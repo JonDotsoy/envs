@@ -3,6 +3,9 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "bin": {
+    "envs": "src/bin/envs.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
