@@ -40,13 +40,15 @@ test("$ envs help", async () => {
 test("envs init", async () => {
   const bin = join(import.meta.dir, "../src/bin/envs.ts");
   const dir = ws.worktrees["worktree-1"]!;
-  const gitignore = join(dir, ".envs/.gitignore");
-  const values = join(dir, ".envs/values.yml");
+  // Run from a worktree: files are generated in the parent (main) workspace.
+  const gitignore = join(ws.main, ".envs/.gitignore");
+  const values = join(ws.main, ".envs/values.yml");
   expect(await Bun.file(gitignore).exists()).toBe(false);
 
   const result = await $`bun ${bin} init`.cwd(dir).quiet();
   expect(result.exitCode).toBe(0);
-  expect((await stat(join(dir, ".envs"))).isDirectory()).toBe(true);
+  expect((await stat(join(ws.main, ".envs"))).isDirectory()).toBe(true);
+  expect(await Bun.file(join(dir, ".envs/.gitignore")).exists()).toBe(false);
   expect(await Bun.file(gitignore).text()).toBe("*\n");
   expect(await Bun.file(values).exists()).toBe(true);
 
