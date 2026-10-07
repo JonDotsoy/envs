@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
+import { mkdir } from "node:fs/promises";
 
 export const HELP = `Usage: envs <command>
 
 Commands:
-  init    Create an empty .env file if it does not exist
+  init    Create the .envs/ directory (.gitignore, values.yml)
   help    Show this help message
 `;
 
@@ -16,12 +17,15 @@ switch (command) {
     console.log(HELP);
     break;
   case "init": {
-    const env = Bun.file(".env");
-    if (await env.exists()) {
-      console.log(".env already exists");
-    } else {
-      await Bun.write(env, "");
-      console.log("Created .env");
+    const files = { ".envs/.gitignore": "*\n", ".envs/values.yml": "" };
+    await mkdir(".envs", { recursive: true });
+    for (const [path, content] of Object.entries(files)) {
+      if (await Bun.file(path).exists()) {
+        console.log(`${path} already exists`);
+      } else {
+        await Bun.write(path, content);
+        console.log(`Created ${path}`);
+      }
     }
     break;
   }

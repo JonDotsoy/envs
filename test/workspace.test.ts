@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { $ } from "bun";
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { createWorkspace, type Workspace } from "./fixtures/workspace";
 
@@ -39,17 +40,19 @@ test("$ envs help", async () => {
 test("envs init", async () => {
   const bin = join(import.meta.dir, "../src/bin/envs.ts");
   const dir = ws.worktrees["worktree-1"]!;
-  const envPath = join(dir, ".env");
-  expect(await Bun.file(envPath).exists()).toBe(false);
+  const gitignore = join(dir, ".envs/.gitignore");
+  const values = join(dir, ".envs/values.yml");
+  expect(await Bun.file(gitignore).exists()).toBe(false);
 
   const result = await $`bun ${bin} init`.cwd(dir).quiet();
   expect(result.exitCode).toBe(0);
-  expect(await Bun.file(envPath).exists()).toBe(true);
-  expect(await Bun.file(envPath).text()).toBe("");
+  expect((await stat(join(dir, ".envs"))).isDirectory()).toBe(true);
+  expect(await Bun.file(gitignore).text()).toBe("*\n");
+  expect(await Bun.file(values).exists()).toBe(true);
 
-  // Running again must not overwrite an existing .env.
-  await Bun.write(envPath, "FOO=bar\n");
+  // Running again must not overwrite existing files.
+  await Bun.write(values, "FOO: bar\n");
   const again = await $`bun ${bin} init`.cwd(dir).quiet();
   expect(again.exitCode).toBe(0);
-  expect(await Bun.file(envPath).text()).toBe("FOO=bar\n");
+  expect(await Bun.file(values).text()).toBe("FOO: bar\n");
 });
