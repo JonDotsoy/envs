@@ -9,7 +9,7 @@ Commands:
   init    Create the .envs/ directory (.gitignore, values.yml)
   pull    Read each worktree's .env and write it into .envs/values.yml
   push    Write defaults and .envs/values.yml into the .env of each worktree
-  edit    Open .envs/values.yml in VS Code and wait (code -w)
+  edit    Pull, open .envs/values.yml in VS Code (code -w), then push
   help    Show this help message
 `;
 
@@ -85,6 +85,63 @@ function updateDotenv(text: string, entries: Record<string, string>): string {
   return updated.join("\n") + "\n";
 }
 
+async function push(): Promise<void> {
+  const valuesPath = join(await findRoot(), ".envs/values.yml");
+  if (!(await Bun.file(valuesPath).exists())) {
+    console.error(`${valuesPath} not found. Run \`envs init\` first.`);
+    process.exit(1);
+  }
+  const values = (Bun.YAML.parse(await Bun.file(valuesPath).text()) ?? {}) as {
+    defaults?: Record<string, string>;
+    envs?: Record<string, Record<string, string>>;
+  };
+  for (const { name, path } of await listWorktrees()) {
+    // Defaults apply to every worktree; per-worktree values override them.
+    const entries: Record<string, string> = {};
+    for (const [key, value] of Object.entries(values.defaults ?? {})) {
+      entries[key] = String(value);
+    }
+    for (const [key, byWorktree] of Object.entries(values.envs ?? {})) {
+      if (name in byWorktree) entries[key] = String(byWorktree[name]);
+    }
+    if (Object.keys(entries).length === 0) continue;
+    const dotenv = Bun.file(join(path, ".env"));
+    const current = (await dotenv.exists()) ? await dotenv.text() : "";
+    await Bun.write(dotenv, updateDotenv(current, entries));
+    console.log(`Pushed ${name}`);
+  }
+}
+
+async function pull(): Promise<void> {
+  const valuesPath = join(await findRoot(), ".envs/values.yml");
+  if (!(await Bun.file(valuesPath).exists())) {
+    console.error(`${valuesPath} not found. Run \`envs init\` first.`);
+    process.exit(1);
+  }
+  const values = (Bun.YAML.parse(await Bun.file(valuesPath).text()) ?? {}) as {
+    defaults?: Record<string, string>;
+    envs?: Record<string, Record<string, string>>;
+  };
+  const envs = (values.envs ??= {});
+  for (const { name, path } of await listWorktrees()) {
+    const dotenv = Bun.file(join(path, ".env"));
+    if (!(await dotenv.exists())) continue;
+    const parsed = parseDotenv(await dotenv.text());
+    // Drop keys that are no longer in this worktree's .env.
+    for (const [key, byWorktree] of Object.entries(envs)) {
+      if (!(key in parsed)) delete byWorktree[name];
+    }
+    for (const [key, value] of Object.entries(parsed)) {
+      (envs[key] ??= {})[name] = value;
+    }
+    console.log(`Pulled ${name}`);
+  }
+  for (const [key, byWorktree] of Object.entries(envs)) {
+    if (Object.keys(byWorktree).length === 0) delete envs[key];
+  }
+  await Bun.write(valuesPath, Bun.YAML.stringify(values, null, 2));
+}
+
 const [command = "help"] = Bun.argv.slice(2);
 
 switch (command) {
@@ -108,73 +165,26 @@ switch (command) {
     }
     break;
   }
-  case "push": {
-    const valuesPath = join(await findRoot(), ".envs/values.yml");
-    if (!(await Bun.file(valuesPath).exists())) {
-      console.error(`${valuesPath} not found. Run \`envs init\` first.`);
-      process.exit(1);
-    }
-    const values = (Bun.YAML.parse(await Bun.file(valuesPath).text()) ?? {}) as {
-      defaults?: Record<string, string>;
-      envs?: Record<string, Record<string, string>>;
-    };
-    for (const { name, path } of await listWorktrees()) {
-      // Defaults apply to every worktree; per-worktree values override them.
-      const entries: Record<string, string> = {};
-      for (const [key, value] of Object.entries(values.defaults ?? {})) {
-        entries[key] = String(value);
-      }
-      for (const [key, byWorktree] of Object.entries(values.envs ?? {})) {
-        if (name in byWorktree) entries[key] = String(byWorktree[name]);
-      }
-      if (Object.keys(entries).length === 0) continue;
-      const dotenv = Bun.file(join(path, ".env"));
-      const current = (await dotenv.exists()) ? await dotenv.text() : "";
-      await Bun.write(dotenv, updateDotenv(current, entries));
-      console.log(`Pushed ${name}`);
-    }
+  case "push":
+    await push();
     break;
-  }
-  case "pull": {
-    const valuesPath = join(await findRoot(), ".envs/values.yml");
-    if (!(await Bun.file(valuesPath).exists())) {
-      console.error(`${valuesPath} not found. Run \`envs init\` first.`);
-      process.exit(1);
-    }
-    const values = (Bun.YAML.parse(await Bun.file(valuesPath).text()) ?? {}) as {
-      defaults?: Record<string, string>;
-      envs?: Record<string, Record<string, string>>;
-    };
-    const envs = (values.envs ??= {});
-    for (const { name, path } of await listWorktrees()) {
-      const dotenv = Bun.file(join(path, ".env"));
-      if (!(await dotenv.exists())) continue;
-      const parsed = parseDotenv(await dotenv.text());
-      // Drop keys that are no longer in this worktree's .env.
-      for (const [key, byWorktree] of Object.entries(envs)) {
-        if (!(key in parsed)) delete byWorktree[name];
-      }
-      for (const [key, value] of Object.entries(parsed)) {
-        (envs[key] ??= {})[name] = value;
-      }
-      console.log(`Synced ${name}`);
-    }
-    for (const [key, byWorktree] of Object.entries(envs)) {
-      if (Object.keys(byWorktree).length === 0) delete envs[key];
-    }
-    await Bun.write(valuesPath, Bun.YAML.stringify(values, null, 2));
+  case "pull":
+    await pull();
     break;
-  }
   case "edit": {
     const path = join(await findRoot(), ".envs/values.yml");
     if (!(await Bun.file(path).exists())) {
       console.error(`${path} not found. Run \`envs init\` first.`);
       process.exit(1);
     }
+    await pull();
     const proc = Bun.spawn(["code", "-w", path], {
       stdio: ["inherit", "inherit", "inherit"],
     });
-    process.exit(await proc.exited);
+    const code = await proc.exited;
+    if (code !== 0) process.exit(code);
+    await push();
+    break;
   }
   default:
     console.error(`Unknown command: ${command}\n\n${HELP}`);

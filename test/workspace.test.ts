@@ -60,26 +60,37 @@ test("envs init", async () => {
   expect(await Bun.file(values).text()).toBe("FOO: bar\n");
 });
 
-test("envs edit", async () => {
+test("envs edit pulls before opening and pushes after closing", async () => {
   const bin = join(import.meta.dir, "../src/bin/envs.ts");
   const dir = ws.worktrees["wt-2"]!;
+  const valuesPath = join(ws.main, ".envs/values.yml");
 
-  // Fake `code` executable that records its arguments.
+  // Fake `code` executable: records its arguments and the file content it was
+  // opened with, then edits the file like a user would.
   const fakeBin = await mkdtemp(join(tmpdir(), "envs-fakebin-"));
   const argsFile = join(fakeBin, "args.txt");
+  const openedWith = join(fakeBin, "opened.yml");
   const code = join(fakeBin, "code");
-  await Bun.write(code, `#!/bin/sh\necho "$@" > "${argsFile}"\n`);
+  await Bun.write(
+    code,
+    `#!/bin/sh\necho "$@" > "${argsFile}"\ncp "$2" "${openedWith}"\nsed -i 's/initial/edited/' "$2"\n`,
+  );
   await chmod(code, 0o755);
   const env = { ...process.env, PATH: `${fakeBin}:${process.env.PATH}` };
 
   try {
-    // Runs from a worktree: opens values.yml of the parent workspace.
     await $`bun ${bin} init`.cwd(dir).quiet();
+    await Bun.write(valuesPath, ""); // independent from other tests
+    await Bun.write(join(dir, ".env"), "EDIT=initial\n");
+
+    // Runs from a worktree: opens values.yml of the parent workspace.
     const result = await $`bun ${bin} edit`.cwd(dir).env(env).quiet();
     expect(result.exitCode).toBe(0);
-    expect((await Bun.file(argsFile).text()).trim()).toBe(
-      `-w ${join(ws.main, ".envs/values.yml")}`,
-    );
+    expect((await Bun.file(argsFile).text()).trim()).toBe(`-w ${valuesPath}`);
+    // pull ran before the editor opened the file...
+    expect(await Bun.file(openedWith).text()).toContain("initial");
+    // ...and push ran after it closed.
+    expect(await Bun.file(join(dir, ".env")).text()).toBe("EDIT=edited\n");
   } finally {
     await rm(fakeBin, { recursive: true, force: true });
   }
@@ -115,6 +126,7 @@ test("envs push", async () => {
   const one = ws.worktrees["worktree-1"]!;
   const two = ws.worktrees["wt-2"]!;
   await $`bun ${bin} init`.cwd(one).quiet();
+  await rm(join(two, ".env"), { force: true }); // independent from other tests
   await Bun.write(
     join(ws.main, ".envs/values.yml"),
     `envs:
