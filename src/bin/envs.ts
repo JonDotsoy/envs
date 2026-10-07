@@ -7,7 +7,7 @@ export const HELP = `Usage: envs <command>
 
 Commands:
   init    Create the .envs/ directory (.gitignore, values.yml)
-  sync    Read each worktree's .env and write it into .envs/values.yml
+  pull    Read each worktree's .env and write it into .envs/values.yml
   edit    Open .envs/values.yml in VS Code and wait (code -w)
   help    Show this help message
 `;
@@ -85,7 +85,7 @@ switch (command) {
     }
     break;
   }
-  case "sync": {
+  case "pull": {
     const valuesPath = join(await findRoot(), ".envs/values.yml");
     if (!(await Bun.file(valuesPath).exists())) {
       console.error(`${valuesPath} not found. Run \`envs init\` first.`);

@@ -85,7 +85,7 @@ test("envs edit", async () => {
   }
 });
 
-test("envs sync", async () => {
+test("envs pull", async () => {
   const bin = join(import.meta.dir, "../src/bin/envs.ts");
   const dir = ws.worktrees["worktree-1"]!;
   const valuesPath = join(ws.main, ".envs/values.yml");
@@ -96,7 +96,7 @@ test("envs sync", async () => {
   await Bun.write(join(ws.main, ".env"), "FOO=main\n");
   await Bun.write(join(dir, ".env"), "FOO=one\n# comment\nBAR=\"two words\"\n");
 
-  const first = await $`bun ${bin} sync`.cwd(dir).quiet();
+  const first = await $`bun ${bin} pull`.cwd(dir).quiet();
   expect(first.exitCode).toBe(0);
   let values = await readValues();
   expect(values.envs.FOO).toEqual({ main: "main", "worktree-1": "one" });
@@ -104,7 +104,7 @@ test("envs sync", async () => {
 
   // Modify the .env of one worktree: the change is reflected in values.yml.
   await Bun.write(join(dir, ".env"), "FOO=changed\n");
-  await $`bun ${bin} sync`.cwd(dir).quiet();
+  await $`bun ${bin} pull`.cwd(dir).quiet();
   values = await readValues();
   expect(values.envs.FOO).toEqual({ main: "main", "worktree-1": "changed" });
   expect(values.envs.BAR).toBeUndefined();
