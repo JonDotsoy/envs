@@ -39,17 +39,17 @@ test("$ envs help", async () => {
 test("envs init", async () => {
   const bin = join(import.meta.dir, "../src/bin/envs.ts");
   const dir = ws.worktrees["worktree-1"]!;
-  const envFile = Bun.file(join(dir, ".env"));
-  expect(await envFile.exists()).toBe(false);
+  const envPath = join(dir, ".env");
+  expect(await Bun.file(envPath).exists()).toBe(false);
 
   const result = await $`bun ${bin} init`.cwd(dir).quiet();
   expect(result.exitCode).toBe(0);
-  expect(await envFile.exists()).toBe(true);
-  expect(await envFile.text()).toBe("");
+  expect(await Bun.file(envPath).exists()).toBe(true);
+  expect(await Bun.file(envPath).text()).toBe("");
 
   // Running again must not overwrite an existing .env.
-  await Bun.write(envFile, "FOO=bar\n");
+  await Bun.write(envPath, "FOO=bar\n");
   const again = await $`bun ${bin} init`.cwd(dir).quiet();
   expect(again.exitCode).toBe(0);
-  expect(await envFile.text()).toBe("FOO=bar\n");
+  expect(await Bun.file(envPath).text()).toBe("FOO=bar\n");
 });
