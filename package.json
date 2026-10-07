@@ -7,7 +7,8 @@
     "envs": "src/bin/envs.ts"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "ajv": "^8.20.0"
   },
   "peerDependencies": {
     "typescript": "^7"
