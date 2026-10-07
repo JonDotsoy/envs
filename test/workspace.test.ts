@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { $ } from "bun";
-import { stat } from "node:fs/promises";
+import { chmod, mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createWorkspace, type Workspace } from "./fixtures/workspace";
 
@@ -57,4 +58,29 @@ test("envs init", async () => {
   const again = await $`bun ${bin} init`.cwd(dir).quiet();
   expect(again.exitCode).toBe(0);
   expect(await Bun.file(values).text()).toBe("FOO: bar\n");
+});
+
+test("envs edit", async () => {
+  const bin = join(import.meta.dir, "../src/bin/envs.ts");
+  const dir = ws.worktrees["wt-2"]!;
+
+  // Fake `code` executable that records its arguments.
+  const fakeBin = await mkdtemp(join(tmpdir(), "envs-fakebin-"));
+  const argsFile = join(fakeBin, "args.txt");
+  const code = join(fakeBin, "code");
+  await Bun.write(code, `#!/bin/sh\necho "$@" > "${argsFile}"\n`);
+  await chmod(code, 0o755);
+  const env = { ...process.env, PATH: `${fakeBin}:${process.env.PATH}` };
+
+  try {
+    // Runs from a worktree: opens values.yml of the parent workspace.
+    await $`bun ${bin} init`.cwd(dir).quiet();
+    const result = await $`bun ${bin} edit`.cwd(dir).env(env).quiet();
+    expect(result.exitCode).toBe(0);
+    expect((await Bun.file(argsFile).text()).trim()).toBe(
+      `-w ${join(ws.main, ".envs/values.yml")}`,
+    );
+  } finally {
+    await rm(fakeBin, { recursive: true, force: true });
+  }
 });

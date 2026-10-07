@@ -7,6 +7,7 @@ export const HELP = `Usage: envs <command>
 
 Commands:
   init    Create the .envs/ directory (.gitignore, values.yml)
+  edit    Open .envs/values.yml in VS Code and wait (code -w)
   help    Show this help message
 `;
 
@@ -40,6 +41,17 @@ switch (command) {
       }
     }
     break;
+  }
+  case "edit": {
+    const path = join(await findRoot(), ".envs/values.yml");
+    if (!(await Bun.file(path).exists())) {
+      console.error(`${path} not found. Run \`envs init\` first.`);
+      process.exit(1);
+    }
+    const proc = Bun.spawn(["code", "-w", path], {
+      stdio: ["inherit", "inherit", "inherit"],
+    });
+    process.exit(await proc.exited);
   }
   default:
     console.error(`Unknown command: ${command}\n\n${HELP}`);
