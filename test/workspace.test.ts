@@ -28,3 +28,10 @@ test("files created on main are present in every worktree", async () => {
     expect(await Bun.file(join(dir, "nested/bar.txt")).text()).toBe("baz");
   }
 });
+
+test("$ envs help", async () => {
+  const bin = join(import.meta.dir, "../src/bin/envs.ts");
+  const result = await $`bun ${bin} help`.cwd(ws.main).quiet();
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout.toString()).toContain("Usage: envs <command>");
+});
