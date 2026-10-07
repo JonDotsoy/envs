@@ -8,6 +8,7 @@ export const HELP = `Usage: envs <command>
 Commands:
   init    Create the .envs/ directory (.gitignore, values.yml)
   pull    Read each worktree's .env and write it into .envs/values.yml
+  push    Write .envs/values.yml into the .env of each worktree
   edit    Open .envs/values.yml in VS Code and wait (code -w)
   help    Show this help message
 `;
@@ -62,6 +63,28 @@ function parseDotenv(text: string): Record<string, string> {
   return result;
 }
 
+function formatDotenvValue(value: string): string {
+  if (value !== "" && !/[\s#"'\\$]/.test(value)) return value;
+  return value.includes('"') ? `'${value}'` : `"${value}"`;
+}
+
+/** Sets KEY=VALUE for each entry, updating existing lines in place and appending new ones. */
+function updateDotenv(text: string, entries: Record<string, string>): string {
+  const pending = new Map(Object.entries(entries));
+  const lines = text === "" ? [] : text.replace(/\n$/, "").split("\n");
+  const updated = lines.map((line) => {
+    const key = line.trim().match(/^(?:export\s+)?([\w.-]+)\s*=/)?.[1];
+    if (key === undefined || !pending.has(key)) return line;
+    const value = pending.get(key)!;
+    pending.delete(key);
+    return `${key}=${formatDotenvValue(value)}`;
+  });
+  for (const [key, value] of pending) {
+    updated.push(`${key}=${formatDotenvValue(value)}`);
+  }
+  return updated.join("\n") + "\n";
+}
+
 const [command = "help"] = Bun.argv.slice(2);
 
 switch (command) {
@@ -82,6 +105,28 @@ switch (command) {
         await Bun.write(path, content);
         console.log(`Created ${path}`);
       }
+    }
+    break;
+  }
+  case "push": {
+    const valuesPath = join(await findRoot(), ".envs/values.yml");
+    if (!(await Bun.file(valuesPath).exists())) {
+      console.error(`${valuesPath} not found. Run \`envs init\` first.`);
+      process.exit(1);
+    }
+    const values = (Bun.YAML.parse(await Bun.file(valuesPath).text()) ?? {}) as {
+      envs?: Record<string, Record<string, string>>;
+    };
+    for (const { name, path } of await listWorktrees()) {
+      const entries: Record<string, string> = {};
+      for (const [key, byWorktree] of Object.entries(values.envs ?? {})) {
+        if (name in byWorktree) entries[key] = String(byWorktree[name]);
+      }
+      if (Object.keys(entries).length === 0) continue;
+      const dotenv = Bun.file(join(path, ".env"));
+      const current = (await dotenv.exists()) ? await dotenv.text() : "";
+      await Bun.write(dotenv, updateDotenv(current, entries));
+      console.log(`Pushed ${name}`);
     }
     break;
   }

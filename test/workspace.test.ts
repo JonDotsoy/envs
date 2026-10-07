@@ -109,3 +109,31 @@ test("envs pull", async () => {
   expect(values.envs.FOO).toEqual({ main: "main", "worktree-1": "changed" });
   expect(values.envs.BAR).toBeUndefined();
 });
+
+test("envs push", async () => {
+  const bin = join(import.meta.dir, "../src/bin/envs.ts");
+  const one = ws.worktrees["worktree-1"]!;
+  const two = ws.worktrees["wt-2"]!;
+  await $`bun ${bin} init`.cwd(one).quiet();
+  await Bun.write(
+    join(ws.main, ".envs/values.yml"),
+    `envs:
+  FOO:
+    main: from-main
+    worktree-1: "two words"
+  BAR:
+    wt-2: "2"
+`,
+  );
+  // Existing content is kept; managed keys are updated in place.
+  await Bun.write(join(one, ".env"), "# mine\nKEEP=1\nFOO=old\n");
+  await Bun.write(join(ws.main, ".env"), "");
+
+  const result = await $`bun ${bin} push`.cwd(one).quiet();
+  expect(result.exitCode).toBe(0);
+  expect(await Bun.file(join(ws.main, ".env")).text()).toBe("FOO=from-main\n");
+  expect(await Bun.file(join(one, ".env")).text()).toBe(
+    '# mine\nKEEP=1\nFOO="two words"\n',
+  );
+  expect(await Bun.file(join(two, ".env")).text()).toBe("BAR=2\n");
+});
