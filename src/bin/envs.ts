@@ -8,7 +8,7 @@ export const HELP = `Usage: envs <command>
 Commands:
   init    Create the .envs/ directory (.gitignore, values.yml)
   pull    Read each worktree's .env and write it into .envs/values.yml
-  push    Write .envs/values.yml into the .env of each worktree
+  push    Write defaults and .envs/values.yml into the .env of each worktree
   edit    Open .envs/values.yml in VS Code and wait (code -w)
   help    Show this help message
 `;
@@ -115,10 +115,15 @@ switch (command) {
       process.exit(1);
     }
     const values = (Bun.YAML.parse(await Bun.file(valuesPath).text()) ?? {}) as {
+      defaults?: Record<string, string>;
       envs?: Record<string, Record<string, string>>;
     };
     for (const { name, path } of await listWorktrees()) {
+      // Defaults apply to every worktree; per-worktree values override them.
       const entries: Record<string, string> = {};
+      for (const [key, value] of Object.entries(values.defaults ?? {})) {
+        entries[key] = String(value);
+      }
       for (const [key, byWorktree] of Object.entries(values.envs ?? {})) {
         if (name in byWorktree) entries[key] = String(byWorktree[name]);
       }
@@ -137,6 +142,7 @@ switch (command) {
       process.exit(1);
     }
     const values = (Bun.YAML.parse(await Bun.file(valuesPath).text()) ?? {}) as {
+      defaults?: Record<string, string>;
       envs?: Record<string, Record<string, string>>;
     };
     const envs = (values.envs ??= {});

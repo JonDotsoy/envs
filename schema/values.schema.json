@@ -5,6 +5,14 @@
   "description": "Values of the environment variables per worktree, stored in .envs/values.yml.",
   "type": "object",
   "properties": {
+    "defaults": {
+      "description": "Default value of each environment variable, written to every worktree's .env on push unless envs overrides it.",
+      "type": "object",
+      "additionalProperties": {
+        "description": "Default value of the environment variable.",
+        "type": "string"
+      }
+    },
     "envs": {
       "description": "Environment variables by name.",
       "type": "object",

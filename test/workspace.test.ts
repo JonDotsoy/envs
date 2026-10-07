@@ -137,3 +137,26 @@ test("envs push", async () => {
   );
   expect(await Bun.file(join(two, ".env")).text()).toBe("BAR=2\n");
 });
+
+test("envs push writes defaults and lets envs override them", async () => {
+  const bin = join(import.meta.dir, "../src/bin/envs.ts");
+  const one = ws.worktrees["worktree-1"]!;
+  const two = ws.worktrees["wt-2"]!;
+  await $`bun ${bin} init`.cwd(one).quiet();
+  await Bun.write(
+    join(ws.main, ".envs/values.yml"),
+    `defaults:
+  FOO: tar
+
+envs:
+  FOO:
+    main: biz
+`,
+  );
+  for (const dir of [ws.main, one, two]) await rm(join(dir, ".env"), { force: true });
+
+  await $`bun ${bin} push`.cwd(one).quiet();
+  expect(await Bun.file(join(ws.main, ".env")).text()).toBe("FOO=biz\n");
+  expect(await Bun.file(join(one, ".env")).text()).toBe("FOO=tar\n");
+  expect(await Bun.file(join(two, ".env")).text()).toBe("FOO=tar\n");
+});

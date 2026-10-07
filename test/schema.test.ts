@@ -25,3 +25,16 @@ test("values.yml schema rejects invalid shapes", () => {
   expect(validate({ envs: { PORT: { main: { nested: "x" } } } })).toBe(false);
   expect(validate({ other: {} })).toBe(false);
 });
+
+test("values.yml schema accepts defaults alongside envs", () => {
+  const values = Bun.YAML.parse(`
+defaults:
+  FOO: tar
+
+envs:
+  FOO:
+    main: biz
+`);
+  expect(validate(values)).toBe(true);
+  expect(validate({ defaults: { FOO: 1 } })).toBe(false);
+});
