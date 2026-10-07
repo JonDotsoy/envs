@@ -84,3 +84,28 @@ test("envs edit", async () => {
     await rm(fakeBin, { recursive: true, force: true });
   }
 });
+
+test("envs sync", async () => {
+  const bin = join(import.meta.dir, "../src/bin/envs.ts");
+  const dir = ws.worktrees["worktree-1"]!;
+  const valuesPath = join(ws.main, ".envs/values.yml");
+  const readValues = async () => Bun.YAML.parse(await Bun.file(valuesPath).text()) as any;
+
+  await $`bun ${bin} init`.cwd(dir).quiet();
+  await Bun.write(valuesPath, ""); // independent from other tests
+  await Bun.write(join(ws.main, ".env"), "FOO=main\n");
+  await Bun.write(join(dir, ".env"), "FOO=one\n# comment\nBAR=\"two words\"\n");
+
+  const first = await $`bun ${bin} sync`.cwd(dir).quiet();
+  expect(first.exitCode).toBe(0);
+  let values = await readValues();
+  expect(values.envs.FOO).toEqual({ main: "main", "worktree-1": "one" });
+  expect(values.envs.BAR).toEqual({ "worktree-1": "two words" });
+
+  // Modify the .env of one worktree: the change is reflected in values.yml.
+  await Bun.write(join(dir, ".env"), "FOO=changed\n");
+  await $`bun ${bin} sync`.cwd(dir).quiet();
+  values = await readValues();
+  expect(values.envs.FOO).toEqual({ main: "main", "worktree-1": "changed" });
+  expect(values.envs.BAR).toBeUndefined();
+});
