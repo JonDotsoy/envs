@@ -282,3 +282,15 @@ describe("commands (in-process)", () => {
     expect(await Bun.file(join(ws.main, ".env")).text()).toBe("E=keep\n");
   });
 });
+
+test("parseValue turns booleans and canonical numbers into YAML scalars", async () => {
+  const { parseValue } = await import("../src/envs");
+  expect(parseValue("true")).toBe(true);
+  expect(parseValue("false")).toBe(false);
+  expect(parseValue("3000")).toBe(3000);
+  expect(parseValue("-1")).toBe(-1);
+  expect(parseValue("0.5")).toBe(0.5);
+  for (const keep of ["007", "1.50", "True", "1e3", "", "3000 ", "v1"]) {
+    expect(parseValue(keep)).toBe(keep);
+  }
+});

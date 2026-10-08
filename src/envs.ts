@@ -96,6 +96,18 @@ export function parseDotenv(text: string): Record<string, string> {
   return result;
 }
 
+/** Turns "true"/"false" and canonical numbers ("3000", "0.5") into YAML scalars; anything else stays a string. */
+export function parseValue(value: string): Value {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (/^-?\d+(\.\d+)?$/.test(value)) {
+    const number = Number(value);
+    // Keep strings that would not round-trip (leading zeros, huge ints).
+    if (String(number) === value) return number;
+  }
+  return value;
+}
+
 export function formatDotenvValue(value: string): string {
   if (value !== "" && !/[\s#"'\\$]/.test(value)) return value;
   return value.includes('"') ? `'${value}'` : `"${value}"`;
@@ -186,7 +198,7 @@ export async function pull(ctx: Context): Promise<number> {
       if (!(key in parsed)) delete byWorktree[name];
     }
     for (const [key, value] of Object.entries(parsed)) {
-      (envs[key] ??= {})[name] = value;
+      (envs[key] ??= {})[name] = parseValue(value);
     }
     ctx.log(`Pulled ${name}`);
   }

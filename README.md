@@ -47,7 +47,7 @@ envs:
 
 - `defaults`: valor por defecto de cada variable. `push` lo escribe en el `.env` de todos los worktrees.
 - `envs.<VARIABLE>.<worktree>`: valor de la variable en ese worktree. Sobrescribe al valor de `defaults`.
-- Los valores pueden ser strings, números o booleanos (`PORT: 3000`, `DEBUG: true`); `push` los escribe en el `.env` como texto (`PORT=3000`, `DEBUG=true`). `pull` siempre escribe strings.
+- Los valores pueden ser strings, números o booleanos (`PORT: 3000`, `DEBUG: true`); `push` los escribe en el `.env` como texto (`PORT=3000`, `DEBUG=true`). `pull` convierte `true`/`false` y los números canónicos (`3000`, `0.5`) a booleanos y números; el resto (`007`, `1e3`) queda como string.
 
 El schema (JSON Schema) está en [`schema/values.schema.json`](schema/values.schema.json). Para que VS Code valide el archivo con la extensión YAML, agrega al inicio de `values.yml`:
 
