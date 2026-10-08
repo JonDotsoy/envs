@@ -6,7 +6,7 @@ on:
       bump:
         description: Version bump
         type: choice
-        options: [major, minor, patch]
+        options: [major, minor, patch, prerelease]
         default: patch
         required: true
       tag:
@@ -47,13 +47,16 @@ jobs:
           BUMP: ${{ inputs.bump }}
           TAG: ${{ inputs.tag }}
         run: |
-          current=$(node -p "require('./package.json').version")
-          if [ "$TAG" = "latest" ]; then
+          if [ "$BUMP" = "prerelease" ]; then
+            # Next prerelease of the current version: 0.0.1-beta.0 -> 0.0.1-beta.1
+            if [ "$TAG" = "latest" ]; then
+              echo "::error::bump=prerelease needs a tag other than latest"
+              exit 1
+            fi
+            npm version prerelease --preid "$TAG" --no-git-tag-version
+          elif [ "$TAG" = "latest" ]; then
             # Stable release (a prerelease graduates, e.g. 0.0.2-beta.1 -> 0.0.2).
             npm version "$BUMP" --no-git-tag-version
-          elif [[ "$current" == *-* ]]; then
-            # Already a prerelease: 0.0.2-beta.0 -> 0.0.2-beta.1 (or switches the id).
-            npm version prerelease --preid "$TAG" --no-git-tag-version
           else
             # First prerelease of the bump: 0.0.1 -> 0.0.2-beta.0
             npm version "pre$BUMP" --preid "$TAG" --no-git-tag-version
