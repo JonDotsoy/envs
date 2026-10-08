@@ -25,10 +25,25 @@ Ejecuta los comandos dentro del repo o de cualquiera de sus worktrees. Dentro de
 | `envs init` | Crea `.envs/`, `.envs/.gitignore` (con `*`) y un `.envs/values.yml` vacío. No sobrescribe archivos existentes. |
 | `envs pull` | Lee el `.env` del repo principal y de cada worktree y lo escribe en `values.yml`. Las variables que ya no están en un `.env` se quitan de `values.yml` para ese worktree. |
 | `envs push` | Escribe `values.yml` en el `.env` de cada worktree. Actualiza las variables existentes en su línea, agrega las nuevas al final y conserva comentarios y variables que no están en `values.yml`. |
+| `envs lint` | Revisa la seguridad y muestra un warning por cada problema. Termina con código 1 si hay alguno (útil en CI). Ver abajo. |
 | `envs edit` | Ejecuta `pull`, abre `values.yml` con `code -w` y, al cerrar el editor, ejecuta `push`. Si el editor falla, no hace `push`. |
 | `envs help` | Muestra la ayuda. |
 
 Los worktrees se identifican por el nombre de su rama (o el nombre de su carpeta si están en HEAD desacoplado). El repo principal usa el nombre de su rama, por ejemplo `main`.
+
+### `envs lint`
+
+Nunca imprime los valores, solo la variable y su ubicación (`envs.DB_PASSWORD.main`).
+
+| Regla | Detecta |
+| --- | --- |
+| `tracked-values`, `unignored-values` | `values.yml` está versionado en git o no está ignorado. |
+| `tracked-dotenv`, `unignored-dotenv` | El `.env` de un worktree está versionado o no está ignorado. |
+| `open-permissions` | `values.yml` es legible por otros usuarios (usa `chmod 600`). |
+| `weak-secret` | Variable sensible (`PASSWORD`, `TOKEN`, `SECRET`, `API_KEY`…) vacía o con un valor típico (`changeme`, `admin`…). |
+| `shared-secret` | Variable sensible en `defaults`, que se escribe en todos los worktrees. |
+| `secret-pattern` | Valor con formato de secreto conocido (AWS, GitHub, Slack, `sk-…`, clave privada). |
+| `url-credentials`, `insecure-url` | URL remota con contraseña embebida, o con `http://`, `ws://` o `ftp://`. |
 
 ## Formato de `values.yml`
 
