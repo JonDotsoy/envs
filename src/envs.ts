@@ -24,9 +24,8 @@ export interface Context {
   openEditor(path: string): Promise<number>;
 }
 
-/** Colors are skipped when NO_COLOR (https://no-color.org) or NO_COLORS is set to a non-empty value. */
-const colorsDisabled = () =>
-  Boolean(process.env.NO_COLOR || process.env.NO_COLORS);
+/** Colors are skipped when NO_COLOR (https://no-color.org) is set to a non-empty value. */
+const colorsDisabled = () => Boolean(process.env.NO_COLOR);
 const paint = (code: number, text: string) =>
   colorsDisabled() ? text : `\x1b[${code}m${text}\x1b[0m`;
 const green = (text: string) => paint(32, text);

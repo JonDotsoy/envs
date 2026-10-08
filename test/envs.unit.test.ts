@@ -27,7 +27,6 @@ import { createWorkspace, type Workspace } from "./fixtures/workspace";
 // Keep color assertions independent of the developer's shell.
 beforeEach(() => {
   delete process.env.NO_COLOR;
-  delete process.env.NO_COLORS;
 });
 
 function testContext(cwd: string, overrides: Partial<Context> = {}) {
@@ -265,27 +264,25 @@ describe("commands (in-process)", () => {
     });
   }
 
-  for (const name of ["NO_COLOR", "NO_COLORS"]) {
-    test(`${name} disables colors in pull and push logs`, async () => {
-      const previous = process.env[name];
-      process.env[name] = "1";
-      try {
-        await Bun.write(join(ws.main, ".env"), "A=1\n");
-        await rm(join(ws.worktrees.one!, ".env"), { force: true });
-        await Bun.write(valuesPath(), "");
-        const pulled = testContext(ws.main);
-        await run(["pull"], pulled.ctx);
-        expect(pulled.logs).toEqual(["↓ pulling main - 1 variables"]);
-        await Bun.write(valuesPath(), "defaults:\n  A: 2\n");
-        const pushed = testContext(ws.main);
-        await run(["push"], pushed.ctx);
-        expect(pushed.logs).toEqual(["↻ A=2 → main, one"]);
-      } finally {
-        if (previous === undefined) delete process.env[name];
-        else process.env[name] = previous;
-      }
-    });
-  }
+  test("NO_COLOR disables colors in pull and push logs", async () => {
+    const previous = process.env.NO_COLOR;
+    process.env.NO_COLOR = "1";
+    try {
+      await Bun.write(join(ws.main, ".env"), "A=1\n");
+      await rm(join(ws.worktrees.one!, ".env"), { force: true });
+      await Bun.write(valuesPath(), "");
+      const pulled = testContext(ws.main);
+      await run(["pull"], pulled.ctx);
+      expect(pulled.logs).toEqual(["↓ pulling main - 1 variables"]);
+      await Bun.write(valuesPath(), "defaults:\n  A: 2\n");
+      const pushed = testContext(ws.main);
+      await run(["push"], pushed.ctx);
+      expect(pushed.logs).toEqual(["↻ A=2 → main, one"]);
+    } finally {
+      if (previous === undefined) delete process.env.NO_COLOR;
+      else process.env.NO_COLOR = previous;
+    }
+  });
 
   test("pull skips worktrees without .env and keeps defaults", async () => {
     await Bun.write(valuesPath(), "defaults:\n  D: d\n");
