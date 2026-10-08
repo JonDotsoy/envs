@@ -19,6 +19,23 @@ Incluye, si puedes:
 
 Te responderé lo antes posible y coordinaremos la corrección y la divulgación del problema.
 
+## Archivos que modifica
+
+`envs` solo lee y escribe los archivos de esta tabla. `<raíz>` es el repo principal (dentro de un worktree, el repo padre) y `<worktree>` es la carpeta de cada worktree que lista `git worktree list`, incluido el repo principal, aunque esté fuera de `<raíz>`.
+
+| Comando | Lee | Escribe |
+| --- | --- | --- |
+| `envs init` | — | Crea `<raíz>/.envs/`, `<raíz>/.envs/.gitignore` y `<raíz>/.envs/values.yml`, solo si no existen. Nunca sobrescribe. |
+| `envs pull` | `<worktree>/.env` de cada worktree | Reescribe `<raíz>/.envs/values.yml`. El archivo se serializa de nuevo, así que se pierden los comentarios del YAML. |
+| `envs push` | `<raíz>/.envs/values.yml` | Crea o actualiza `<worktree>/.env` de cada worktree que tenga valores. Actualiza las variables existentes en su línea, agrega las nuevas al final y conserva el resto del archivo. Si hay `defaults`, esto incluye a todos los worktrees. |
+| `envs edit` | Lo mismo que `pull` y `push` | Lo mismo que `pull` y `push`. Además ejecuta `code -w <raíz>/.envs/values.yml`. |
+
+Además:
+
+- Ejecuta `git rev-parse` y `git worktree list` para ubicar la raíz y los worktrees. Son comandos de solo lectura.
+- `envs edit` ejecuta el programa `code` que encuentre en el `PATH`.
+- No hace conexiones de red ni modifica otros archivos del proyecto, ni siquiera el `.gitignore` de tu proyecto.
+
 ## Manejo de secretos
 
 `envs` trabaja con valores que suelen ser secretos:
