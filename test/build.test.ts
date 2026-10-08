@@ -18,6 +18,8 @@ test("build creates the compiled script and a self-pointing package.json", async
   expect(pkg.type).toBe(original.type);
   expect(pkg.bin).toEqual({ envs: "envs.js" });
   expect(pkg.module).toBe("envs.js");
+  expect(pkg.license).toBe("MIT");
+  expect(await Bun.file(join(outdir, "LICENSE")).text()).toContain("MIT License");
   expect(pkg.scripts).toBeUndefined();
   expect(pkg.devDependencies).toBeUndefined();
   expect(pkg.files).toBeUndefined();

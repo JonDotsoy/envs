@@ -1,6 +1,19 @@
 {
   "name": "@jondotsoy/envs",
   "version": "0.0.2",
+  "license": "MIT",
+  "author": {
+    "name": "Jonathan Delgado",
+    "email": "hi@jon.soy",
+    "url": "https://jon.soy"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JonDotsoy/envs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JonDotsoy/envs/issues"
+  },
   "module": "index.ts",
   "type": "module",
   "bin": {
