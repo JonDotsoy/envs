@@ -33,6 +33,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Deploy key: the only identity allowed to push to the protected `develop` branch.
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
