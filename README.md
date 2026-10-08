@@ -4,6 +4,8 @@ CLI that keeps the `.env` values of every git worktree in a single file (`.envs/
 
 Requires [Bun](https://bun.com) and git.
 
+![Each worktree keeps its own .env; envs edit and envs push sync the shared values across them](docs/assets/images/worktrees-sync.svg)
+
 ## Installation
 
 ```bash

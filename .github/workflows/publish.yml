@@ -132,3 +132,34 @@ jobs:
           if [ "$TAG" != "latest" ]; then args+=(--prerelease); fi
           gh release create "v$VERSION" --verify-tag --title "v$VERSION" \
             --notes "Published to npm: $url" "${args[@]}"
+
+      - name: GitHub summary
+        if: ${{ always() }}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUMP: ${{ inputs.bump }}
+          TAG: ${{ inputs.tag }}
+          PROVENANCE: ${{ inputs.provenance }}
+          RELEASE_CHANGELOG: ${{ inputs.release_changelog }}
+          STATUS: ${{ job.status }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          name=$(node -p "require('./package.json').name")
+          {
+            echo "## Publish summary"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Status | $STATUS |"
+            echo "| Package | \`$name\` |"
+            echo "| Version | \`${VERSION:-n/a}\` |"
+            echo "| Bump | \`$BUMP\` |"
+            echo "| npm dist-tag | \`$TAG\` |"
+            echo "| Provenance | $PROVENANCE |"
+            echo "| Changelog released | $RELEASE_CHANGELOG |"
+            if [ "$STATUS" = "success" ]; then
+              echo
+              echo "- [npm package](https://www.npmjs.com/package/$name/v/$VERSION)"
+              echo "- [GitHub release]($REPO_URL/releases/tag/v$VERSION)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
