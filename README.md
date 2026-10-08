@@ -33,6 +33,26 @@ Run the commands inside the repo or any of its worktrees. Inside a worktree, `.e
 
 Worktrees are identified by their branch name (or their folder name if they are in detached HEAD). The main repo uses its branch name, for example `main`.
 
+### Output
+
+`envs pull` prints one green line with the pulled branches and the number of variables:
+
+```
+↓ pulling main, feature/biz - 3 variables
+```
+
+`envs push` prints one yellow line for each variable whose value changes, listing the branches where it changed. Variables that already have the same value are not shown:
+
+```
+↻ LOG_LEVEL=info → main, feature/biz
+```
+
+Colors are disabled when the [`NO_COLOR`](https://no-color.org) environment variable is set to a non-empty value:
+
+```sh
+NO_COLOR=1 envs push
+```
+
 ### `envs lint`
 
 It never prints values, only the variable and its location (`envs.DB_PASSWORD.main`).

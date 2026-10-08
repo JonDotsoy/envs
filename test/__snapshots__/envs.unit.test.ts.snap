@@ -1,0 +1,354 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`commands (in-process) pull and push log 3 variables 1`] = `
+[
+  "\x1B[32m↓ pulling main - 3 variables\x1B[0m",
+]
+`;
+
+exports[`commands (in-process) pull and push log 3 variables 2`] = `
+[
+  "\x1B[33m↻ VAR_0=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_1=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_2=w → main, one\x1B[0m",
+]
+`;
+
+exports[`commands (in-process) pull and push log 3 variables with NO_COLOR 1`] = `
+[
+  "↓ pulling main - 3 variables",
+]
+`;
+
+exports[`commands (in-process) pull and push log 3 variables with NO_COLOR 2`] = `
+[
+  "↻ VAR_0=w → main, one",
+  "↻ VAR_1=w → main, one",
+  "↻ VAR_2=w → main, one",
+]
+`;
+
+exports[`commands (in-process) pull and push log 5 variables 1`] = `
+[
+  "\x1B[32m↓ pulling main - 5 variables\x1B[0m",
+]
+`;
+
+exports[`commands (in-process) pull and push log 5 variables 2`] = `
+[
+  "\x1B[33m↻ VAR_0=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_1=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_2=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_3=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_4=w → main, one\x1B[0m",
+]
+`;
+
+exports[`commands (in-process) pull and push log 5 variables with NO_COLOR 1`] = `
+[
+  "↓ pulling main - 5 variables",
+]
+`;
+
+exports[`commands (in-process) pull and push log 5 variables with NO_COLOR 2`] = `
+[
+  "↻ VAR_0=w → main, one",
+  "↻ VAR_1=w → main, one",
+  "↻ VAR_2=w → main, one",
+  "↻ VAR_3=w → main, one",
+  "↻ VAR_4=w → main, one",
+]
+`;
+
+exports[`commands (in-process) pull and push log 10 variables 1`] = `
+[
+  "\x1B[32m↓ pulling main - 10 variables\x1B[0m",
+]
+`;
+
+exports[`commands (in-process) pull and push log 10 variables 2`] = `
+[
+  "\x1B[33m↻ VAR_0=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_1=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_2=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_3=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_4=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_5=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_6=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_7=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_8=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_9=w → main, one\x1B[0m",
+]
+`;
+
+exports[`commands (in-process) pull and push log 10 variables with NO_COLOR 1`] = `
+[
+  "↓ pulling main - 10 variables",
+]
+`;
+
+exports[`commands (in-process) pull and push log 10 variables with NO_COLOR 2`] = `
+[
+  "↻ VAR_0=w → main, one",
+  "↻ VAR_1=w → main, one",
+  "↻ VAR_2=w → main, one",
+  "↻ VAR_3=w → main, one",
+  "↻ VAR_4=w → main, one",
+  "↻ VAR_5=w → main, one",
+  "↻ VAR_6=w → main, one",
+  "↻ VAR_7=w → main, one",
+  "↻ VAR_8=w → main, one",
+  "↻ VAR_9=w → main, one",
+]
+`;
+
+exports[`commands (in-process) pull and push log 100 variables 1`] = `
+[
+  "\x1B[32m↓ pulling main - 100 variables\x1B[0m",
+]
+`;
+
+exports[`commands (in-process) pull and push log 100 variables 2`] = `
+[
+  "\x1B[33m↻ VAR_0=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_1=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_2=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_3=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_4=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_5=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_6=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_7=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_8=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_9=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_10=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_11=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_12=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_13=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_14=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_15=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_16=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_17=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_18=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_19=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_20=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_21=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_22=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_23=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_24=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_25=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_26=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_27=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_28=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_29=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_30=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_31=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_32=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_33=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_34=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_35=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_36=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_37=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_38=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_39=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_40=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_41=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_42=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_43=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_44=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_45=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_46=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_47=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_48=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_49=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_50=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_51=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_52=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_53=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_54=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_55=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_56=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_57=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_58=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_59=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_60=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_61=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_62=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_63=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_64=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_65=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_66=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_67=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_68=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_69=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_70=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_71=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_72=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_73=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_74=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_75=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_76=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_77=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_78=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_79=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_80=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_81=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_82=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_83=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_84=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_85=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_86=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_87=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_88=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_89=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_90=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_91=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_92=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_93=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_94=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_95=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_96=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_97=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_98=w → main, one\x1B[0m",
+  "\x1B[33m↻ VAR_99=w → main, one\x1B[0m",
+]
+`;
+
+exports[`commands (in-process) pull and push log 100 variables with NO_COLOR 1`] = `
+[
+  "↓ pulling main - 100 variables",
+]
+`;
+
+exports[`commands (in-process) pull and push log 100 variables with NO_COLOR 2`] = `
+[
+  "↻ VAR_0=w → main, one",
+  "↻ VAR_1=w → main, one",
+  "↻ VAR_2=w → main, one",
+  "↻ VAR_3=w → main, one",
+  "↻ VAR_4=w → main, one",
+  "↻ VAR_5=w → main, one",
+  "↻ VAR_6=w → main, one",
+  "↻ VAR_7=w → main, one",
+  "↻ VAR_8=w → main, one",
+  "↻ VAR_9=w → main, one",
+  "↻ VAR_10=w → main, one",
+  "↻ VAR_11=w → main, one",
+  "↻ VAR_12=w → main, one",
+  "↻ VAR_13=w → main, one",
+  "↻ VAR_14=w → main, one",
+  "↻ VAR_15=w → main, one",
+  "↻ VAR_16=w → main, one",
+  "↻ VAR_17=w → main, one",
+  "↻ VAR_18=w → main, one",
+  "↻ VAR_19=w → main, one",
+  "↻ VAR_20=w → main, one",
+  "↻ VAR_21=w → main, one",
+  "↻ VAR_22=w → main, one",
+  "↻ VAR_23=w → main, one",
+  "↻ VAR_24=w → main, one",
+  "↻ VAR_25=w → main, one",
+  "↻ VAR_26=w → main, one",
+  "↻ VAR_27=w → main, one",
+  "↻ VAR_28=w → main, one",
+  "↻ VAR_29=w → main, one",
+  "↻ VAR_30=w → main, one",
+  "↻ VAR_31=w → main, one",
+  "↻ VAR_32=w → main, one",
+  "↻ VAR_33=w → main, one",
+  "↻ VAR_34=w → main, one",
+  "↻ VAR_35=w → main, one",
+  "↻ VAR_36=w → main, one",
+  "↻ VAR_37=w → main, one",
+  "↻ VAR_38=w → main, one",
+  "↻ VAR_39=w → main, one",
+  "↻ VAR_40=w → main, one",
+  "↻ VAR_41=w → main, one",
+  "↻ VAR_42=w → main, one",
+  "↻ VAR_43=w → main, one",
+  "↻ VAR_44=w → main, one",
+  "↻ VAR_45=w → main, one",
+  "↻ VAR_46=w → main, one",
+  "↻ VAR_47=w → main, one",
+  "↻ VAR_48=w → main, one",
+  "↻ VAR_49=w → main, one",
+  "↻ VAR_50=w → main, one",
+  "↻ VAR_51=w → main, one",
+  "↻ VAR_52=w → main, one",
+  "↻ VAR_53=w → main, one",
+  "↻ VAR_54=w → main, one",
+  "↻ VAR_55=w → main, one",
+  "↻ VAR_56=w → main, one",
+  "↻ VAR_57=w → main, one",
+  "↻ VAR_58=w → main, one",
+  "↻ VAR_59=w → main, one",
+  "↻ VAR_60=w → main, one",
+  "↻ VAR_61=w → main, one",
+  "↻ VAR_62=w → main, one",
+  "↻ VAR_63=w → main, one",
+  "↻ VAR_64=w → main, one",
+  "↻ VAR_65=w → main, one",
+  "↻ VAR_66=w → main, one",
+  "↻ VAR_67=w → main, one",
+  "↻ VAR_68=w → main, one",
+  "↻ VAR_69=w → main, one",
+  "↻ VAR_70=w → main, one",
+  "↻ VAR_71=w → main, one",
+  "↻ VAR_72=w → main, one",
+  "↻ VAR_73=w → main, one",
+  "↻ VAR_74=w → main, one",
+  "↻ VAR_75=w → main, one",
+  "↻ VAR_76=w → main, one",
+  "↻ VAR_77=w → main, one",
+  "↻ VAR_78=w → main, one",
+  "↻ VAR_79=w → main, one",
+  "↻ VAR_80=w → main, one",
+  "↻ VAR_81=w → main, one",
+  "↻ VAR_82=w → main, one",
+  "↻ VAR_83=w → main, one",
+  "↻ VAR_84=w → main, one",
+  "↻ VAR_85=w → main, one",
+  "↻ VAR_86=w → main, one",
+  "↻ VAR_87=w → main, one",
+  "↻ VAR_88=w → main, one",
+  "↻ VAR_89=w → main, one",
+  "↻ VAR_90=w → main, one",
+  "↻ VAR_91=w → main, one",
+  "↻ VAR_92=w → main, one",
+  "↻ VAR_93=w → main, one",
+  "↻ VAR_94=w → main, one",
+  "↻ VAR_95=w → main, one",
+  "↻ VAR_96=w → main, one",
+  "↻ VAR_97=w → main, one",
+  "↻ VAR_98=w → main, one",
+  "↻ VAR_99=w → main, one",
+]
+`;
+
+exports[`commands (in-process) push masks the value of sensitive variables (snapshot) 1`] = `
+[
+  "\x1B[33m↻ KEY_FOO=******** → main, one\x1B[0m",
+  "\x1B[33m↻ API_KEY=******** → main, one\x1B[0m",
+  "\x1B[33m↻ AWS_BUCKET_SECRET=******** → main, one\x1B[0m",
+  "\x1B[33m↻ DB_PASSWORD=******** → main, one\x1B[0m",
+  "\x1B[33m↻ AUTH_TOKEN=******** → main, one\x1B[0m",
+  "\x1B[33m↻ JWT_SECRET=******** → main, one\x1B[0m",
+]
+`;
+
+exports[`push with many branches logs one line when the same value changes in 3 branches 1`] = `
+[
+  "\x1B[33m↻ LOG_LEVEL=info → main, b1, b2\x1B[0m",
+]
+`;
+
+exports[`push with many branches logs one line when the same value changes in 5 branches 1`] = `
+[
+  "\x1B[33m↻ LOG_LEVEL=info → main, b1, b2, b3, b4\x1B[0m",
+]
+`;
+
+exports[`push with many branches logs one line when the same value changes in 10 branches 1`] = `
+[
+  "\x1B[33m↻ LOG_LEVEL=info → main, b1, b2, b3, b4, b5, b6, b7, b8, b9\x1B[0m",
+]
+`;

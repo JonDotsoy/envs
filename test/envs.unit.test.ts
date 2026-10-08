@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  spyOn,
+  test,
+} from "bun:test";
 import { $ } from "bun";
 import { chmod, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,6 +23,11 @@ import {
   type Context,
 } from "../src/envs";
 import { createWorkspace, type Workspace } from "./fixtures/workspace";
+
+// Keep color assertions independent of the developer's shell.
+beforeEach(() => {
+  delete process.env.NO_COLOR;
+});
 
 function testContext(cwd: string, overrides: Partial<Context> = {}) {
   const logs: string[] = [];
@@ -126,7 +139,9 @@ describe("run", () => {
     process.env.PATH = `${fakeBin}:${originalPath}`;
     try {
       expect(await defaultContext().openEditor("/some/values.yml")).toBe(7);
-      expect((await Bun.file(argsFile).text()).trim()).toBe("-w /some/values.yml");
+      expect((await Bun.file(argsFile).text()).trim()).toBe(
+        "-w /some/values.yml",
+      );
     } finally {
       process.env.PATH = originalPath;
       await rm(fakeBin, { recursive: true, force: true });
@@ -157,7 +172,9 @@ describe("git helpers", () => {
   });
 
   test("listWorktrees names by branch and by dir when detached", async () => {
-    await $`git -C ${ws.main} worktree add -q --detach ${join(ws.main, "..", "detached-wt")}`.nothrow().quiet();
+    await $`git -C ${ws.main} worktree add -q --detach ${join(ws.main, "..", "detached-wt")}`
+      .nothrow()
+      .quiet();
     const list = await listWorktrees(ws.main);
     expect(list.find((w) => w.path === ws.main)?.name).toBe("main");
     expect(list.find((w) => w.path === ws.worktrees.one)?.name).toBe("one");
@@ -189,7 +206,9 @@ describe("commands (in-process)", () => {
     const first = testContext(ws.worktrees.one!);
     expect(await run(["init"], first.ctx)).toBe(0);
     expect(first.logs.every((l) => l.startsWith("Created "))).toBe(true);
-    expect(await Bun.file(join(ws.main, ".envs/.gitignore")).text()).toBe("*\n");
+    expect(await Bun.file(join(ws.main, ".envs/.gitignore")).text()).toBe(
+      "*\n",
+    );
 
     const second = testContext(ws.main);
     expect(await run(["init"], second.ctx)).toBe(0);
@@ -201,7 +220,7 @@ describe("commands (in-process)", () => {
     await Bun.write(join(ws.worktrees.one!, ".env"), "A=one\n");
     const { ctx, logs } = testContext(ws.main);
     expect(await run(["pull"], ctx)).toBe(0);
-    expect(logs).toEqual(["Pulled main", "Pulled one"]);
+    expect(logs).toEqual(["\x1b[32m↓ pulling main, one - 2 variables\x1b[0m"]);
     const values = Bun.YAML.parse(await Bun.file(valuesPath()).text()) as any;
     expect(values.envs).toEqual({
       A: { main: "main", one: "one" },
@@ -212,6 +231,92 @@ describe("commands (in-process)", () => {
     await run(["pull"], testContext(ws.main).ctx);
     const after = Bun.YAML.parse(await Bun.file(valuesPath()).text()) as any;
     expect(after.envs.B).toBeUndefined();
+  });
+
+  for (const [count, noColor] of [3, 5, 10, 100].flatMap(
+    (n) =>
+      [
+        [n, false],
+        [n, true],
+      ] as const,
+  )) {
+    const title = `pull and push log ${count} variables${noColor ? " with NO_COLOR" : ""}`;
+    test(title, async () => {
+      if (noColor) process.env.NO_COLOR = "1";
+      const [g, y, r] = noColor
+        ? ["", "", ""]
+        : ["\x1b[32m", "\x1b[33m", "\x1b[0m"];
+      const keys = Array.from({ length: count }, (_, i) => `VAR_${i}`);
+      await Bun.write(
+        join(ws.main, ".env"),
+        keys.map((k) => `${k}=v`).join("\n") + "\n",
+      );
+      await rm(join(ws.worktrees.one!, ".env"), { force: true });
+      await Bun.write(valuesPath(), "");
+
+      const pulled = testContext(ws.main);
+      expect(await run(["pull"], pulled.ctx)).toBe(0);
+      expect(pulled.logs).toEqual([
+        `${g}↓ pulling main - ${count} variables${r}`,
+      ]);
+      expect(pulled.logs).toMatchSnapshot();
+
+      // Defaults with a new value change both worktrees, so each line lists both.
+      await Bun.write(
+        valuesPath(),
+        "defaults:\n" + keys.map((k) => `  ${k}: w`).join("\n") + "\n",
+      );
+      const pushed = testContext(ws.main);
+      expect(await run(["push"], pushed.ctx)).toBe(0);
+      expect(pushed.logs).toEqual(
+        keys.map((k) => `${y}↻ ${k}=w → main, one${r}`),
+      );
+      expect(pushed.logs).toMatchSnapshot();
+    });
+  }
+
+  test("NO_COLOR disables colors in pull and push logs", async () => {
+    const previous = process.env.NO_COLOR;
+    process.env.NO_COLOR = "1";
+    try {
+      await Bun.write(join(ws.main, ".env"), "A=1\n");
+      await rm(join(ws.worktrees.one!, ".env"), { force: true });
+      await Bun.write(valuesPath(), "");
+      const pulled = testContext(ws.main);
+      await run(["pull"], pulled.ctx);
+      expect(pulled.logs).toEqual(["↓ pulling main - 1 variables"]);
+      await Bun.write(valuesPath(), "defaults:\n  A: 2\n");
+      const pushed = testContext(ws.main);
+      await run(["push"], pushed.ctx);
+      expect(pushed.logs).toEqual(["↻ A=2 → main, one"]);
+    } finally {
+      if (previous === undefined) delete process.env.NO_COLOR;
+      else process.env.NO_COLOR = previous;
+    }
+  });
+
+  test("push masks the value of sensitive variables (snapshot)", async () => {
+    // Fake values: only the shape of the log output matters here.
+    await Bun.write(
+      valuesPath(),
+      [
+        "defaults:",
+        "  KEY_FOO: fake-key-foo",
+        "  API_KEY: sk_test_0000000000",
+        "  AWS_BUCKET_SECRET: fake/aws+secret==",
+        "  DB_PASSWORD: 'p@ss word'",
+        "  AUTH_TOKEN: ghp_fake0000",
+        "  JWT_SECRET: fake.jwt.secret",
+        "envs:",
+        "  API_KEY:",
+        "    one: sk_test_1111111111",
+        "",
+      ].join("\n"),
+    );
+    const { ctx, logs } = testContext(ws.main);
+    expect(await run(["push"], ctx)).toBe(0);
+    expect(logs.join("\n")).not.toMatch(/fake|sk_test|ghp_|p@ss/);
+    expect(logs).toMatchSnapshot();
   });
 
   test("pull skips worktrees without .env and keeps defaults", async () => {
@@ -228,9 +333,11 @@ describe("commands (in-process)", () => {
     await Bun.write(valuesPath(), "envs:\n  A:\n    one: x\n");
     const { ctx, logs } = testContext(ws.main);
     expect(await run(["push"], ctx)).toBe(0);
-    expect(logs).toEqual(["Pushed one"]);
+    expect(logs).toEqual(["\x1b[33m↻ A=x → one\x1b[0m"]);
     expect(await Bun.file(join(ws.main, ".env")).exists()).toBe(false);
-    expect(await Bun.file(join(ws.worktrees.one!, ".env")).text()).toBe("A=x\n");
+    expect(await Bun.file(join(ws.worktrees.one!, ".env")).text()).toBe(
+      "A=x\n",
+    );
   });
 
   test("push writes defaults to every worktree, overridden by envs", async () => {
@@ -278,7 +385,7 @@ describe("commands (in-process)", () => {
       },
     });
     expect(await run(["edit"], ctx)).toBe(3);
-    expect(logs.some((l) => l.startsWith("Pushed"))).toBe(false);
+    expect(logs.some((l) => l.includes("↻"))).toBe(false);
     expect(await Bun.file(join(ws.main, ".env")).text()).toBe("E=keep\n");
   });
 });
@@ -292,5 +399,33 @@ test("parseValue turns booleans and canonical numbers into YAML scalars", async 
   expect(parseValue("0.5")).toBe(0.5);
   for (const keep of ["007", "1.50", "True", "1e3", "", "3000 ", "v1"]) {
     expect(parseValue(keep)).toBe(keep);
+  }
+});
+
+describe("push with many branches", () => {
+  for (const branches of [3, 5, 10]) {
+    test(`logs one line when the same value changes in ${branches} branches`, async () => {
+      const names = Array.from({ length: branches - 1 }, (_, i) => `b${i + 1}`);
+      const ws = await createWorkspace({ worktrees: names });
+      try {
+        await Bun.write(
+          join(ws.main, ".envs/values.yml"),
+          "defaults:\n  LOG_LEVEL: info\n",
+        );
+        const { ctx, logs } = testContext(ws.main);
+        expect(await run(["push"], ctx)).toBe(0);
+        expect(logs).toEqual([
+          `\x1b[33m↻ LOG_LEVEL=info → ${["main", ...names].join(", ")}\x1b[0m`,
+        ]);
+        expect(logs).toMatchSnapshot();
+
+        // Same value again: nothing changed, nothing logged.
+        const again = testContext(ws.main);
+        expect(await run(["push"], again.ctx)).toBe(0);
+        expect(again.logs).toEqual([]);
+      } finally {
+        await ws.cleanup();
+      }
+    });
   }
 });
