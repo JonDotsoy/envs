@@ -32,6 +32,8 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      # Trusted publishing (OIDC) needs npm >= 11.5.1; Node 22 ships an older npm.
+      - run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
       - run: bun test
 
@@ -44,8 +46,8 @@ jobs:
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm
+        # Authenticates with GitHub OIDC (id-token: write); no npm token needed.
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           TAG: ${{ inputs.tag }}
         run: npm publish --tag "$TAG" --access public --provenance
 
