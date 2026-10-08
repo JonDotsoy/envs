@@ -126,7 +126,9 @@ describe("run", () => {
     process.env.PATH = `${fakeBin}:${originalPath}`;
     try {
       expect(await defaultContext().openEditor("/some/values.yml")).toBe(7);
-      expect((await Bun.file(argsFile).text()).trim()).toBe("-w /some/values.yml");
+      expect((await Bun.file(argsFile).text()).trim()).toBe(
+        "-w /some/values.yml",
+      );
     } finally {
       process.env.PATH = originalPath;
       await rm(fakeBin, { recursive: true, force: true });
@@ -157,7 +159,9 @@ describe("git helpers", () => {
   });
 
   test("listWorktrees names by branch and by dir when detached", async () => {
-    await $`git -C ${ws.main} worktree add -q --detach ${join(ws.main, "..", "detached-wt")}`.nothrow().quiet();
+    await $`git -C ${ws.main} worktree add -q --detach ${join(ws.main, "..", "detached-wt")}`
+      .nothrow()
+      .quiet();
     const list = await listWorktrees(ws.main);
     expect(list.find((w) => w.path === ws.main)?.name).toBe("main");
     expect(list.find((w) => w.path === ws.worktrees.one)?.name).toBe("one");
@@ -189,7 +193,9 @@ describe("commands (in-process)", () => {
     const first = testContext(ws.worktrees.one!);
     expect(await run(["init"], first.ctx)).toBe(0);
     expect(first.logs.every((l) => l.startsWith("Created "))).toBe(true);
-    expect(await Bun.file(join(ws.main, ".envs/.gitignore")).text()).toBe("*\n");
+    expect(await Bun.file(join(ws.main, ".envs/.gitignore")).text()).toBe(
+      "*\n",
+    );
 
     const second = testContext(ws.main);
     expect(await run(["init"], second.ctx)).toBe(0);
@@ -201,7 +207,7 @@ describe("commands (in-process)", () => {
     await Bun.write(join(ws.worktrees.one!, ".env"), "A=one\n");
     const { ctx, logs } = testContext(ws.main);
     expect(await run(["pull"], ctx)).toBe(0);
-    expect(logs).toEqual(["Pulled main", "Pulled one"]);
+    expect(logs).toEqual(["\x1b[32m↓ pulling main, one - 2 variables\x1b[0m"]);
     const values = Bun.YAML.parse(await Bun.file(valuesPath()).text()) as any;
     expect(values.envs).toEqual({
       A: { main: "main", one: "one" },
@@ -228,9 +234,11 @@ describe("commands (in-process)", () => {
     await Bun.write(valuesPath(), "envs:\n  A:\n    one: x\n");
     const { ctx, logs } = testContext(ws.main);
     expect(await run(["push"], ctx)).toBe(0);
-    expect(logs).toEqual(["Pushed one"]);
+    expect(logs).toEqual(["\x1b[33m↻ A=x → one\x1b[0m"]);
     expect(await Bun.file(join(ws.main, ".env")).exists()).toBe(false);
-    expect(await Bun.file(join(ws.worktrees.one!, ".env")).text()).toBe("A=x\n");
+    expect(await Bun.file(join(ws.worktrees.one!, ".env")).text()).toBe(
+      "A=x\n",
+    );
   });
 
   test("push writes defaults to every worktree, overridden by envs", async () => {
@@ -278,7 +286,7 @@ describe("commands (in-process)", () => {
       },
     });
     expect(await run(["edit"], ctx)).toBe(3);
-    expect(logs.some((l) => l.startsWith("Pushed"))).toBe(false);
+    expect(logs.some((l) => l.includes("↻"))).toBe(false);
     expect(await Bun.file(join(ws.main, ".env")).text()).toBe("E=keep\n");
   });
 });

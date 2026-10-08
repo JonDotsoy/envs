@@ -24,6 +24,9 @@ export interface Context {
   openEditor(path: string): Promise<number>;
 }
 
+const green = (text: string) => `\x1b[32m${text}\x1b[0m`;
+const yellow = (text: string) => `\x1b[33m${text}\x1b[0m`;
+
 export const defaultContext = (): Context => ({
   cwd: process.cwd(),
   log: (message) => console.log(message),
@@ -169,6 +172,8 @@ export async function push(ctx: Context): Promise<number> {
   const read = await readValues(ctx);
   if (!read) return 1;
   const { values } = read;
+  // Changed variables, grouped by `KEY=VALUE` so each log line lists every branch it changed in.
+  const changes = new Map<string, string[]>();
   for (const { name, path } of await listWorktrees(ctx.cwd)) {
     // Defaults apply to every worktree; per-worktree values override them.
     const entries: Record<string, string> = {};
@@ -181,8 +186,16 @@ export async function push(ctx: Context): Promise<number> {
     if (Object.keys(entries).length === 0) continue;
     const dotenv = Bun.file(join(path, ".env"));
     const current = (await dotenv.exists()) ? await dotenv.text() : "";
+    const existing = parseDotenv(current);
+    for (const [key, value] of Object.entries(entries)) {
+      if (existing[key] === value) continue;
+      const line = `${key}=${formatDotenvValue(value)}`;
+      changes.set(line, [...(changes.get(line) ?? []), name]);
+    }
     await Bun.write(dotenv, updateDotenv(current, entries));
-    ctx.log(`Pushed ${name}`);
+  }
+  for (const [line, names] of changes) {
+    ctx.log(yellow(`↻ ${line} → ${names.join(", ")}`));
   }
   return 0;
 }
@@ -193,10 +206,14 @@ export async function pull(ctx: Context): Promise<number> {
   const { path: valuesPath, values } = read;
   const envs = (values.envs ??= {});
   const defaults = values.defaults ?? {};
+  const pulledNames: string[] = [];
+  const pulledKeys = new Set<string>();
   for (const { name, path } of await listWorktrees(ctx.cwd)) {
     const dotenv = Bun.file(join(path, ".env"));
     if (!(await dotenv.exists())) continue;
     const parsed = parseDotenv(await dotenv.text());
+    pulledNames.push(name);
+    for (const key of Object.keys(parsed)) pulledKeys.add(key);
     // Drop keys that are no longer in this worktree's .env.
     for (const [key, byWorktree] of Object.entries(envs)) {
       if (!(key in parsed)) delete byWorktree[name];
@@ -212,18 +229,27 @@ export async function pull(ctx: Context): Promise<number> {
         (envs[key] ??= {})[name] = parsedValue;
       }
     }
-    ctx.log(`Pulled ${name}`);
   }
   for (const [key, byWorktree] of Object.entries(envs)) {
     if (Object.keys(byWorktree).length === 0) delete envs[key];
   }
   await Bun.write(valuesPath, Bun.YAML.stringify(values, null, 2));
+  if (pulledNames.length > 0) {
+    ctx.log(
+      green(
+        `↓ pulling ${pulledNames.join(", ")} - ${pulledKeys.size} variables`,
+      ),
+    );
+  }
   return 0;
 }
 
 /** Whether git ignores `file` inside `dir` (true when it would not be committed). */
 async function isIgnored(dir: string, file: string): Promise<boolean> {
-  const result = await $`git check-ignore -q ${file}`.cwd(dir).nothrow().quiet();
+  const result = await $`git check-ignore -q ${file}`
+    .cwd(dir)
+    .nothrow()
+    .quiet();
   return result.exitCode === 0;
 }
 
