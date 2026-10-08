@@ -15,5 +15,8 @@
   },
   "files": [
     "src"
-  ]
+  ],
+  "scripts": {
+    "build": "bun scripts/build.ts"
+  }
 }
