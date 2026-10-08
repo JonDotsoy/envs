@@ -121,6 +121,23 @@ test("envs pull", async () => {
   expect(values.envs.BAR).toBeUndefined();
 });
 
+test("envs pull skips values equal to defaults", async () => {
+  const bin = join(import.meta.dir, "../src/bin/envs.ts");
+  const dir = ws.worktrees["worktree-1"]!;
+  const valuesPath = join(ws.main, ".envs/values.yml");
+
+  await $`bun ${bin} init`.cwd(dir).quiet();
+  await rm(join(ws.main, ".env"), { force: true }); // independent from other tests
+  await Bun.write(valuesPath, "defaults:\n  FOO: tar\n");
+  await Bun.write(join(dir, ".env"), "FOO=tar\n");
+
+  const result = await $`bun ${bin} pull`.cwd(dir).quiet();
+  expect(result.exitCode).toBe(0);
+  const values = Bun.YAML.parse(await Bun.file(valuesPath).text()) as any;
+  expect(values.defaults).toEqual({ FOO: "tar" });
+  expect(values.envs?.FOO).toBeUndefined();
+});
+
 test("envs push", async () => {
   const bin = join(import.meta.dir, "../src/bin/envs.ts");
   const one = ws.worktrees["worktree-1"]!;

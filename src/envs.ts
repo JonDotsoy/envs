@@ -192,6 +192,7 @@ export async function pull(ctx: Context): Promise<number> {
   if (!read) return 1;
   const { path: valuesPath, values } = read;
   const envs = (values.envs ??= {});
+  const defaults = values.defaults ?? {};
   for (const { name, path } of await listWorktrees(ctx.cwd)) {
     const dotenv = Bun.file(join(path, ".env"));
     if (!(await dotenv.exists())) continue;
@@ -201,7 +202,15 @@ export async function pull(ctx: Context): Promise<number> {
       if (!(key in parsed)) delete byWorktree[name];
     }
     for (const [key, value] of Object.entries(parsed)) {
-      (envs[key] ??= {})[name] = parseValue(value);
+      const parsedValue = parseValue(value);
+      // A value equal to its default is already covered by `defaults:`.
+      const fromDefaults =
+        key in defaults && String(defaults[key]) === String(parsedValue);
+      if (fromDefaults) {
+        if (envs[key]) delete envs[key]![name];
+      } else {
+        (envs[key] ??= {})[name] = parsedValue;
+      }
     }
     ctx.log(`Pulled ${name}`);
   }
