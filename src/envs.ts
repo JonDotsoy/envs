@@ -1,6 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { stat } from "node:fs/promises";
 import { $ } from "bun";
+import { rules, type LintContext } from "./lint-rules";
 
 export const HELP = `Usage: envs <command>
 
@@ -8,6 +10,7 @@ Commands:
   init    Create the .envs/ directory (.gitignore, values.yml)
   pull    Read each worktree's .env and write it into .envs/values.yml
   push    Write defaults and .envs/values.yml into the .env of each worktree
+  lint    Warn about insecure values and unprotected secret files
   edit    Pull, open .envs/values.yml in VS Code (code -w), then push
   help    Show this help message
 `;
@@ -209,6 +212,60 @@ export async function pull(ctx: Context): Promise<number> {
   return 0;
 }
 
+/** Whether git ignores `file` inside `dir` (true when it would not be committed). */
+async function isIgnored(dir: string, file: string): Promise<boolean> {
+  const result = await $`git check-ignore -q ${file}`.cwd(dir).nothrow().quiet();
+  return result.exitCode === 0;
+}
+
+/** Whether git tracks `file` inside `dir`. */
+async function isTracked(dir: string, file: string): Promise<boolean> {
+  const result = await $`git ls-files --error-unmatch ${file}`
+    .cwd(dir)
+    .nothrow()
+    .quiet();
+  return result.exitCode === 0;
+}
+
+/** Runs each rule of lint-rules.ts one by one and prints a warning per violation. */
+export async function lint(ctx: Context): Promise<number> {
+  const read = await readValues(ctx);
+  if (!read) return 1;
+  const root = await findRoot(ctx.cwd);
+  const worktrees = await listWorktrees(ctx.cwd);
+  const modeOf = async (path: string) =>
+    process.platform === "win32" ? undefined : (await stat(path)).mode;
+  const dotenvs: LintContext["dotenvs"] = [];
+  for (const worktree of worktrees) {
+    const path = join(worktree.path, ".env");
+    if (await Bun.file(path).exists()) {
+      dotenvs.push({ ...worktree, mode: await modeOf(path) });
+    }
+  }
+  const lintContext: LintContext = {
+    values: read.values,
+    root,
+    valuesMode: await modeOf(read.path),
+    dotenvs,
+    isTracked,
+    isIgnored,
+  };
+
+  let count = 0;
+  for (const rule of rules) {
+    for (const { location, message } of await rule.check(lintContext)) {
+      ctx.error(`warning [${rule.id}] ${location}: ${message}`);
+      count++;
+    }
+  }
+  if (count === 0) {
+    ctx.log("No security problems found.");
+    return 0;
+  }
+  ctx.error(`\n${count} warning(s) found.`);
+  return 1;
+}
+
 export async function edit(ctx: Context): Promise<number> {
   const pulled = await pull(ctx);
   if (pulled !== 0) return pulled;
@@ -236,6 +293,8 @@ export async function run(
       return await push(ctx);
     case "pull":
       return await pull(ctx);
+    case "lint":
+      return await lint(ctx);
     case "edit":
       return await edit(ctx);
     default:
