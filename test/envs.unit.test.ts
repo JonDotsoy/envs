@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  spyOn,
+  test,
+} from "bun:test";
 import { $ } from "bun";
 import { chmod, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,6 +23,12 @@ import {
   type Context,
 } from "../src/envs";
 import { createWorkspace, type Workspace } from "./fixtures/workspace";
+
+// Keep color assertions independent of the developer's shell.
+beforeEach(() => {
+  delete process.env.NO_COLOR;
+  delete process.env.NO_COLORS;
+});
 
 function testContext(cwd: string, overrides: Partial<Context> = {}) {
   const logs: string[] = [];
@@ -248,6 +262,28 @@ describe("commands (in-process)", () => {
         keys.map((k) => `\x1b[33m↻ ${k}=w → main, one\x1b[0m`),
       );
       expect(pushed.logs).toMatchSnapshot();
+    });
+  }
+
+  for (const name of ["NO_COLOR", "NO_COLORS"]) {
+    test(`${name} disables colors in pull and push logs`, async () => {
+      const previous = process.env[name];
+      process.env[name] = "1";
+      try {
+        await Bun.write(join(ws.main, ".env"), "A=1\n");
+        await rm(join(ws.worktrees.one!, ".env"), { force: true });
+        await Bun.write(valuesPath(), "");
+        const pulled = testContext(ws.main);
+        await run(["pull"], pulled.ctx);
+        expect(pulled.logs).toEqual(["↓ pulling main - 1 variables"]);
+        await Bun.write(valuesPath(), "defaults:\n  A: 2\n");
+        const pushed = testContext(ws.main);
+        await run(["push"], pushed.ctx);
+        expect(pushed.logs).toEqual(["↻ A=2 → main, one"]);
+      } finally {
+        if (previous === undefined) delete process.env[name];
+        else process.env[name] = previous;
+      }
     });
   }
 

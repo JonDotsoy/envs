@@ -24,8 +24,13 @@ export interface Context {
   openEditor(path: string): Promise<number>;
 }
 
-const green = (text: string) => `\x1b[32m${text}\x1b[0m`;
-const yellow = (text: string) => `\x1b[33m${text}\x1b[0m`;
+/** Colors are skipped when NO_COLOR (https://no-color.org) or NO_COLORS is set to a non-empty value. */
+const colorsDisabled = () =>
+  Boolean(process.env.NO_COLOR || process.env.NO_COLORS);
+const paint = (code: number, text: string) =>
+  colorsDisabled() ? text : `\x1b[${code}m${text}\x1b[0m`;
+const green = (text: string) => paint(32, text);
+const yellow = (text: string) => paint(33, text);
 
 export const defaultContext = (): Context => ({
   cwd: process.cwd(),
