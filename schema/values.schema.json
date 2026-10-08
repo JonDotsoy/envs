@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/JonDotsoy/envs/schema/values.schema.json",
+  "title": "envs values.yml",
+  "description": "Values of the environment variables per worktree, stored in .envs/values.yml.",
+  "type": "object",
+  "properties": {
+    "defaults": {
+      "description": "Default value of each environment variable, written to every worktree's .env on push unless envs overrides it.",
+      "type": "object",
+      "additionalProperties": {
+        "description": "Default value of the environment variable.",
+        "type": "string"
+      }
+    },
+    "envs": {
+      "description": "Environment variables by name.",
+      "type": "object",
+      "additionalProperties": {
+        "description": "Values of one environment variable, keyed by worktree name.",
+        "type": "object",
+        "additionalProperties": {
+          "description": "Value of the environment variable in that worktree.",
+          "type": "string"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
