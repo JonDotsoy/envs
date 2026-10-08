@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-08
+
 ### Added
 
 - `envs` CLI with the `init`, `pull`, `push` and `edit` commands, plus build, tests and workflows.
@@ -16,4 +18,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Documentation and metadata: README, MIT license, `SECURITY.md` and `package.json`.
 - The build includes `README.md` and `SECURITY.md` in `dist`.
 
-[Unreleased]: https://github.com/JonDotsoy/envs/commits/develop
+[Unreleased]: https://github.com/JonDotsoy/envs/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/JonDotsoy/envs/releases/tag/v0.1.0
