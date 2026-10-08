@@ -16,7 +16,9 @@ export async function build(outdir = join(root, "dist")): Promise<void> {
     throw new AggregateError(result.logs, "Build failed");
   }
 
-  await Bun.write(join(outdir, "LICENSE"), Bun.file(join(root, "LICENSE")));
+  for (const file of ["LICENSE", "README.md", "SECURITY.md"]) {
+    await Bun.write(join(outdir, file), Bun.file(join(root, file)));
+  }
 
   // Copy the original package.json, pointing to the built files in this folder.
   const {
