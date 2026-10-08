@@ -2,6 +2,7 @@
   "name": "@jondotsoy/envs",
   "version": "0.0.2",
   "license": "MIT",
+  "author": "Jonathan Delgado <hi@jon.soy> (https://jon.soy)",
   "module": "index.ts",
   "type": "module",
   "bin": {
