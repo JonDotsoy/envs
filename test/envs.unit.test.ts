@@ -220,6 +220,35 @@ describe("commands (in-process)", () => {
     expect(after.envs.B).toBeUndefined();
   });
 
+  for (const count of [3, 5, 10, 100]) {
+    test(`pull and push log ${count} variables`, async () => {
+      const keys = Array.from({ length: count }, (_, i) => `VAR_${i}`);
+      await Bun.write(
+        join(ws.main, ".env"),
+        keys.map((k) => `${k}=v`).join("\n") + "\n",
+      );
+      await rm(join(ws.worktrees.one!, ".env"), { force: true });
+      await Bun.write(valuesPath(), "");
+
+      const pulled = testContext(ws.main);
+      expect(await run(["pull"], pulled.ctx)).toBe(0);
+      expect(pulled.logs).toEqual([
+        `\x1b[32m↓ pulling main - ${count} variables\x1b[0m`,
+      ]);
+
+      // Defaults with a new value change both worktrees, so each line lists both.
+      await Bun.write(
+        valuesPath(),
+        "defaults:\n" + keys.map((k) => `  ${k}: w`).join("\n") + "\n",
+      );
+      const pushed = testContext(ws.main);
+      expect(await run(["push"], pushed.ctx)).toBe(0);
+      expect(pushed.logs).toEqual(
+        keys.map((k) => `\x1b[33m↻ ${k}=w → main, one\x1b[0m`),
+      );
+    });
+  }
+
   test("pull skips worktrees without .env and keeps defaults", async () => {
     await Bun.write(valuesPath(), "defaults:\n  D: d\n");
     await rm(join(ws.main, ".env"), { force: true });
