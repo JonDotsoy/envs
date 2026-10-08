@@ -295,7 +295,7 @@ describe("commands (in-process)", () => {
     }
   });
 
-  test("push logs sensitive-looking variables (snapshot)", async () => {
+  test("push masks the value of sensitive variables (snapshot)", async () => {
     // Fake values: only the shape of the log output matters here.
     await Bun.write(
       valuesPath(),
@@ -315,6 +315,7 @@ describe("commands (in-process)", () => {
     );
     const { ctx, logs } = testContext(ws.main);
     expect(await run(["push"], ctx)).toBe(0);
+    expect(logs.join("\n")).not.toMatch(/fake|sk_test|ghp_|p@ss/);
     expect(logs).toMatchSnapshot();
   });
 

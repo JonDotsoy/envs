@@ -14,6 +14,20 @@ exports[`commands (in-process) pull and push log 3 variables 2`] = `
 ]
 `;
 
+exports[`commands (in-process) pull and push log 3 variables with NO_COLOR 1`] = `
+[
+  "↓ pulling main - 3 variables",
+]
+`;
+
+exports[`commands (in-process) pull and push log 3 variables with NO_COLOR 2`] = `
+[
+  "↻ VAR_0=w → main, one",
+  "↻ VAR_1=w → main, one",
+  "↻ VAR_2=w → main, one",
+]
+`;
+
 exports[`commands (in-process) pull and push log 5 variables 1`] = `
 [
   "\x1B[32m↓ pulling main - 5 variables\x1B[0m",
@@ -27,6 +41,22 @@ exports[`commands (in-process) pull and push log 5 variables 2`] = `
   "\x1B[33m↻ VAR_2=w → main, one\x1B[0m",
   "\x1B[33m↻ VAR_3=w → main, one\x1B[0m",
   "\x1B[33m↻ VAR_4=w → main, one\x1B[0m",
+]
+`;
+
+exports[`commands (in-process) pull and push log 5 variables with NO_COLOR 1`] = `
+[
+  "↓ pulling main - 5 variables",
+]
+`;
+
+exports[`commands (in-process) pull and push log 5 variables with NO_COLOR 2`] = `
+[
+  "↻ VAR_0=w → main, one",
+  "↻ VAR_1=w → main, one",
+  "↻ VAR_2=w → main, one",
+  "↻ VAR_3=w → main, one",
+  "↻ VAR_4=w → main, one",
 ]
 `;
 
@@ -48,6 +78,27 @@ exports[`commands (in-process) pull and push log 10 variables 2`] = `
   "\x1B[33m↻ VAR_7=w → main, one\x1B[0m",
   "\x1B[33m↻ VAR_8=w → main, one\x1B[0m",
   "\x1B[33m↻ VAR_9=w → main, one\x1B[0m",
+]
+`;
+
+exports[`commands (in-process) pull and push log 10 variables with NO_COLOR 1`] = `
+[
+  "↓ pulling main - 10 variables",
+]
+`;
+
+exports[`commands (in-process) pull and push log 10 variables with NO_COLOR 2`] = `
+[
+  "↻ VAR_0=w → main, one",
+  "↻ VAR_1=w → main, one",
+  "↻ VAR_2=w → main, one",
+  "↻ VAR_3=w → main, one",
+  "↻ VAR_4=w → main, one",
+  "↻ VAR_5=w → main, one",
+  "↻ VAR_6=w → main, one",
+  "↻ VAR_7=w → main, one",
+  "↻ VAR_8=w → main, one",
+  "↻ VAR_9=w → main, one",
 ]
 `;
 
@@ -162,57 +213,6 @@ exports[`commands (in-process) pull and push log 100 variables 2`] = `
 ]
 `;
 
-exports[`commands (in-process) pull and push log 3 variables with NO_COLOR 1`] = `
-[
-  "↓ pulling main - 3 variables",
-]
-`;
-
-exports[`commands (in-process) pull and push log 3 variables with NO_COLOR 2`] = `
-[
-  "↻ VAR_0=w → main, one",
-  "↻ VAR_1=w → main, one",
-  "↻ VAR_2=w → main, one",
-]
-`;
-
-exports[`commands (in-process) pull and push log 5 variables with NO_COLOR 1`] = `
-[
-  "↓ pulling main - 5 variables",
-]
-`;
-
-exports[`commands (in-process) pull and push log 5 variables with NO_COLOR 2`] = `
-[
-  "↻ VAR_0=w → main, one",
-  "↻ VAR_1=w → main, one",
-  "↻ VAR_2=w → main, one",
-  "↻ VAR_3=w → main, one",
-  "↻ VAR_4=w → main, one",
-]
-`;
-
-exports[`commands (in-process) pull and push log 10 variables with NO_COLOR 1`] = `
-[
-  "↓ pulling main - 10 variables",
-]
-`;
-
-exports[`commands (in-process) pull and push log 10 variables with NO_COLOR 2`] = `
-[
-  "↻ VAR_0=w → main, one",
-  "↻ VAR_1=w → main, one",
-  "↻ VAR_2=w → main, one",
-  "↻ VAR_3=w → main, one",
-  "↻ VAR_4=w → main, one",
-  "↻ VAR_5=w → main, one",
-  "↻ VAR_6=w → main, one",
-  "↻ VAR_7=w → main, one",
-  "↻ VAR_8=w → main, one",
-  "↻ VAR_9=w → main, one",
-]
-`;
-
 exports[`commands (in-process) pull and push log 100 variables with NO_COLOR 1`] = `
 [
   "↓ pulling main - 100 variables",
@@ -324,6 +324,17 @@ exports[`commands (in-process) pull and push log 100 variables with NO_COLOR 2`]
 ]
 `;
 
+exports[`commands (in-process) push masks the value of sensitive variables (snapshot) 1`] = `
+[
+  "\x1B[33m↻ KEY_FOO=******** → main, one\x1B[0m",
+  "\x1B[33m↻ API_KEY=******** → main, one\x1B[0m",
+  "\x1B[33m↻ AWS_BUCKET_SECRET=******** → main, one\x1B[0m",
+  "\x1B[33m↻ DB_PASSWORD=******** → main, one\x1B[0m",
+  "\x1B[33m↻ AUTH_TOKEN=******** → main, one\x1B[0m",
+  "\x1B[33m↻ JWT_SECRET=******** → main, one\x1B[0m",
+]
+`;
+
 exports[`push with many branches logs one line when the same value changes in 3 branches 1`] = `
 [
   "\x1B[33m↻ LOG_LEVEL=info → main, b1, b2\x1B[0m",
@@ -339,17 +350,5 @@ exports[`push with many branches logs one line when the same value changes in 5 
 exports[`push with many branches logs one line when the same value changes in 10 branches 1`] = `
 [
   "\x1B[33m↻ LOG_LEVEL=info → main, b1, b2, b3, b4, b5, b6, b7, b8, b9\x1B[0m",
-]
-`;
-
-exports[`commands (in-process) push logs sensitive-looking variables (snapshot) 1`] = `
-[
-  "\x1B[33m↻ KEY_FOO=fake-key-foo → main, one\x1B[0m",
-  "\x1B[33m↻ API_KEY=sk_test_0000000000 → main\x1B[0m",
-  "\x1B[33m↻ AWS_BUCKET_SECRET=fake/aws+secret== → main, one\x1B[0m",
-  "\x1B[33m↻ DB_PASSWORD="p@ss word" → main, one\x1B[0m",
-  "\x1B[33m↻ AUTH_TOKEN=ghp_fake0000 → main, one\x1B[0m",
-  "\x1B[33m↻ JWT_SECRET=fake.jwt.secret → main, one\x1B[0m",
-  "\x1B[33m↻ API_KEY=sk_test_1111111111 → one\x1B[0m",
 ]
 `;

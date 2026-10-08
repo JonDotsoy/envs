@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { stat } from "node:fs/promises";
 import { $ } from "bun";
-import { rules, type LintContext } from "./lint-rules";
+import { isSensitiveKey, rules, type LintContext } from "./lint-rules";
 
 export const HELP = `Usage: envs <command>
 
@@ -26,6 +26,11 @@ export interface Context {
 
 /** Colors are skipped when NO_COLOR (https://no-color.org) is set to a non-empty value. */
 const colorsDisabled = () => Boolean(process.env.NO_COLOR);
+/** Printed instead of the value of sensitive variables so secrets never reach stdout. */
+const MASK = "********";
+/** Sensitive per the lint rules, plus a bare KEY word (KEY_FOO, FOO_KEY). */
+const isMaskedKey = (key: string) =>
+  isSensitiveKey(key) || /(^|_)KEY(_|$)/i.test(key);
 const paint = (code: number, text: string) =>
   colorsDisabled() ? text : `\x1b[${code}m${text}\x1b[0m`;
 const green = (text: string) => paint(32, text);
@@ -193,7 +198,9 @@ export async function push(ctx: Context): Promise<number> {
     const existing = parseDotenv(current);
     for (const [key, value] of Object.entries(entries)) {
       if (existing[key] === value) continue;
-      const line = `${key}=${formatDotenvValue(value)}`;
+      const shown = isMaskedKey(key) ? MASK : formatDotenvValue(value);
+      const line = `${key}=${shown}`;
+      // Different secret values share a masked line, so group by what is printed.
       changes.set(line, [...(changes.get(line) ?? []), name]);
     }
     await Bun.write(dotenv, updateDotenv(current, entries));

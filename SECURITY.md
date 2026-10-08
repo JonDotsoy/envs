@@ -44,3 +44,13 @@ Additionally:
 - `envs init` creates `.envs/.gitignore` with `*`, so the `.envs/` folder is not committed to git. Do not remove that file.
 - `envs push` writes the values to the `.env` files of each worktree. Make sure `.env` is in your project's `.gitignore`.
 - Do not share `values.yml` or paste it in issues or logs.
+
+## Console output
+
+`envs push` prints one line for each variable whose value changes, in the form `↻ NAME=VALUE → branch, ...`, and `envs pull` prints `↓ pulling branch, ... - N variables`. To keep secrets out of the terminal and CI logs:
+
+- The value is replaced by `********` when the variable name contains a sensitive word: `SECRET`, `PASSWORD`, `PASSWD`, `PWD`, `TOKEN`, `KEY` (including `API_KEY` and `PRIVATE_KEY`), `CREDENTIAL`, `AUTH`, `SALT` or `SIGNING`. The match is case-insensitive and applies to whole `_`-separated words, so `KEY_FOO` and `AWS_BUCKET_SECRET` are masked but `MONKEY` is not.
+- Masking is based on the name only. A secret stored in a variable with an innocuous name (for example `DATABASE_URL` with a password inside) is printed as is.
+- `envs pull` never prints values, only branch names and the number of variables.
+- `envs lint` messages never include the matched value.
+- Set `NO_COLOR` to a non-empty value to print the output without colors.
