@@ -233,8 +233,19 @@ describe("commands (in-process)", () => {
     expect(after.envs.B).toBeUndefined();
   });
 
-  for (const count of [3, 5, 10, 100]) {
-    test(`pull and push log ${count} variables`, async () => {
+  for (const [count, noColor] of [3, 5, 10, 100].flatMap(
+    (n) =>
+      [
+        [n, false],
+        [n, true],
+      ] as const,
+  )) {
+    const title = `pull and push log ${count} variables${noColor ? " with NO_COLOR" : ""}`;
+    test(title, async () => {
+      if (noColor) process.env.NO_COLOR = "1";
+      const [g, y, r] = noColor
+        ? ["", "", ""]
+        : ["\x1b[32m", "\x1b[33m", "\x1b[0m"];
       const keys = Array.from({ length: count }, (_, i) => `VAR_${i}`);
       await Bun.write(
         join(ws.main, ".env"),
@@ -246,7 +257,7 @@ describe("commands (in-process)", () => {
       const pulled = testContext(ws.main);
       expect(await run(["pull"], pulled.ctx)).toBe(0);
       expect(pulled.logs).toEqual([
-        `\x1b[32m↓ pulling main - ${count} variables\x1b[0m`,
+        `${g}↓ pulling main - ${count} variables${r}`,
       ]);
       expect(pulled.logs).toMatchSnapshot();
 
@@ -258,7 +269,7 @@ describe("commands (in-process)", () => {
       const pushed = testContext(ws.main);
       expect(await run(["push"], pushed.ctx)).toBe(0);
       expect(pushed.logs).toEqual(
-        keys.map((k) => `\x1b[33m↻ ${k}=w → main, one\x1b[0m`),
+        keys.map((k) => `${y}↻ ${k}=w → main, one${r}`),
       );
       expect(pushed.logs).toMatchSnapshot();
     });

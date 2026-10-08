@@ -161,3 +161,165 @@ exports[`commands (in-process) pull and push log 100 variables 2`] = `
   "\x1B[33m↻ VAR_99=w → main, one\x1B[0m",
 ]
 `;
+
+exports[`commands (in-process) pull and push log 3 variables with NO_COLOR 1`] = `
+[
+  "↓ pulling main - 3 variables",
+]
+`;
+
+exports[`commands (in-process) pull and push log 3 variables with NO_COLOR 2`] = `
+[
+  "↻ VAR_0=w → main, one",
+  "↻ VAR_1=w → main, one",
+  "↻ VAR_2=w → main, one",
+]
+`;
+
+exports[`commands (in-process) pull and push log 5 variables with NO_COLOR 1`] = `
+[
+  "↓ pulling main - 5 variables",
+]
+`;
+
+exports[`commands (in-process) pull and push log 5 variables with NO_COLOR 2`] = `
+[
+  "↻ VAR_0=w → main, one",
+  "↻ VAR_1=w → main, one",
+  "↻ VAR_2=w → main, one",
+  "↻ VAR_3=w → main, one",
+  "↻ VAR_4=w → main, one",
+]
+`;
+
+exports[`commands (in-process) pull and push log 10 variables with NO_COLOR 1`] = `
+[
+  "↓ pulling main - 10 variables",
+]
+`;
+
+exports[`commands (in-process) pull and push log 10 variables with NO_COLOR 2`] = `
+[
+  "↻ VAR_0=w → main, one",
+  "↻ VAR_1=w → main, one",
+  "↻ VAR_2=w → main, one",
+  "↻ VAR_3=w → main, one",
+  "↻ VAR_4=w → main, one",
+  "↻ VAR_5=w → main, one",
+  "↻ VAR_6=w → main, one",
+  "↻ VAR_7=w → main, one",
+  "↻ VAR_8=w → main, one",
+  "↻ VAR_9=w → main, one",
+]
+`;
+
+exports[`commands (in-process) pull and push log 100 variables with NO_COLOR 1`] = `
+[
+  "↓ pulling main - 100 variables",
+]
+`;
+
+exports[`commands (in-process) pull and push log 100 variables with NO_COLOR 2`] = `
+[
+  "↻ VAR_0=w → main, one",
+  "↻ VAR_1=w → main, one",
+  "↻ VAR_2=w → main, one",
+  "↻ VAR_3=w → main, one",
+  "↻ VAR_4=w → main, one",
+  "↻ VAR_5=w → main, one",
+  "↻ VAR_6=w → main, one",
+  "↻ VAR_7=w → main, one",
+  "↻ VAR_8=w → main, one",
+  "↻ VAR_9=w → main, one",
+  "↻ VAR_10=w → main, one",
+  "↻ VAR_11=w → main, one",
+  "↻ VAR_12=w → main, one",
+  "↻ VAR_13=w → main, one",
+  "↻ VAR_14=w → main, one",
+  "↻ VAR_15=w → main, one",
+  "↻ VAR_16=w → main, one",
+  "↻ VAR_17=w → main, one",
+  "↻ VAR_18=w → main, one",
+  "↻ VAR_19=w → main, one",
+  "↻ VAR_20=w → main, one",
+  "↻ VAR_21=w → main, one",
+  "↻ VAR_22=w → main, one",
+  "↻ VAR_23=w → main, one",
+  "↻ VAR_24=w → main, one",
+  "↻ VAR_25=w → main, one",
+  "↻ VAR_26=w → main, one",
+  "↻ VAR_27=w → main, one",
+  "↻ VAR_28=w → main, one",
+  "↻ VAR_29=w → main, one",
+  "↻ VAR_30=w → main, one",
+  "↻ VAR_31=w → main, one",
+  "↻ VAR_32=w → main, one",
+  "↻ VAR_33=w → main, one",
+  "↻ VAR_34=w → main, one",
+  "↻ VAR_35=w → main, one",
+  "↻ VAR_36=w → main, one",
+  "↻ VAR_37=w → main, one",
+  "↻ VAR_38=w → main, one",
+  "↻ VAR_39=w → main, one",
+  "↻ VAR_40=w → main, one",
+  "↻ VAR_41=w → main, one",
+  "↻ VAR_42=w → main, one",
+  "↻ VAR_43=w → main, one",
+  "↻ VAR_44=w → main, one",
+  "↻ VAR_45=w → main, one",
+  "↻ VAR_46=w → main, one",
+  "↻ VAR_47=w → main, one",
+  "↻ VAR_48=w → main, one",
+  "↻ VAR_49=w → main, one",
+  "↻ VAR_50=w → main, one",
+  "↻ VAR_51=w → main, one",
+  "↻ VAR_52=w → main, one",
+  "↻ VAR_53=w → main, one",
+  "↻ VAR_54=w → main, one",
+  "↻ VAR_55=w → main, one",
+  "↻ VAR_56=w → main, one",
+  "↻ VAR_57=w → main, one",
+  "↻ VAR_58=w → main, one",
+  "↻ VAR_59=w → main, one",
+  "↻ VAR_60=w → main, one",
+  "↻ VAR_61=w → main, one",
+  "↻ VAR_62=w → main, one",
+  "↻ VAR_63=w → main, one",
+  "↻ VAR_64=w → main, one",
+  "↻ VAR_65=w → main, one",
+  "↻ VAR_66=w → main, one",
+  "↻ VAR_67=w → main, one",
+  "↻ VAR_68=w → main, one",
+  "↻ VAR_69=w → main, one",
+  "↻ VAR_70=w → main, one",
+  "↻ VAR_71=w → main, one",
+  "↻ VAR_72=w → main, one",
+  "↻ VAR_73=w → main, one",
+  "↻ VAR_74=w → main, one",
+  "↻ VAR_75=w → main, one",
+  "↻ VAR_76=w → main, one",
+  "↻ VAR_77=w → main, one",
+  "↻ VAR_78=w → main, one",
+  "↻ VAR_79=w → main, one",
+  "↻ VAR_80=w → main, one",
+  "↻ VAR_81=w → main, one",
+  "↻ VAR_82=w → main, one",
+  "↻ VAR_83=w → main, one",
+  "↻ VAR_84=w → main, one",
+  "↻ VAR_85=w → main, one",
+  "↻ VAR_86=w → main, one",
+  "↻ VAR_87=w → main, one",
+  "↻ VAR_88=w → main, one",
+  "↻ VAR_89=w → main, one",
+  "↻ VAR_90=w → main, one",
+  "↻ VAR_91=w → main, one",
+  "↻ VAR_92=w → main, one",
+  "↻ VAR_93=w → main, one",
+  "↻ VAR_94=w → main, one",
+  "↻ VAR_95=w → main, one",
+  "↻ VAR_96=w → main, one",
+  "↻ VAR_97=w → main, one",
+  "↻ VAR_98=w → main, one",
+  "↻ VAR_99=w → main, one",
+]
+`;
