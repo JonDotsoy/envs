@@ -69,3 +69,16 @@ jobs:
           git commit -m "chore: release v$VERSION"
           git tag "v$VERSION"
           git push origin HEAD "v$VERSION"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          name=$(node -p "require('./package.json').name")
+          url="https://www.npmjs.com/package/$name/v/$VERSION"
+          args=()
+          case "$TAG" in alpha|demo) args+=(--prerelease) ;; esac
+          gh release create "v$VERSION" --verify-tag --title "v$VERSION" \
+            --notes "Published to npm: $url" "${args[@]}"
