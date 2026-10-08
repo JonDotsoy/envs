@@ -235,6 +235,7 @@ describe("commands (in-process)", () => {
       expect(pulled.logs).toEqual([
         `\x1b[32m↓ pulling main - ${count} variables\x1b[0m`,
       ]);
+      expect(pulled.logs).toMatchSnapshot();
 
       // Defaults with a new value change both worktrees, so each line lists both.
       await Bun.write(
@@ -246,6 +247,7 @@ describe("commands (in-process)", () => {
       expect(pushed.logs).toEqual(
         keys.map((k) => `\x1b[33m↻ ${k}=w → main, one\x1b[0m`),
       );
+      expect(pushed.logs).toMatchSnapshot();
     });
   }
 
