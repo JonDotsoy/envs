@@ -76,3 +76,7 @@ El workflow **Publish** (Actions → Publish → Run workflow) sube la versión,
 - `provenance`: publica con provenance. npm solo lo acepta si el repositorio es público.
 
 Luego del publish crea el commit y el tag de la versión, y un release en GitHub con el enlace a la versión en npm.
+
+## Licencia
+
+[MIT](LICENSE)
