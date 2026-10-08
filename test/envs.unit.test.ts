@@ -377,3 +377,31 @@ test("parseValue turns booleans and canonical numbers into YAML scalars", async 
     expect(parseValue(keep)).toBe(keep);
   }
 });
+
+describe("push with many branches", () => {
+  for (const branches of [3, 5, 10]) {
+    test(`logs one line when the same value changes in ${branches} branches`, async () => {
+      const names = Array.from({ length: branches - 1 }, (_, i) => `b${i + 1}`);
+      const ws = await createWorkspace({ worktrees: names });
+      try {
+        await Bun.write(
+          join(ws.main, ".envs/values.yml"),
+          "defaults:\n  LOG_LEVEL: info\n",
+        );
+        const { ctx, logs } = testContext(ws.main);
+        expect(await run(["push"], ctx)).toBe(0);
+        expect(logs).toEqual([
+          `\x1b[33m↻ LOG_LEVEL=info → ${["main", ...names].join(", ")}\x1b[0m`,
+        ]);
+        expect(logs).toMatchSnapshot();
+
+        // Same value again: nothing changed, nothing logged.
+        const again = testContext(ws.main);
+        expect(await run(["push"], again.ctx)).toBe(0);
+        expect(again.logs).toEqual([]);
+      } finally {
+        await ws.cleanup();
+      }
+    });
+  }
+});

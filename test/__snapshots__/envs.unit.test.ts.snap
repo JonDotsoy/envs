@@ -323,3 +323,21 @@ exports[`commands (in-process) pull and push log 100 variables with NO_COLOR 2`]
   "↻ VAR_99=w → main, one",
 ]
 `;
+
+exports[`push with many branches logs one line when the same value changes in 3 branches 1`] = `
+[
+  "\x1B[33m↻ LOG_LEVEL=info → main, b1, b2\x1B[0m",
+]
+`;
+
+exports[`push with many branches logs one line when the same value changes in 5 branches 1`] = `
+[
+  "\x1B[33m↻ LOG_LEVEL=info → main, b1, b2, b3, b4\x1B[0m",
+]
+`;
+
+exports[`push with many branches logs one line when the same value changes in 10 branches 1`] = `
+[
+  "\x1B[33m↻ LOG_LEVEL=info → main, b1, b2, b3, b4, b5, b6, b7, b8, b9\x1B[0m",
+]
+`;
