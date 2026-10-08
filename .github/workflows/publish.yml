@@ -63,6 +63,9 @@ jobs:
           fi
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
+      - name: Build
+        run: bun run build
+
       - name: Publish to npm
         # Authenticates with GitHub OIDC (id-token: write); no npm token needed.
         env:
@@ -71,7 +74,7 @@ jobs:
         run: |
           args=(--tag "$TAG" --access public)
           if [ "$PROVENANCE" = "true" ]; then args+=(--provenance); fi
-          npm publish "${args[@]}"
+          npm publish dist/ "${args[@]}"
 
       - name: Commit and tag the release
         env:
