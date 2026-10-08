@@ -2,58 +2,89 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { $ } from "bun";
 import { chmod, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { lintValue, lintValues } from "../src/lint";
+import { rules, type LintContext } from "../src/lint-rules";
 import { createWorkspace, type Workspace } from "./fixtures/workspace";
 
-const rules = (findings: { rule: string }[]) => findings.map((f) => f.rule);
+const never = async () => false;
+const context = (values: LintContext["values"]): LintContext => ({
+  values,
+  root: "/repo",
+  dotenvs: [],
+  isTracked: never,
+  isIgnored: async () => true,
+});
+/** Runs one rule by id; returns `location` of each violation. */
+const run = async (id: string, values: LintContext["values"]) =>
+  (await rules.find((r) => r.id === id)!.check(context(values))).map((v) => v.location);
 
-describe("lintValue", () => {
-  test("flags weak values only for sensitive keys", () => {
-    expect(rules(lintValue("DB_PASSWORD", "changeme", "x"))).toEqual(["weak-secret"]);
-    expect(rules(lintValue("API_TOKEN", "", "x"))).toEqual(["weak-secret"]);
-    expect(lintValue("LOG_LEVEL", "test", "x")).toEqual([]);
-    expect(lintValue("DB_PASSWORD", "k3j!x9Qz-long-random", "x")).toEqual([]);
+test("rules have unique ids and descriptions", () => {
+  const ids = rules.map((r) => r.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  for (const rule of rules) expect(rule.description).not.toBe("");
+});
+
+describe("value rules", () => {
+  test("weak-secret flags weak values only for sensitive keys", async () => {
+    expect(await run("weak-secret", { envs: { DB_PASSWORD: { main: "changeme" } } })).toEqual(["envs.DB_PASSWORD.main"]);
+    expect(await run("weak-secret", { defaults: { API_TOKEN: "" } })).toEqual(["defaults.API_TOKEN"]);
+    expect(await run("weak-secret", { defaults: { LOG_LEVEL: "test" } })).toEqual([]);
+    expect(await run("weak-secret", { defaults: { DB_PASSWORD: "k3j!x9Qz-long-random" } })).toEqual([]);
   });
 
-  test("detects well-known secret formats without echoing the value", () => {
+  test("shared-secret flags sensitive keys in defaults only", async () => {
+    expect(await run("shared-secret", { defaults: { API_KEY: "x", LOG_LEVEL: "info" } })).toEqual(["defaults.API_KEY"]);
+    expect(await run("shared-secret", { envs: { API_KEY: { main: "x" } } })).toEqual([]);
+  });
+
+  test("secret-pattern detects known formats without echoing the value", async () => {
     const token = "ghp_" + "a".repeat(36);
-    const [finding] = lintValue("DEPLOY", token, "envs.DEPLOY.main");
-    expect(finding?.rule).toBe("secret-pattern");
-    expect(finding?.message).not.toContain(token);
-    expect(rules(lintValue("K", "AKIAABCDEFGHIJKLMNOP", "x"))).toEqual(["secret-pattern"]);
-    expect(rules(lintValue("K", "-----BEGIN RSA PRIVATE KEY-----", "x"))).toEqual(["secret-pattern"]);
+    const values = { envs: { DEPLOY: { main: token } } };
+    expect(await run("secret-pattern", values)).toEqual(["envs.DEPLOY.main"]);
+    const [violation] = await rules.find((r) => r.id === "secret-pattern")!.check(context(values));
+    expect(violation?.message).not.toContain(token);
+    expect(await run("secret-pattern", { defaults: { K: "AKIAABCDEFGHIJKLMNOP" } })).toEqual(["defaults.K"]);
+    expect(await run("secret-pattern", { defaults: { K: "-----BEGIN RSA PRIVATE KEY-----" } })).toEqual(["defaults.K"]);
   });
 
-  test("flags credentials in remote URLs and insecure schemes, but not localhost", () => {
-    expect(rules(lintValue("DB", "postgres://user:pw@db.example.com/app", "x"))).toEqual(["url-credentials"]);
-    expect(rules(lintValue("API", "http://api.example.com", "x"))).toEqual(["insecure-url"]);
-    expect(lintValue("DB", "postgres://user:pw@localhost/app", "x")).toEqual([]);
-    expect(lintValue("API", "http://127.0.0.1:3000", "x")).toEqual([]);
-    expect(lintValue("API", "https://api.example.com", "x")).toEqual([]);
+  test("url-credentials flags remote URLs with a password, not localhost", async () => {
+    expect(await run("url-credentials", { defaults: { DB: "postgres://user:pw@db.example.com/app" } })).toEqual(["defaults.DB"]);
+    expect(await run("url-credentials", { defaults: { DB: "postgres://user:pw@localhost/app" } })).toEqual([]);
+    expect(await run("url-credentials", { defaults: { DB: "postgres://db.example.com/app" } })).toEqual([]);
   });
 
-  test("handles numbers and booleans", () => {
-    expect(lintValue("PORT", 3000, "x")).toEqual([]);
-    expect(lintValue("DEBUG", true, "x")).toEqual([]);
+  test("insecure-url flags http/ws/ftp on remote hosts only", async () => {
+    expect(await run("insecure-url", { defaults: { API: "http://api.example.com" } })).toEqual(["defaults.API"]);
+    expect(await run("insecure-url", { defaults: { API: "http://127.0.0.1:3000" } })).toEqual([]);
+    expect(await run("insecure-url", { defaults: { API: "https://api.example.com" } })).toEqual([]);
+  });
+
+  test("numbers, booleans and empty values.yml are clean", async () => {
+    const values = { defaults: { DEBUG: true }, envs: { PORT: { main: 3000 } } };
+    for (const rule of rules) expect(await rule.check(context(values))).toEqual([]);
+    for (const rule of rules) expect(await rule.check(context({}))).toEqual([]);
   });
 });
 
-describe("lintValues", () => {
-  test("warns when a sensitive key is shared through defaults", () => {
-    const findings = lintValues({
-      defaults: { API_KEY: "a-long-random-value", LOG_LEVEL: "info" },
-    });
-    expect(findings.map((f) => [f.rule, f.location])).toEqual([["shared-secret", "defaults.API_KEY"]]);
+describe("git rules", () => {
+  test("tracked and unignored files are reported per rule", async () => {
+    const ctx = {
+      ...context({}),
+      dotenvs: [{ name: "main", path: "/repo" }],
+      isTracked: async (_: string, file: string) => file === ".env",
+      isIgnored: never,
+    };
+    const check = async (id: string) => (await rules.find((r) => r.id === id)!.check(ctx)).map((v) => v.location);
+    expect(await check("tracked-dotenv")).toEqual(["main/.env"]);
+    expect(await check("unignored-dotenv")).toEqual([]);
+    expect(await check("tracked-values")).toEqual([]);
+    expect(await check("unignored-values")).toEqual([".envs/values.yml"]);
   });
 
-  test("reports the location of per-worktree findings", () => {
-    const findings = lintValues({ envs: { DB_PASSWORD: { main: "secret" } } });
-    expect(findings[0]?.location).toBe("envs.DB_PASSWORD.main");
-  });
-
-  test("returns nothing for clean values", () => {
-    expect(lintValues({})).toEqual([]);
-    expect(lintValues({ envs: { PORT: { main: 3000 } } })).toEqual([]);
+  test("open-permissions looks at the mode of values.yml", async () => {
+    const check = (valuesMode?: number) => rules.find((r) => r.id === "open-permissions")!.check({ ...context({}), valuesMode });
+    expect(await check(0o100644)).toHaveLength(1);
+    expect(await check(0o100600)).toEqual([]);
+    expect(await check(undefined)).toEqual([]);
   });
 });
 

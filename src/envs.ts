@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { stat } from "node:fs/promises";
 import { $ } from "bun";
-import { lintValues, type Finding } from "./lint";
+import { rules, type LintContext } from "./lint-rules";
 
 export const HELP = `Usage: envs <command>
 
@@ -227,63 +227,38 @@ async function isTracked(dir: string, file: string): Promise<boolean> {
   return result.exitCode === 0;
 }
 
-/** Security checks over values.yml, its protection and each worktree's .env. */
+/** Runs each rule of lint-rules.ts one by one and prints a warning per violation. */
 export async function lint(ctx: Context): Promise<number> {
   const read = await readValues(ctx);
   if (!read) return 1;
   const root = await findRoot(ctx.cwd);
-  const findings: Finding[] = [];
-
-  if (await isTracked(root, ".envs/values.yml")) {
-    findings.push({
-      rule: "tracked-values",
-      location: ".envs/values.yml",
-      message: "values.yml is tracked by git, so its secrets are in the history. Run `git rm --cached .envs/values.yml`.",
-    });
-  } else if (!(await isIgnored(root, ".envs/values.yml"))) {
-    findings.push({
-      rule: "unignored-values",
-      location: ".envs/values.yml",
-      message: "values.yml is not ignored by git and could be committed by accident. Add `*` to .envs/.gitignore.",
-    });
+  const worktrees = await listWorktrees(ctx.cwd);
+  const dotenvs: Worktree[] = [];
+  for (const worktree of worktrees) {
+    if (await Bun.file(join(worktree.path, ".env")).exists()) dotenvs.push(worktree);
   }
+  const lintContext: LintContext = {
+    values: read.values,
+    root,
+    valuesMode:
+      process.platform === "win32" ? undefined : (await stat(read.path)).mode,
+    dotenvs,
+    isTracked,
+    isIgnored,
+  };
 
-  const mode = (await stat(read.path)).mode;
-  if (process.platform !== "win32" && (mode & 0o077) !== 0) {
-    findings.push({
-      rule: "open-permissions",
-      location: ".envs/values.yml",
-      message: `values.yml is readable by other users (mode ${(mode & 0o777).toString(8)}). Run \`chmod 600 .envs/values.yml\`.`,
-    });
-  }
-
-  for (const { name, path } of await listWorktrees(ctx.cwd)) {
-    if (!(await Bun.file(join(path, ".env")).exists())) continue;
-    if (await isTracked(path, ".env")) {
-      findings.push({
-        rule: "tracked-dotenv",
-        location: `${name}/.env`,
-        message: "The .env is tracked by git. Run `git rm --cached .env` and add it to .gitignore.",
-      });
-    } else if (!(await isIgnored(path, ".env"))) {
-      findings.push({
-        rule: "unignored-dotenv",
-        location: `${name}/.env`,
-        message: "The .env is not ignored by git. Add `.env` to .gitignore.",
-      });
+  let count = 0;
+  for (const rule of rules) {
+    for (const { location, message } of await rule.check(lintContext)) {
+      ctx.error(`warning [${rule.id}] ${location}: ${message}`);
+      count++;
     }
   }
-
-  findings.push(...lintValues(read.values));
-
-  if (findings.length === 0) {
+  if (count === 0) {
     ctx.log("No security problems found.");
     return 0;
   }
-  for (const { rule, location, message } of findings) {
-    ctx.error(`warning [${rule}] ${location}: ${message}`);
-  }
-  ctx.error(`\n${findings.length} warning(s) found.`);
+  ctx.error(`\n${count} warning(s) found.`);
   return 1;
 }
 
