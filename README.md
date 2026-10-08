@@ -77,6 +77,10 @@ El workflow **Publish** (Actions → Publish → Run workflow) sube la versión,
 
 Luego del publish crea el commit y el tag de la versión, y un release en GitHub con el enlace a la versión en npm.
 
+## Seguridad
+
+Para reportar una vulnerabilidad, mira [SECURITY.md](SECURITY.md).
+
 ## Licencia
 
 [MIT](LICENSE)
