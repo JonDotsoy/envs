@@ -341,3 +341,15 @@ exports[`push with many branches logs one line when the same value changes in 10
   "\x1B[33m↻ LOG_LEVEL=info → main, b1, b2, b3, b4, b5, b6, b7, b8, b9\x1B[0m",
 ]
 `;
+
+exports[`commands (in-process) push logs sensitive-looking variables (snapshot) 1`] = `
+[
+  "\x1B[33m↻ KEY_FOO=fake-key-foo → main, one\x1B[0m",
+  "\x1B[33m↻ API_KEY=sk_test_0000000000 → main\x1B[0m",
+  "\x1B[33m↻ AWS_BUCKET_SECRET=fake/aws+secret== → main, one\x1B[0m",
+  "\x1B[33m↻ DB_PASSWORD="p@ss word" → main, one\x1B[0m",
+  "\x1B[33m↻ AUTH_TOKEN=ghp_fake0000 → main, one\x1B[0m",
+  "\x1B[33m↻ JWT_SECRET=fake.jwt.secret → main, one\x1B[0m",
+  "\x1B[33m↻ API_KEY=sk_test_1111111111 → one\x1B[0m",
+]
+`;

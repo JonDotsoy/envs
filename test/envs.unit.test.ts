@@ -295,6 +295,29 @@ describe("commands (in-process)", () => {
     }
   });
 
+  test("push logs sensitive-looking variables (snapshot)", async () => {
+    // Fake values: only the shape of the log output matters here.
+    await Bun.write(
+      valuesPath(),
+      [
+        "defaults:",
+        "  KEY_FOO: fake-key-foo",
+        "  API_KEY: sk_test_0000000000",
+        "  AWS_BUCKET_SECRET: fake/aws+secret==",
+        "  DB_PASSWORD: 'p@ss word'",
+        "  AUTH_TOKEN: ghp_fake0000",
+        "  JWT_SECRET: fake.jwt.secret",
+        "envs:",
+        "  API_KEY:",
+        "    one: sk_test_1111111111",
+        "",
+      ].join("\n"),
+    );
+    const { ctx, logs } = testContext(ws.main);
+    expect(await run(["push"], ctx)).toBe(0);
+    expect(logs).toMatchSnapshot();
+  });
+
   test("pull skips worktrees without .env and keeps defaults", async () => {
     await Bun.write(valuesPath(), "defaults:\n  D: d\n");
     await rm(join(ws.main, ".env"), { force: true });
