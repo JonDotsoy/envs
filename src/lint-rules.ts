@@ -109,6 +109,14 @@ function parseUrl(text: string) {
 
 const valuesFile = ".envs/values.yml";
 
+/** values.yml and every worktree's .env with their file modes. */
+function envFiles(ctx: LintContext) {
+  return [
+    { location: valuesFile, mode: ctx.valuesMode },
+    ...ctx.dotenvs.map((d) => ({ location: `${d.name}/.env`, mode: d.mode })),
+  ];
+}
+
 /** The rules `envs lint` runs, one by one, in this order. */
 export const rules: Rule[] = [
   {
@@ -156,18 +164,24 @@ export const rules: Rule[] = [
   {
     id: "executable-files",
     description: "values.yml or a worktree's .env has execute permission.",
-    check(ctx) {
-      const files = [
-        { location: valuesFile, mode: ctx.valuesMode },
-        ...ctx.dotenvs.map((d) => ({ location: `${d.name}/.env`, mode: d.mode })),
-      ];
-      return files
+    check: (ctx) =>
+      envFiles(ctx)
         .filter((f) => f.mode !== undefined && (f.mode & 0o111) !== 0)
         .map((f) => ({
           location: f.location,
           message: `The file is executable (mode ${(f.mode! & 0o777).toString(8)}); env files are data and must not be. Run \`chmod -x\` on it.`,
-        }));
-    },
+        })),
+  },
+  {
+    id: "writable-files",
+    description: "values.yml or a worktree's .env is writable by other users.",
+    check: (ctx) =>
+      envFiles(ctx)
+        .filter((f) => f.mode !== undefined && (f.mode & 0o022) !== 0)
+        .map((f) => ({
+          location: f.location,
+          message: `The file is writable by group or other users (mode ${(f.mode! & 0o777).toString(8)}), who could change your environment. Run \`chmod go-w\` on it.`,
+        })),
   },
   {
     id: "tracked-dotenv",

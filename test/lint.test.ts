@@ -96,6 +96,21 @@ describe("git rules", () => {
     expect(await check(undefined, undefined)).toEqual([]);
   });
 
+  test("writable-files flags group- or other-writable values.yml and .env", async () => {
+    const check = async (valuesMode?: number, mode?: number) =>
+      (
+        await rules.find((r) => r.id === "writable-files")!.check({
+          ...context({}),
+          valuesMode,
+          dotenvs: [{ name: "main", path: "/repo", mode }],
+        })
+      ).map((v) => v.location);
+    expect(await check(0o100644, 0o100600)).toEqual([]);
+    expect(await check(0o100664, 0o100600)).toEqual([".envs/values.yml"]);
+    expect(await check(0o100600, 0o100602)).toEqual(["main/.env"]);
+    expect(await check(undefined, undefined)).toEqual([]);
+  });
+
   test("open-permissions looks at the mode of values.yml", async () => {
     const check = (valuesMode?: number) => rules.find((r) => r.id === "open-permissions")!.check({ ...context({}), valuesMode });
     expect(await check(0o100644)).toHaveLength(1);
@@ -169,6 +184,14 @@ describe("envs lint", () => {
     const result = await lint();
     expect(result.exitCode).toBe(1);
     expect(result.stderr.toString()).toContain("warning [executable-files] main/.env");
+    await chmod(join(ws.main, ".env"), 0o600);
+  });
+
+  test("warns about a world-writable .env", async () => {
+    await chmod(join(ws.main, ".env"), 0o666);
+    const result = await lint();
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.toString()).toContain("warning [writable-files] main/.env");
     await chmod(join(ws.main, ".env"), 0o600);
   });
 
