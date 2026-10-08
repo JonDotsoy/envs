@@ -15,8 +15,8 @@ export interface LintContext {
   root: string;
   /** File mode of values.yml (`stat().mode`); undefined where modes do not apply. */
   valuesMode?: number;
-  /** Worktrees that have a `.env` file. */
-  dotenvs: { name: string; path: string }[];
+  /** Worktrees that have a `.env` file, with its file mode (undefined where modes do not apply). */
+  dotenvs: { name: string; path: string; mode?: number }[];
   isTracked(dir: string, file: string): Promise<boolean>;
   isIgnored(dir: string, file: string): Promise<boolean>;
 }
@@ -151,6 +151,22 @@ export const rules: Rule[] = [
           message: `values.yml is readable by other users (mode ${(valuesMode & 0o777).toString(8)}). Run \`chmod 600 .envs/values.yml\`.`,
         },
       ];
+    },
+  },
+  {
+    id: "executable-files",
+    description: "values.yml or a worktree's .env has execute permission.",
+    check(ctx) {
+      const files = [
+        { location: valuesFile, mode: ctx.valuesMode },
+        ...ctx.dotenvs.map((d) => ({ location: `${d.name}/.env`, mode: d.mode })),
+      ];
+      return files
+        .filter((f) => f.mode !== undefined && (f.mode & 0o111) !== 0)
+        .map((f) => ({
+          location: f.location,
+          message: `The file is executable (mode ${(f.mode! & 0o777).toString(8)}); env files are data and must not be. Run \`chmod -x\` on it.`,
+        }));
     },
   },
   {

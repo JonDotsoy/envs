@@ -233,15 +233,19 @@ export async function lint(ctx: Context): Promise<number> {
   if (!read) return 1;
   const root = await findRoot(ctx.cwd);
   const worktrees = await listWorktrees(ctx.cwd);
-  const dotenvs: Worktree[] = [];
+  const modeOf = async (path: string) =>
+    process.platform === "win32" ? undefined : (await stat(path)).mode;
+  const dotenvs: LintContext["dotenvs"] = [];
   for (const worktree of worktrees) {
-    if (await Bun.file(join(worktree.path, ".env")).exists()) dotenvs.push(worktree);
+    const path = join(worktree.path, ".env");
+    if (await Bun.file(path).exists()) {
+      dotenvs.push({ ...worktree, mode: await modeOf(path) });
+    }
   }
   const lintContext: LintContext = {
     values: read.values,
     root,
-    valuesMode:
-      process.platform === "win32" ? undefined : (await stat(read.path)).mode,
+    valuesMode: await modeOf(read.path),
     dotenvs,
     isTracked,
     isIgnored,

@@ -40,6 +40,7 @@ Nunca imprime los valores, solo la variable y su ubicación (`envs.DB_PASSWORD.m
 | `tracked-values`, `unignored-values` | `values.yml` está versionado en git o no está ignorado. |
 | `tracked-dotenv`, `unignored-dotenv` | El `.env` de un worktree está versionado o no está ignorado. |
 | `open-permissions` | `values.yml` es legible por otros usuarios (usa `chmod 600`). |
+| `executable-files` | `values.yml` o un `.env` tiene permiso de ejecución (usa `chmod -x`). |
 | `weak-secret` | Variable sensible (`PASSWORD`, `TOKEN`, `SECRET`, `API_KEY`…) vacía o con un valor típico (`changeme`, `admin`…). |
 | `shared-secret` | Variable sensible en `defaults`, que se escribe en todos los worktrees. |
 | `secret-pattern` | Valor con formato de secreto conocido (AWS, GitHub, Slack, `sk-…`, clave privada). |

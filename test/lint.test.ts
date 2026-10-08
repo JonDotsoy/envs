@@ -80,6 +80,22 @@ describe("git rules", () => {
     expect(await check("unignored-values")).toEqual([".envs/values.yml"]);
   });
 
+  test("executable-files flags values.yml and .env with an execute bit", async () => {
+    const check = async (valuesMode?: number, mode?: number) =>
+      (
+        await rules.find((r) => r.id === "executable-files")!.check({
+          ...context({}),
+          valuesMode,
+          dotenvs: [{ name: "main", path: "/repo", mode }],
+        })
+      ).map((v) => v.location);
+    expect(await check(0o100600, 0o100600)).toEqual([]);
+    expect(await check(0o100700, 0o100600)).toEqual([".envs/values.yml"]);
+    expect(await check(0o100600, 0o100755)).toEqual(["main/.env"]);
+    expect(await check(0o100644, 0o100611)).toEqual(["main/.env"]);
+    expect(await check(undefined, undefined)).toEqual([]);
+  });
+
   test("open-permissions looks at the mode of values.yml", async () => {
     const check = (valuesMode?: number) => rules.find((r) => r.id === "open-permissions")!.check({ ...context({}), valuesMode });
     expect(await check(0o100644)).toHaveLength(1);
@@ -144,6 +160,16 @@ describe("envs lint", () => {
     await Bun.write(join(ws.main, ".envs/values.yml"), "");
     await chmod(join(ws.main, ".envs/values.yml"), 0o600);
     expect((await lint()).exitCode).toBe(0);
+  });
+
+  test("warns about an executable .env", async () => {
+    await Bun.write(join(ws.main, ".env"), "PORT=3000\n");
+    await Bun.write(join(ws.main, ".gitignore"), ".env\n");
+    await chmod(join(ws.main, ".env"), 0o755);
+    const result = await lint();
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.toString()).toContain("warning [executable-files] main/.env");
+    await chmod(join(ws.main, ".env"), 0o600);
   });
 
   test("warns when values.yml or .env are tracked by git", async () => {
