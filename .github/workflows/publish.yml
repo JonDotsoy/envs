@@ -45,8 +45,19 @@ jobs:
         id: version
         env:
           BUMP: ${{ inputs.bump }}
+          TAG: ${{ inputs.tag }}
         run: |
-          npm version "$BUMP" --no-git-tag-version
+          current=$(node -p "require('./package.json').version")
+          if [ "$TAG" = "latest" ]; then
+            # Stable release (a prerelease graduates, e.g. 0.0.2-beta.1 -> 0.0.2).
+            npm version "$BUMP" --no-git-tag-version
+          elif [[ "$current" == *-* ]]; then
+            # Already a prerelease: 0.0.2-beta.0 -> 0.0.2-beta.1 (or switches the id).
+            npm version prerelease --preid "$TAG" --no-git-tag-version
+          else
+            # First prerelease of the bump: 0.0.1 -> 0.0.2-beta.0
+            npm version "pre$BUMP" --preid "$TAG" --no-git-tag-version
+          fi
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm
@@ -79,6 +90,6 @@ jobs:
           name=$(node -p "require('./package.json').name")
           url="https://www.npmjs.com/package/$name/v/$VERSION"
           args=()
-          case "$TAG" in alpha|demo) args+=(--prerelease) ;; esac
+          if [ "$TAG" != "latest" ]; then args+=(--prerelease); fi
           gh release create "v$VERSION" --verify-tag --title "v$VERSION" \
             --notes "Published to npm: $url" "${args[@]}"
