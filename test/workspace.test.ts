@@ -199,3 +199,54 @@ envs:
     "DEBUG=true\nRATIO=0.5\nPORT=3001\n",
   );
 });
+
+test("envs push preserves comments, blank lines and order; new keys go at the end", async () => {
+  const bin = join(import.meta.dir, "../src/bin/envs.ts");
+  const one = ws.worktrees["worktree-1"]!;
+  await $`bun ${bin} init`.cwd(one).quiet();
+  await Bun.write(
+    join(ws.main, ".envs/values.yml"),
+    `envs:
+  PORT:
+    worktree-1: 4000
+  NEW_KEY:
+    worktree-1: added
+  DEBUG:
+    worktree-1: false
+`,
+  );
+  const original = `# App config
+# Second header comment
+
+HOST=localhost
+PORT=3000 # inline comment
+
+# Feature flags
+export DEBUG=true
+
+   # indented comment
+UNTOUCHED="keep me"
+
+
+# trailing comment
+`;
+  await Bun.write(join(one, ".env"), original);
+
+  await $`bun ${bin} push`.cwd(one).quiet();
+  expect(await Bun.file(join(one, ".env")).text()).toBe(`# App config
+# Second header comment
+
+HOST=localhost
+PORT=4000
+
+# Feature flags
+DEBUG=false
+
+   # indented comment
+UNTOUCHED="keep me"
+
+
+# trailing comment
+NEW_KEY=added
+`);
+});
