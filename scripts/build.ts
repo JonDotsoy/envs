@@ -16,7 +16,7 @@ export async function build(outdir = join(root, "dist")): Promise<void> {
     throw new AggregateError(result.logs, "Build failed");
   }
 
-  for (const file of ["LICENSE", "README.md"]) {
+  for (const file of ["LICENSE", "README.md", "SECURITY.md"]) {
     await Bun.write(join(outdir, file), Bun.file(join(root, file)));
   }
 

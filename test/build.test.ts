@@ -21,6 +21,7 @@ test("build creates the compiled script and a self-pointing package.json", async
   expect(pkg.license).toBe("MIT");
   expect(await Bun.file(join(outdir, "LICENSE")).text()).toContain("MIT License");
   expect(await Bun.file(join(outdir, "README.md")).text()).toContain("# @jondotsoy/envs");
+  expect(await Bun.file(join(outdir, "SECURITY.md")).text()).toContain("Política de seguridad");
   expect(pkg.scripts).toBeUndefined();
   expect(pkg.devDependencies).toBeUndefined();
   expect(pkg.files).toBeUndefined();
