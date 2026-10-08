@@ -1,53 +1,53 @@
 # @jondotsoy/envs
 
-CLI para mantener en un solo archivo (`.envs/values.yml`) los valores del `.env` de cada worktree de git. Edita todos los valores juntos y distribúyelos a cada worktree, o recógelos desde los `.env` existentes.
+CLI that keeps the `.env` values of every git worktree in a single file (`.envs/values.yml`). Edit all values together and distribute them to each worktree, or collect them from the existing `.env` files.
 
-Requiere [Bun](https://bun.com) y git.
+Requires [Bun](https://bun.com) and git.
 
-## Instalación
+## Installation
 
 ```bash
 bun add -g @jondotsoy/envs
 ```
 
-O sin instalar:
+Or without installing:
 
 ```bash
 bunx @jondotsoy/envs help
 ```
 
-## Uso
+## Usage
 
-Ejecuta los comandos dentro del repo o de cualquiera de sus worktrees. Dentro de un worktree, `.envs/` siempre vive en el repo principal.
+Run the commands inside the repo or any of its worktrees. Inside a worktree, `.envs/` always lives in the main repo.
 
-| Comando | Qué hace |
+| Command | What it does |
 | --- | --- |
-| `envs init` | Crea `.envs/`, `.envs/.gitignore` (con `*`) y un `.envs/values.yml` vacío. No sobrescribe archivos existentes. |
-| `envs pull` | Lee el `.env` del repo principal y de cada worktree y lo escribe en `values.yml`. Las variables que ya no están en un `.env` se quitan de `values.yml` para ese worktree. |
-| `envs push` | Escribe `values.yml` en el `.env` de cada worktree. Actualiza las variables existentes en su línea, agrega las nuevas al final y conserva comentarios y variables que no están en `values.yml`. |
-| `envs lint` | Revisa la seguridad y muestra un warning por cada problema. Termina con código 1 si hay alguno (útil en CI). Ver abajo. |
-| `envs edit` | Ejecuta `pull`, abre `values.yml` con `code -w` y, al cerrar el editor, ejecuta `push`. Si el editor falla, no hace `push`. |
-| `envs help` | Muestra la ayuda. |
+| `envs init` | Creates `.envs/`, `.envs/.gitignore` (containing `*`) and an empty `.envs/values.yml`. Does not overwrite existing files. |
+| `envs pull` | Reads the `.env` of the main repo and of each worktree and writes it to `values.yml`. Variables that are no longer in a `.env` are removed from `values.yml` for that worktree. |
+| `envs push` | Writes `values.yml` to the `.env` of each worktree. Updates existing variables in place, appends new ones at the end, and keeps comments and variables that are not in `values.yml`. |
+| `envs lint` | Checks security and prints a warning for each problem. Exits with code 1 if there is any (useful in CI). See below. |
+| `envs edit` | Runs `pull`, opens `values.yml` with `code -w` and, when the editor closes, runs `push`. If the editor fails, it does not `push`. |
+| `envs help` | Shows the help. |
 
-Los worktrees se identifican por el nombre de su rama (o el nombre de su carpeta si están en HEAD desacoplado). El repo principal usa el nombre de su rama, por ejemplo `main`.
+Worktrees are identified by their branch name (or their folder name if they are in detached HEAD). The main repo uses its branch name, for example `main`.
 
 ### `envs lint`
 
-Nunca imprime los valores, solo la variable y su ubicación (`envs.DB_PASSWORD.main`).
+It never prints values, only the variable and its location (`envs.DB_PASSWORD.main`).
 
-| Regla | Detecta |
+| Rule | Detects |
 | --- | --- |
-| `tracked-values`, `unignored-values` | `values.yml` está versionado en git o no está ignorado. |
-| `tracked-dotenv`, `unignored-dotenv` | El `.env` de un worktree está versionado o no está ignorado. |
-| `open-permissions` | `values.yml` es legible por otros usuarios (usa `chmod 600`). |
-| `executable-files` | `values.yml` o un `.env` tiene permiso de ejecución (usa `chmod -x`). |
-| `writable-files` | `values.yml` o un `.env` es escribible por el grupo u otros usuarios (usa `chmod go-w`). |
-| `weak-secret` | Variable sensible (`PASSWORD`, `TOKEN`, `SECRET`, `API_KEY`…) vacía o con un valor típico (`changeme`, `admin`…). |
-| `shared-secret` | Variable sensible en `defaults`, que se escribe en todos los worktrees. |
-| `secret-pattern` | Valor con formato de secreto conocido (AWS, GitHub, Slack, `sk-…`, clave privada). |
-| `url-credentials`, `insecure-url` | URL remota con contraseña embebida, o con `http://`, `ws://` o `ftp://`. |
+| `tracked-values`, `unignored-values` | `values.yml` is tracked by git or is not ignored. |
+| `tracked-dotenv`, `unignored-dotenv` | A worktree's `.env` is tracked or is not ignored. |
+| `open-permissions` | `values.yml` is readable by other users (use `chmod 600`). |
+| `executable-files` | `values.yml` or a `.env` has the execute permission (use `chmod -x`). |
+| `writable-files` | `values.yml` or a `.env` is writable by the group or other users (use `chmod go-w`). |
+| `weak-secret` | Sensitive variable (`PASSWORD`, `TOKEN`, `SECRET`, `API_KEY`…) that is empty or has a typical value (`changeme`, `admin`…). |
+| `shared-secret` | Sensitive variable in `defaults`, which is written to all worktrees. |
+| `secret-pattern` | Value with a known secret format (AWS, GitHub, Slack, `sk-…`, private key). |
+| `url-credentials`, `insecure-url` | Remote URL with an embedded password, or using `http://`, `ws://` or `ftp://`. |
 
-## Formato de `values.yml`
+## `values.yml` format
 
 ```yaml
 defaults:
@@ -62,42 +62,42 @@ envs:
     feature-x: "3001"
 ```
 
-- `defaults`: valor por defecto de cada variable. `push` lo escribe en el `.env` de todos los worktrees.
-- `envs.<VARIABLE>.<worktree>`: valor de la variable en ese worktree. Sobrescribe al valor de `defaults`.
-- Los valores pueden ser strings, números o booleanos (`PORT: 3000`, `DEBUG: true`); `push` los escribe en el `.env` como texto (`PORT=3000`, `DEBUG=true`). `pull` convierte `true`/`false` y los números canónicos (`3000`, `0.5`) a booleanos y números; el resto (`007`, `1e3`) queda como string.
+- `defaults`: default value of each variable. `push` writes it to the `.env` of all worktrees.
+- `envs.<VARIABLE>.<worktree>`: value of the variable in that worktree. It overrides the value from `defaults`.
+- Values can be strings, numbers or booleans (`PORT: 3000`, `DEBUG: true`); `push` writes them to the `.env` as text (`PORT=3000`, `DEBUG=true`). `pull` converts `true`/`false` and canonical numbers (`3000`, `0.5`) to booleans and numbers; anything else (`007`, `1e3`) stays a string.
 
-El schema (JSON Schema) está en [`schema/values.schema.json`](schema/values.schema.json). Para que VS Code valide el archivo con la extensión YAML, agrega al inicio de `values.yml`:
+The schema (JSON Schema) is at [`schema/values.schema.json`](schema/values.schema.json). To have VS Code validate the file with the YAML extension, add this at the top of `values.yml`:
 
 ```yaml
 # yaml-language-server: $schema=../schema/values.schema.json
 ```
 
-## Desarrollo
+## Development
 
 ```bash
 bun install
-bun test              # ejecuta los tests
-bun test --coverage   # con cobertura
-bun run build         # genera dist/ (envs.js y package.json)
+bun test              # run the tests
+bun test --coverage   # with coverage
+bun run build         # generates dist/ (envs.js and package.json)
 ```
 
-- `src/envs.ts`: lógica de los comandos. `src/bin/envs.ts`: punto de entrada del CLI.
-- `test/fixtures/workspace.ts`: fixture `createWorkspace({ main, worktrees, files })`, que crea un repo git temporal con worktrees, cada uno en su propia carpeta temporal.
+- `src/envs.ts`: command logic. `src/bin/envs.ts`: CLI entry point.
+- `test/fixtures/workspace.ts`: `createWorkspace({ main, worktrees, files })` fixture, which creates a temporary git repo with worktrees, each in its own temporary folder.
 
-## Publicación
+## Publishing
 
-El workflow **Publish** (Actions → Publish → Run workflow) sube la versión, hace el build y publica `dist/` en npm por OIDC (trusted publishing). Inputs:
+The **Publish** workflow (Actions → Publish → Run workflow) bumps the version, builds and publishes `dist/` to npm via OIDC (trusted publishing). Inputs:
 
-- `bump`: `major`, `minor`, `patch` o `prerelease`.
-- `tag`: dist-tag de npm (`latest`, `default`, `alpha` o `demo`). Con un tag distinto de `latest` la versión es una prerelease (`0.0.2-alpha.0`).
-- `provenance`: publica con provenance. npm solo lo acepta si el repositorio es público.
+- `bump`: `major`, `minor`, `patch` or `prerelease`.
+- `tag`: npm dist-tag (`latest`, `default`, `alpha` or `demo`). With a tag other than `latest` the version is a prerelease (`0.0.2-alpha.0`).
+- `provenance`: publish with provenance. npm only accepts it if the repository is public.
 
-Luego del publish crea el commit y el tag de la versión, y un release en GitHub con el enlace a la versión en npm.
+After publishing, it creates the version commit and tag, and a GitHub release linking to the version on npm.
 
-## Seguridad
+## Security
 
-Para reportar una vulnerabilidad, mira [SECURITY.md](SECURITY.md).
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
-## Licencia
+## License
 
 [MIT](LICENSE)
