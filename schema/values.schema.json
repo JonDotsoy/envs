@@ -10,7 +10,7 @@
       "type": "object",
       "additionalProperties": {
         "description": "Default value of the environment variable.",
-        "type": "string"
+        "anyOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }]
       }
     },
     "envs": {
@@ -21,7 +21,7 @@
         "type": "object",
         "additionalProperties": {
           "description": "Value of the environment variable in that worktree.",
-          "type": "string"
+          "anyOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }]
         }
       }
     }

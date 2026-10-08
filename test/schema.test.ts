@@ -36,5 +36,6 @@ envs:
     main: biz
 `);
   expect(validate(values)).toBe(true);
-  expect(validate({ defaults: { FOO: 1 } })).toBe(false);
+  expect(validate({ defaults: { FOO: 1, BAR: true } })).toBe(true);
+  expect(validate({ defaults: { FOO: null } })).toBe(false);
 });

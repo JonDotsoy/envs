@@ -172,3 +172,30 @@ envs:
   expect(await Bun.file(join(one, ".env")).text()).toBe("FOO=tar\n");
   expect(await Bun.file(join(two, ".env")).text()).toBe("FOO=tar\n");
 });
+
+test("envs push translates YAML numbers and booleans into the .env", async () => {
+  const bin = join(import.meta.dir, "../src/bin/envs.ts");
+  const one = ws.worktrees["worktree-1"]!;
+  await $`bun ${bin} init`.cwd(one).quiet();
+  await Bun.write(
+    join(ws.main, ".envs/values.yml"),
+    `defaults:
+  DEBUG: true
+  RATIO: 0.5
+
+envs:
+  PORT:
+    main: 3000
+    worktree-1: 3001
+`,
+  );
+  for (const dir of [ws.main, one]) await rm(join(dir, ".env"), { force: true });
+
+  await $`bun ${bin} push`.cwd(one).quiet();
+  expect(await Bun.file(join(ws.main, ".env")).text()).toBe(
+    "DEBUG=true\nRATIO=0.5\nPORT=3000\n",
+  );
+  expect(await Bun.file(join(one, ".env")).text()).toBe(
+    "DEBUG=true\nRATIO=0.5\nPORT=3001\n",
+  );
+});

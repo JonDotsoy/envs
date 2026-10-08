@@ -34,9 +34,12 @@ export const defaultContext = (): Context => ({
   },
 });
 
+/** YAML scalar accepted as a value; numbers and booleans are written to .env as their string form. */
+type Value = string | number | boolean;
+
 interface Values {
-  defaults?: Record<string, string>;
-  envs?: Record<string, Record<string, string>>;
+  defaults?: Record<string, Value>;
+  envs?: Record<string, Record<string, Value>>;
 }
 
 export interface Worktree {
