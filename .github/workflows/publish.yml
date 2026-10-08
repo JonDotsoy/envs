@@ -15,6 +15,10 @@ on:
         options: [latest, default, alpha, demo]
         default: latest
         required: true
+      provenance:
+        description: Publish with provenance
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -49,7 +53,11 @@ jobs:
         # Authenticates with GitHub OIDC (id-token: write); no npm token needed.
         env:
           TAG: ${{ inputs.tag }}
-        run: npm publish --tag "$TAG" --access public --provenance
+          PROVENANCE: ${{ inputs.provenance }}
+        run: |
+          args=(--tag "$TAG" --access public)
+          if [ "$PROVENANCE" = "true" ]; then args+=(--provenance); fi
+          npm publish "${args[@]}"
 
       - name: Commit and tag the release
         env:
