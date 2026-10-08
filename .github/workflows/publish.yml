@@ -19,6 +19,10 @@ on:
         description: Publish with provenance
         type: boolean
         default: true
+      release_changelog:
+        description: Turn the Unreleased section of CHANGELOG.md into this version
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -63,6 +67,32 @@ jobs:
           fi
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
+      - name: Release changelog
+        if: ${{ inputs.release_changelog }}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          node <<'EOF'
+          const fs = require("fs");
+          const version = process.env.VERSION;
+          const repo = "https://github.com/JonDotsoy/envs";
+          const date = new Date().toISOString().slice(0, 10);
+          let text = fs.readFileSync("CHANGELOG.md", "utf8");
+          if (!text.includes("## [Unreleased]")) {
+            console.error("::error::CHANGELOG.md has no [Unreleased] section");
+            process.exit(1);
+          }
+          // The previous release is the base of the current [Unreleased] compare link, if any.
+          const prev = text.match(/^\[Unreleased\]: .*\/compare\/(v[^.\s]+\.[^.\s]+\.[^\s]+?)\.\.\.HEAD$/m)?.[1];
+          const versionLink = prev
+            ? `[${version}]: ${repo}/compare/${prev}...v${version}`
+            : `[${version}]: ${repo}/releases/tag/v${version}`;
+          text = text
+            .replace("## [Unreleased]", `## [Unreleased]\n\n## [${version}] - ${date}`)
+            .replace(/^\[Unreleased\]: .*$/m, `[Unreleased]: ${repo}/compare/v${version}...HEAD\n${versionLink}`);
+          fs.writeFileSync("CHANGELOG.md", text);
+          EOF
+
       - name: Build
         run: bun run build
 
@@ -82,7 +112,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json
+          git add package.json CHANGELOG.md
           git commit -m "chore: release v$VERSION"
           git tag "v$VERSION"
           git push origin HEAD "v$VERSION"
