@@ -32,8 +32,15 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
+      - name: Require a branch
+        if: ${{ github.ref_type != 'branch' }}
+        run: |
+          echo "::error::Run this workflow from a branch, not a ${{ github.ref_type }}"
+          exit 1
       - uses: actions/checkout@v4
         with:
+          # Check out the branch the workflow was dispatched on, so the release commit lands there.
+          ref: ${{ github.ref_name }}
           # Deploy key: the only identity allowed to push to the protected `develop` branch.
           ssh-key: ${{ secrets.DEPLOY_KEY }}
       - uses: oven-sh/setup-bun@v2
@@ -112,19 +119,21 @@ jobs:
       - name: Commit and tag the release
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json CHANGELOG.md
           git commit -m "chore: release v$VERSION"
           git tag "v$VERSION"
-          git push origin HEAD "v$VERSION"
+          git push origin "HEAD:refs/heads/$BRANCH" "v$VERSION"
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ inputs.tag }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           name=$(node -p "require('./package.json').name")
           url="https://www.npmjs.com/package/$name/v/$VERSION"
@@ -143,6 +152,7 @@ jobs:
           RELEASE_CHANGELOG: ${{ inputs.release_changelog }}
           STATUS: ${{ job.status }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           name=$(node -p "require('./package.json').name")
           {
@@ -151,6 +161,7 @@ jobs:
             echo "| | |"
             echo "| --- | --- |"
             echo "| Status | $STATUS |"
+            echo "| Branch | \`$BRANCH\` |"
             echo "| Package | \`$name\` |"
             echo "| Version | \`${VERSION:-n/a}\` |"
             echo "| Bump | \`$BUMP\` |"
