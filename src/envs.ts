@@ -3,6 +3,7 @@ import { basename, dirname, join } from "node:path";
 import { stat } from "node:fs/promises";
 import { $ } from "bun";
 import { isSensitiveKey, rules, type LintContext } from "./lint-rules";
+import type { ShareTransport } from "./share/transport";
 
 export const HELP = `Usage: envs <command>
 
@@ -12,6 +13,9 @@ Commands:
   push    Write defaults and .envs/values.yml into the .env of each worktree
   lint    Warn about insecure values and unprotected secret files
   edit    Pull, open .envs/values.yml in VS Code (code -w), then push
+  share   Share the "main" profile with another machine over a P2P link
+          (--max-peers N, --ttl MINUTES, --peer-server URL)
+  receive Fetch variables from an envs:// link into .envs/values.yml (--force)
   help    Show this help message
 `;
 
@@ -22,6 +26,10 @@ export interface Context {
   error(message: string): void;
   /** Opens a file in the editor and resolves with its exit code once closed. */
   openEditor(path: string): Promise<number>;
+  /** Asks a question on the terminal; true only for an explicit `y` or `yes`. */
+  confirm(question: string): Promise<boolean>;
+  /** Network layer of `share`/`receive`; PeerJS by default, replaced by a fake in tests. */
+  shareTransport?: () => Promise<ShareTransport>;
 }
 
 /** Colors are skipped when NO_COLOR (https://no-color.org) is set to a non-empty value. */
@@ -47,12 +55,16 @@ export const defaultContext = (): Context => ({
     });
     return await proc.exited;
   },
+  confirm: async (question) => {
+    const answer = prompt(question);
+    return ["y", "yes"].includes((answer ?? "").trim().toLowerCase());
+  },
 });
 
 /** YAML scalar accepted as a value; numbers and booleans are written to .env as their string form. */
 type Value = string | number | boolean;
 
-interface Values {
+export interface Values {
   defaults?: Record<string, Value>;
   envs?: Record<string, Record<string, Value>>;
 }
@@ -321,6 +333,39 @@ export async function edit(ctx: Context): Promise<number> {
   return await push(ctx);
 }
 
+const peerTransport = async () => (await import("./share/peer")).createPeerTransport();
+
+/** Hosts a P2P session that shares the `main` profile (see docs/sharing/p2p.md). */
+export async function share(ctx: Context, args: string[]): Promise<number> {
+  const read = await readValues(ctx);
+  if (!read) return 1;
+  const { runShare } = await import("./share/host");
+  const interrupt = new AbortController();
+  const onSignal = () => interrupt.abort();
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+  try {
+    const root = await findRoot(ctx.cwd);
+    return await runShare(ctx, { root, values: read.values }, args, ctx.shareTransport ?? peerTransport, interrupt.signal);
+  } finally {
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+  }
+}
+
+/** Fetches variables from an `envs://` link into values.yml. */
+export async function receive(ctx: Context, args: string[]): Promise<number> {
+  const read = await readValues(ctx);
+  if (!read) return 1;
+  const { runReceive } = await import("./share/client");
+  return await runReceive(
+    ctx,
+    { valuesPath: read.path, values: read.values },
+    args,
+    ctx.shareTransport ?? peerTransport,
+  );
+}
+
 /** Runs a command; resolves with the process exit code. */
 export async function run(
   args: string[],
@@ -343,6 +388,10 @@ export async function run(
       return await lint(ctx);
     case "edit":
       return await edit(ctx);
+    case "share":
+      return await share(ctx, args.slice(1));
+    case "receive":
+      return await receive(ctx, args.slice(1));
     default:
       ctx.error(`Unknown command: ${command}\n\n${HELP}`);
       return 1;

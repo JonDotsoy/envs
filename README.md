@@ -29,6 +29,8 @@ Run the commands inside the repo or any of its worktrees. Inside a worktree, `.e
 | `envs push` | Writes `values.yml` to the `.env` of each worktree. Updates existing variables in place, appends new ones at the end, and keeps comments and variables that are not in `values.yml`. |
 | `envs lint` | Checks security and prints a warning for each problem. Exits with code 1 if there is any (useful in CI). See below. |
 | `envs edit` | Runs `pull`, opens `values.yml` with `code -w` and, when the editor closes, runs `push`. If the editor fails, it does not `push`. |
+| `envs share` | Shares the `main` profile over a P2P link (`envs://…`). Shows a warning and requires `y`/`yes`. Options: `--max-peers N`, `--ttl MINUTES`, `--peer-server URL`. See [docs/sharing/p2p.md](docs/sharing/p2p.md). |
+| `envs receive <link>` | Fetches the variables behind a sharing link and, after `y`/`yes`, merges them into `values.yml` `defaults`. Existing keys are kept unless you pass `--force`. |
 | `envs help` | Shows the help. |
 
 Worktrees are identified by their branch name (or their folder name if they are in detached HEAD). The main repo uses its branch name, for example `main`.

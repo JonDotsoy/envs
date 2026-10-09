@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `envs share`: starts a P2P session (PeerJS + WebRTC) that serves the `main` profile from an encrypted `.envs/sharing-envs`, behind an explicit `y`/`yes` and a list of precautions. The link is `envs://<peer-id>/sharing-envs?key=<secret>`.
+- `envs receive <link>`: fetches the variables and merges them into `values.yml` after `y`/`yes`.
+- Connections are audited in `.envs/sharing-connections.ndjson`.
+- Dependencies: `peerjs` and `node-datachannel` (STUN: `stun[1-4].l.google.com:19302`).
+- Documentation: `docs/sharing/p2p.md` and a network section in `SECURITY.md`.
+
 ### Fixed
 
 - `envs pull` no longer writes to `envs:` the values that are equal to their entry in `defaults:`.

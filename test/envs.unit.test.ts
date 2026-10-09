@@ -37,6 +37,7 @@ function testContext(cwd: string, overrides: Partial<Context> = {}) {
     log: (m) => logs.push(m),
     error: (m) => errors.push(m),
     openEditor: async () => 0,
+    confirm: async () => true,
     ...overrides,
   };
   return { ctx, logs, errors };

@@ -11,6 +11,8 @@ export async function build(outdir = join(root, "dist")): Promise<void> {
     entrypoints: [join(root, "src/bin/envs.ts")],
     outdir,
     target: "bun",
+    // node-datachannel is a native addon: it must be installed next to the build, not inlined.
+    external: ["node-datachannel", "node-datachannel/*"],
   });
   if (!result.success) {
     throw new AggregateError(result.logs, "Build failed");
