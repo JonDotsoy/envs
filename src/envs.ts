@@ -313,9 +313,10 @@ export async function lint(ctx: Context): Promise<number> {
 }
 
 export async function edit(ctx: Context): Promise<number> {
+  const valuesPath = join(await findRoot(ctx.cwd), ".envs/values.yml");
+  if (!(await Bun.file(valuesPath).exists())) await init(ctx);
   const pulled = await pull(ctx);
   if (pulled !== 0) return pulled;
-  const valuesPath = join(await findRoot(ctx.cwd), ".envs/values.yml");
   const code = await ctx.openEditor(valuesPath);
   if (code !== 0) return code;
   return await push(ctx);

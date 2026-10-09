@@ -194,12 +194,29 @@ describe("commands (in-process)", () => {
 
   const valuesPath = () => join(ws.main, ".envs/values.yml");
 
-  test("pull, push and edit require init first", async () => {
-    for (const command of ["pull", "push", "edit"]) {
+  test("pull and push require init first", async () => {
+    for (const command of ["pull", "push"]) {
       const { ctx, errors } = testContext(ws.main);
       expect(await run([command], ctx)).toBe(1);
       expect(errors[0]).toContain("Run `envs init` first.");
     }
+  });
+
+  test("edit initializes first when values.yml is missing", async () => {
+    const opened: string[] = [];
+    const { ctx } = testContext(ws.main, {
+      openEditor: async (path) => {
+        opened.push(path);
+        expect(await Bun.file(path).exists()).toBe(true);
+        return 0;
+      },
+    });
+    expect(await run(["edit"], ctx)).toBe(0);
+    expect(opened).toEqual([valuesPath()]);
+    expect(await Bun.file(join(ws.main, ".envs/.gitignore")).text()).toBe(
+      "*\n",
+    );
+    await rm(join(ws.main, ".envs"), { recursive: true, force: true });
   });
 
   test("init creates files and reports existing ones", async () => {
