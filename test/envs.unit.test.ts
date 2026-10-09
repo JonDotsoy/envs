@@ -430,3 +430,46 @@ describe("push with many branches", () => {
     });
   }
 });
+
+describe("share / receive wiring", () => {
+  test("help lists both commands", () => {
+    expect(HELP).toContain("share");
+    expect(HELP).toContain("receive");
+  });
+
+  test("both commands ask for `envs init` first", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "envs-noinit-"));
+    try {
+      for (const args of [["share"], ["receive", "envs://x"]]) {
+        const { ctx, errors } = testContext(dir);
+        expect(await run(args, ctx)).toBe(1);
+        expect(errors.join("\n")).toContain("Run `envs init` first");
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("the default confirm only accepts an explicit y or yes", async () => {
+    const answers: Array<[string | null, boolean]> = [
+      ["y", true],
+      ["Y", true],
+      ["yes", true],
+      [" YES ", true],
+      ["n", false],
+      ["no", false],
+      ["ye", false],
+      ["", false],
+      [null, false],
+    ];
+    for (const [answer, expected] of answers) {
+      const spy = spyOn(globalThis, "prompt").mockReturnValue(answer);
+      try {
+        expect(await defaultContext().confirm("Continue? ")).toBe(expected);
+        expect(spy).toHaveBeenCalledWith("Continue? ");
+      } finally {
+        spy.mockRestore();
+      }
+    }
+  });
+});

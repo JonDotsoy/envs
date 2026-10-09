@@ -1,11 +1,26 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { randomBytes } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { run, type Context } from "../src/envs";
 import { runShare } from "../src/share/host";
 import { buildShareUrl, parseShareUrl } from "../src/share/url";
-import { generateSecret } from "../src/share/crypto";
-import type { ShareTransport } from "../src/share/transport";
+import {
+  DIRECTION,
+  SessionCipher,
+  decodeSecret,
+  deriveAuthKey,
+  deriveFileKey,
+  deriveSessionKeys,
+  generateEphemeralKey,
+  generateSecret,
+  mac,
+  sealFile,
+  sharedSecret,
+} from "../src/share/crypto";
+import { KIND, decodeHello, encodeAck, encodeData, encodeHello } from "../src/share/protocol";
+import { generatePeerId } from "../src/share/url";
+import type { Channel, ShareTransport } from "../src/share/transport";
 import { createWorkspace, type Workspace } from "./fixtures/workspace";
 import { createMemoryNetwork } from "./fixtures/memory-transport";
 
@@ -287,5 +302,206 @@ describe("envs share / envs receive", () => {
     abort.abort();
     expect(await exit).toBe(0);
     expect(network.listening).toEqual([]);
+  });
+});
+
+/** A scripted host that completes the real handshake, then lets the test decide what to send. */
+async function fakeHost(
+  network: ShareTransport,
+  serve: (send: (plain: Uint8Array) => void, sessionId: Buffer, fileKey: Buffer, close: () => void) => void,
+  { badMac = false }: { badMac?: boolean } = {},
+) {
+  const secretText = generateSecret();
+  const secret = decodeSecret(secretText);
+  const kAuth = deriveAuthKey(secret);
+  const peerId = generatePeerId();
+  const endpoint = await network.listen(peerId);
+  endpoint.onConnection((channel: Channel) =>
+    channel.onMessage((data) => {
+      const hello = decodeHello(data);
+      if (!hello) return; // later frames (replies of the client) are not interesting
+      const sessionId = randomBytes(16);
+      const nonceS = randomBytes(16);
+      const ephemeral = generateEphemeralKey();
+      const ackMac = mac(badMac ? randomBytes(64) : kAuth, "envs/ack", hello.nonceC, hello.pubC, sessionId, nonceS, ephemeral.publicKey);
+      const keys = deriveSessionKeys(sharedSecret(ephemeral, hello.pubC), secret, hello.nonceC, nonceS, sessionId);
+      const cipher = new SessionCipher(keys.serverToClient, keys.clientToServer, sessionId, DIRECTION.serverToClient);
+      channel.send(encodeAck(sessionId, nonceS, ephemeral.publicKey, ackMac));
+      serve((plain) => channel.send(encodeData(cipher.seal(plain))), sessionId, deriveFileKey(secret), () => channel.close());
+    }),
+  );
+  return { link: buildShareUrl({ peerId, secret: secretText }), endpoint };
+}
+
+/** A client that authenticates correctly and then goes silent, holding a slot of the session. */
+async function stalledPeer(network: ShareTransport, link: string) {
+  const { peerId, secret } = parseShareUrl(link);
+  const kAuth = deriveAuthKey(decodeSecret(secret));
+  const channel = await network.connect(peerId);
+  const nonceC = randomBytes(16);
+  const ephemeral = generateEphemeralKey();
+  const acked = new Promise<void>((resolve) => channel.onMessage(() => resolve()));
+  channel.send(encodeHello(nonceC, ephemeral.publicKey, mac(kAuth, "envs/hello", nonceC, ephemeral.publicKey)));
+  await acked;
+  return channel;
+}
+
+const hostEnv = (values: string = HOST_VALUES) => ({ root: hostWs.main, values: Bun.YAML.parse(values) as any });
+
+describe("host edge cases", () => {
+  test("reports a broker failure and leaves no sharing file behind", async () => {
+    const broken: ShareTransport = {
+      listen: async () => {
+        throw new Error("broker down");
+      },
+      connect: async () => {
+        throw new Error("unused");
+      },
+    };
+    const host = testContext(hostWs.main, broken);
+    expect(await run(["share"], host.ctx)).toBe(1);
+    expect(host.errors.join("\n")).toContain("Could not start the session: broker down");
+    expect(await Bun.file(join(hostWs.main, ".envs/sharing-envs")).exists()).toBe(false);
+  });
+
+  test("replaces a stale sharing file when a session starts", async () => {
+    const file = join(hostWs.main, ".envs/sharing-envs");
+    await Bun.write(file, "OLD-CONTENT");
+    const host = await startShare(createMemoryNetwork());
+    const onDisk = Buffer.from(await Bun.file(file).arrayBuffer());
+    expect(onDisk.includes(Buffer.from("OLD-CONTENT"))).toBe(false);
+    expect(onDisk.subarray(0, 7).toString()).toBe("ENVSHR1");
+    process.emit("SIGINT");
+    expect(await host.exit).toBe(0);
+  });
+
+  test("returns right away when the session is already aborted", async () => {
+    const network = createMemoryNetwork();
+    const host = testContext(hostWs.main, network);
+    const abort = new AbortController();
+    abort.abort();
+    expect(await runShare(host.ctx, hostEnv(), [], async () => network, abort.signal)).toBe(0);
+    expect(host.logs.join("\n")).toContain("Session closed");
+    expect(await Bun.file(join(hostWs.main, ".envs/sharing-envs")).exists()).toBe(false);
+    expect(network.listening).toEqual([]);
+  });
+
+  test("drops a peer that never sends HELLO", async () => {
+    const network = createMemoryNetwork();
+    const host = testContext(hostWs.main, network);
+    const abort = new AbortController();
+    const exit = runShare(host.ctx, hostEnv(), [], async () => network, abort.signal, { handshakeMs: 30 });
+    const link = await waitFor(() => linkOf(host.logs));
+    const silent = await network.connect(parseShareUrl(link).peerId);
+    let closed = false;
+    silent.onClose(() => (closed = true));
+    await waitFor(() => closed);
+    expect((await audit(hostWs.main)).some((e) => e.event === "auth_failed" && e.reason === "timeout")).toBe(true);
+    abort.abort();
+    expect(await exit).toBe(0);
+  });
+
+  test("drops an authenticated peer that never confirms and frees its slot", async () => {
+    const network = createMemoryNetwork();
+    const host = testContext(hostWs.main, network);
+    const abort = new AbortController();
+    const exit = runShare(host.ctx, hostEnv(), [], async () => network, abort.signal, { transferMs: 30 });
+    const link = await waitFor(() => linkOf(host.logs));
+    const stalled = await stalledPeer(network, link);
+    let closed = false;
+    stalled.onClose(() => (closed = true));
+    await waitFor(() => closed);
+    expect((await audit(hostWs.main)).filter((e) => e.event === "auth_failed").map((e) => e.reason)).toEqual(["timeout"]);
+    // The slot is free again: a legitimate client still gets the variables.
+    expect(await run(["receive", link], testContext(guestWs.main, network).ctx)).toBe(0);
+    expect(await exit).toBe(0);
+  });
+
+  test("rejects extra peers while the only slot is taken, then accepts one once it is free", async () => {
+    const network = createMemoryNetwork();
+    const host = await startShare(network);
+    const stalled = await stalledPeer(network, host.link);
+
+    const late = testContext(guestWs.main, network);
+    expect(await run(["receive", host.link], late.ctx)).toBe(1);
+    expect(late.errors.join("\n")).toContain("closed the connection");
+    expect((await audit(hostWs.main)).some((e) => e.event === "rejected" && e.reason === "max_peers")).toBe(true);
+
+    stalled.close();
+    await waitFor(async () => (await audit(hostWs.main)).some((e) => e.event === "closed" && e.reason === "disconnected"));
+    expect(await run(["receive", host.link], testContext(guestWs.main, network).ctx)).toBe(0);
+    expect(await host.exit).toBe(0);
+  });
+
+  test("a client that cannot read the payload tells the host, which audits client_rejected", async () => {
+    await Bun.write(join(hostWs.main, ".envs/values.yml"), 'defaults:\n  "BAD NAME": x\n');
+    const network = createMemoryNetwork();
+    const host = await startShare(network);
+    const guest = testContext(guestWs.main, network);
+    expect(await run(["receive", host.link], guest.ctx)).toBe(1);
+    expect(guest.errors.join("\n")).toContain("Invalid variable name");
+    await waitFor(async () => (await audit(hostWs.main)).some((e) => e.event === "rejected" && e.reason === "client_rejected"));
+    expect(await Bun.file(join(guestWs.main, ".envs/values.yml")).text()).toBe("");
+    process.emit("SIGINT");
+    expect(await host.exit).toBe(0);
+  });
+});
+
+describe("client edge cases", () => {
+  test("rejects a host that answers with something other than ACK", async () => {
+    const network = createMemoryNetwork();
+    const peerId = generatePeerId();
+    const endpoint = await network.listen(peerId);
+    endpoint.onConnection((channel) => channel.onMessage(() => channel.send(new Uint8Array([9, 9, 9]))));
+    const guest = testContext(guestWs.main, network);
+    expect(await run(["receive", buildShareUrl({ peerId, secret: generateSecret() })], guest.ctx)).toBe(1);
+    expect(guest.errors.join("\n")).toContain("Unexpected reply from the host");
+  });
+
+  test("rejects a host that cannot prove it knows the key", async () => {
+    const network = createMemoryNetwork();
+    const { link } = await fakeHost(network, () => {}, { badMac: true });
+    const guest = testContext(guestWs.main, network);
+    expect(await run(["receive", link], guest.ctx)).toBe(1);
+    expect(guest.errors.join("\n")).toContain("Host authentication failed");
+  });
+
+  test("rejects a payload above the size limit", async () => {
+    const network = createMemoryNetwork();
+    const { link } = await fakeHost(network, (send) => {
+      const chunk = Buffer.concat([Buffer.from([KIND.chunk]), Buffer.alloc(12 * 1024)]);
+      for (let i = 0; i < 100; i++) send(chunk);
+    });
+    const guest = testContext(guestWs.main, network);
+    expect(await run(["receive", link], guest.ctx)).toBe(1);
+    expect(guest.errors.join("\n")).toContain("too large");
+  });
+
+  test("rejects a payload sealed for another session", async () => {
+    const network = createMemoryNetwork();
+    const { link } = await fakeHost(network, (send, _sessionId, fileKey) => {
+      const payload = JSON.stringify({ version: 1, profile: "main", generatedAt: "", values: { A: "1" } });
+      const sealed = sealFile(Buffer.from(payload), fileKey, randomBytes(16));
+      send(Buffer.concat([Buffer.from([KIND.final]), sealed]));
+    });
+    const guest = testContext(guestWs.main, network);
+    expect(await run(["receive", link], guest.ctx)).toBe(1);
+    expect(guest.errors.join("\n")).toContain("another session");
+  });
+
+  test("a host that vanishes mid-transfer ends the command cleanly", async () => {
+    const network = createMemoryNetwork();
+    const { link } = await fakeHost(network, (_send, _sessionId, _fileKey, close) => close());
+    const guest = testContext(guestWs.main, network);
+    expect(await run(["receive", link], guest.ctx)).toBe(1);
+    expect(guest.errors.join("\n")).toContain("closed the connection");
+  });
+
+  test("reports an unreachable host", async () => {
+    const network = createMemoryNetwork();
+    const guest = testContext(guestWs.main, network);
+    const link = buildShareUrl({ peerId: generatePeerId(), secret: generateSecret() });
+    expect(await run(["receive", link], guest.ctx)).toBe(1);
+    expect(guest.errors.join("\n")).toContain("Could not connect: Host not found");
   });
 });

@@ -57,6 +57,8 @@ export async function runShare(
   args: string[],
   createTransport: () => Promise<ShareTransport>,
   signal?: AbortSignal,
+  /** Test hook: shorter timeouts than the protocol defaults. */
+  timings: { handshakeMs?: number; transferMs?: number } = {},
 ): Promise<number> {
   let options;
   try {
@@ -182,7 +184,7 @@ export async function runShare(
       clearTimeout(timer);
       timer = setTimeout(() => close("auth_failed", reason), ms);
     };
-    arm(HANDSHAKE_TIMEOUT_MS, "timeout");
+    arm(timings.handshakeMs ?? HANDSHAKE_TIMEOUT_MS, "timeout");
 
     channel.onClose(() => close("closed", "disconnected"));
     channel.onMessage((data) => {
@@ -210,7 +212,7 @@ export async function runShare(
           hasSlot = true;
           reserved++;
           state = "transfer";
-          arm(TRANSFER_TIMEOUT_MS, "timeout");
+          arm(timings.transferMs ?? TRANSFER_TIMEOUT_MS, "timeout");
           audit("auth_ok", fields());
           ctx.log(`Peer ${peer} authenticated; sending ${keyCount} variables…`);
           channel.send(encodeAck(sessionId, nonceS, ephemeral.publicKey, ackMac));

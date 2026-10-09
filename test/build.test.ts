@@ -30,3 +30,12 @@ test("build creates the compiled script and a self-pointing package.json", async
   expect(result.exitCode).toBe(0);
   expect(result.stdout.toString()).toContain("Usage: envs <command>");
 });
+
+test("build keeps the native WebRTC addon out of the bundle and declares the runtime dependencies", async () => {
+  await build(outdir);
+  const pkg = await Bun.file(join(outdir, "package.json")).json();
+  expect(Object.keys(pkg.dependencies).sort()).toEqual(["node-datachannel", "peerjs"]);
+  const bundle = await Bun.file(join(outdir, "envs.js")).text();
+  expect(bundle).not.toContain("node_datachannel.node");
+  expect(bundle).toContain('import("node-datachannel/polyfill")');
+});

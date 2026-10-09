@@ -50,6 +50,15 @@ afterAll(async () => {
   await guestWs.cleanup();
 });
 
+async function linkFrom(host: { logs: string[]; errors: string[] }) {
+  for (let i = 0; i < 400; i++) {
+    const found = host.logs.join("\n").match(/envs:\/\/\S+/)?.[0];
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`no link printed: ${host.errors.join("\n")}`);
+}
+
 describe("envs share over PeerJS", () => {
   test.skipIf(!available)("shares the main profile through a real data channel", async () => {
     const host = testContext(hostWs.main);
@@ -77,4 +86,32 @@ describe("envs share over PeerJS", () => {
       .map((line) => JSON.parse(line).event);
     expect(events).toContain("transferred");
   }, 40_000);
+
+  test.skipIf(!available)("a wrong key is rejected by the real host, which stays available", async () => {
+    const host = testContext(hostWs.main);
+    const exit = run(["share", "--peer-server", brokerUrl], host.ctx);
+    const link = await linkFrom(host);
+    const wrong = link.replace(/key=[^&]+/, "key=" + "A".repeat(43));
+
+    const bad = testContext(guestWs.main);
+    expect(await run(["receive", wrong], bad.ctx)).toBe(1);
+    expect(bad.errors.join("\n")).toContain("closed the connection");
+
+    const good = testContext(guestWs.main);
+    expect(await run(["receive", link], good.ctx)).toBe(0);
+    expect(await exit).toBe(0);
+    const log = (await Bun.file(join(hostWs.main, ".envs/sharing-connections.ndjson")).text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(log.some((e) => e.event === "auth_failed" && e.reason === "bad_mac")).toBe(true);
+    expect(log.some((e) => e.event === "transferred")).toBe(true);
+  }, 40_000);
+
+  test.skipIf(!available)("an unused link expires and tears the session down", async () => {
+    const host = testContext(hostWs.main);
+    expect(await run(["share", "--ttl", "0.02", "--peer-server", brokerUrl], host.ctx)).toBe(1);
+    expect(host.errors.join("\n")).toContain("expired");
+    expect(await Bun.file(join(hostWs.main, ".envs/sharing-envs")).exists()).toBe(false);
+  }, 20_000);
 });
