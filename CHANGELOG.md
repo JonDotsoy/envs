@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- `envs edit` runs `envs init` first when `.envs/values.yml` does not exist, so `bunx @jondotsoy/envs edit` works without prior setup.
+- README: the quick start uses `bunx @jondotsoy/envs edit`; the global install is optional.
+
 ### Fixed
 
 - `envs pull` no longer writes to `envs:` the values that are equal to their entry in `defaults:`.

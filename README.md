@@ -6,17 +6,31 @@ Requires [Bun](https://bun.com) and git.
 
 ![Each worktree keeps its own .env; envs edit and envs push sync the shared values across them](docs/assets/images/worktrees-sync.svg)
 
-## Installation
+## Quick start
+
+Inside your repo (or any of its worktrees), run:
+
+```bash
+bunx @jondotsoy/envs edit
+```
+
+No install or setup needed. The first time, `edit` creates `.envs/values.yml` and `.envs/.gitignore` (containing `*`, so git ignores the folder), collects the current `.env` of every worktree into `values.yml`, opens it in VS Code (`code -w`) and, when you close the editor, writes the values back to each worktree's `.env`.
+
+To see all commands:
+
+```bash
+bunx @jondotsoy/envs help
+```
+
+### Global install (optional)
+
+To use the shorter `envs` command, install it globally:
 
 ```bash
 bun add -g @jondotsoy/envs
 ```
 
-Or without installing:
-
-```bash
-bunx @jondotsoy/envs help
-```
+The examples below use `envs`; without a global install, replace it with `bunx @jondotsoy/envs`.
 
 ## Usage
 
@@ -24,12 +38,14 @@ Run the commands inside the repo or any of its worktrees. Inside a worktree, `.e
 
 | Command | What it does |
 | --- | --- |
+| `envs edit` | Runs `init` if `.envs/values.yml` does not exist yet, then runs `pull`, opens `values.yml` with `code -w` and, when the editor closes, runs `push`. If the editor fails, it does not `push`. |
 | `envs init` | Creates `.envs/`, `.envs/.gitignore` (containing `*`) and an empty `.envs/values.yml`. Does not overwrite existing files. |
 | `envs pull` | Reads the `.env` of the main repo and of each worktree and writes it to `values.yml`. Variables that are no longer in a `.env` are removed from `values.yml` for that worktree. |
 | `envs push` | Writes `values.yml` to the `.env` of each worktree. Updates existing variables in place, appends new ones at the end, and keeps comments and variables that are not in `values.yml`. |
 | `envs lint` | Checks security and prints a warning for each problem. Exits with code 1 if there is any (useful in CI). See below. |
-| `envs edit` | Runs `pull`, opens `values.yml` with `code -w` and, when the editor closes, runs `push`. If the editor fails, it does not `push`. |
-| `envs help` | Shows the help. |
+| `envs help` | Shows the help (also `--help`, `-h`, or no command). |
+
+`pull`, `push` and `lint` need `.envs/values.yml` to exist: if it is missing they exit with code 1 and ask you to run `envs init` (or just use `envs edit`, which creates it).
 
 Worktrees are identified by their branch name (or their folder name if they are in detached HEAD). The main repo uses its branch name, for example `main`.
 
@@ -45,6 +61,12 @@ Worktrees are identified by their branch name (or their folder name if they are 
 
 ```
 ↻ LOG_LEVEL=info → main, feature/biz
+```
+
+Values of sensitive variables (`PASSWORD`, `TOKEN`, `SECRET`, `API_KEY`…, or a `KEY` word such as `KEY_FOO` or `FOO_KEY`) are printed as `********`:
+
+```
+↻ DB_PASSWORD=******** → main
 ```
 
 Colors are disabled when the [`NO_COLOR`](https://no-color.org) environment variable is set to a non-empty value:

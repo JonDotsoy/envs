@@ -194,12 +194,29 @@ describe("commands (in-process)", () => {
 
   const valuesPath = () => join(ws.main, ".envs/values.yml");
 
-  test("pull, push and edit require init first", async () => {
-    for (const command of ["pull", "push", "edit"]) {
+  test("pull and push require init first", async () => {
+    for (const command of ["pull", "push"]) {
       const { ctx, errors } = testContext(ws.main);
       expect(await run([command], ctx)).toBe(1);
       expect(errors[0]).toContain("Run `envs init` first.");
     }
+  });
+
+  test("edit initializes first when values.yml is missing", async () => {
+    const opened: string[] = [];
+    const { ctx } = testContext(ws.main, {
+      openEditor: async (path) => {
+        opened.push(path);
+        expect(await Bun.file(path).exists()).toBe(true);
+        return 0;
+      },
+    });
+    expect(await run(["edit"], ctx)).toBe(0);
+    expect(opened).toEqual([valuesPath()]);
+    expect(await Bun.file(join(ws.main, ".envs/.gitignore")).text()).toBe(
+      "*\n",
+    );
+    await rm(join(ws.main, ".envs"), { recursive: true, force: true });
   });
 
   test("init creates files and reports existing ones", async () => {
@@ -425,6 +442,49 @@ describe("push with many branches", () => {
         expect(again.logs).toEqual([]);
       } finally {
         await ws.cleanup();
+      }
+    });
+  }
+});
+
+describe("edit creates .envs/ in the main repo", () => {
+  let ws: Workspace;
+  beforeAll(async () => {
+    ws = await createWorkspace({
+      worktrees: ["one"],
+      files: { "src/foo/.keep": "" },
+    });
+  });
+  afterAll(() => ws.cleanup());
+
+  const cases: [string, () => string][] = [
+    ["a worktree root", () => ws.worktrees.one!],
+    ["a subfolder of the main repo", () => join(ws.main, "src/foo")],
+    ["a subfolder of a worktree", () => join(ws.worktrees.one!, "src/foo")],
+  ];
+
+  for (const [label, cwd] of cases) {
+    test(`from ${label}`, async () => {
+      await rm(join(ws.main, ".envs"), { recursive: true, force: true });
+      const opened: string[] = [];
+      const { ctx } = testContext(cwd(), {
+        openEditor: async (path) => {
+          opened.push(path);
+          return 0;
+        },
+      });
+      expect(await run(["edit"], ctx)).toBe(0);
+      const valuesPath = join(ws.main, ".envs/values.yml");
+      expect(opened).toEqual([valuesPath]);
+      expect(await Bun.file(valuesPath).exists()).toBe(true);
+      expect(await Bun.file(join(ws.main, ".envs/.gitignore")).text()).toBe(
+        "*\n",
+      );
+      // Nothing is created next to where the command ran.
+      for (const dir of [ws.worktrees.one!, cwd()]) {
+        expect(await Bun.file(join(dir, ".envs/values.yml")).exists()).toBe(
+          false,
+        );
       }
     });
   }
