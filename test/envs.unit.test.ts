@@ -393,6 +393,21 @@ describe("commands (in-process)", () => {
     expect(await Bun.file(join(ws.main, ".env")).text()).toBe("E=after\n");
   });
 
+  test("edit shows a notice while editing and removes it afterwards", async () => {
+    await Bun.write(join(ws.main, ".env"), "E=1\n");
+    let seen = "";
+    const { ctx } = testContext(ws.main, {
+      openEditor: async (path) => {
+        seen = await Bun.file(path).text();
+        return 0;
+      },
+    });
+    expect(await run(["edit"], ctx)).toBe(0);
+    expect(seen.startsWith("# ")).toBe(true);
+    expect(seen).toContain("Ctrl+C");
+    expect(await Bun.file(valuesPath()).text()).not.toContain("Ctrl+C");
+  });
+
   test("edit does not push when the editor fails", async () => {
     await Bun.write(join(ws.main, ".env"), "E=keep\n");
     const { ctx, logs } = testContext(ws.main, {

@@ -317,10 +317,24 @@ export async function edit(ctx: Context): Promise<number> {
   if (!(await Bun.file(valuesPath).exists())) await init(ctx);
   const pulled = await pull(ctx);
   if (pulled !== 0) return pulled;
+  const original = await Bun.file(valuesPath).text();
+  await Bun.write(valuesPath, EDIT_NOTICE + original);
   const code = await ctx.openEditor(valuesPath);
+  // Drop the notice so it never lingers in the file (or reaches `push`).
+  const edited = await Bun.file(valuesPath).text();
+  if (edited.startsWith(EDIT_NOTICE)) {
+    await Bun.write(valuesPath, edited.slice(EDIT_NOTICE.length));
+  }
   if (code !== 0) return code;
   return await push(ctx);
 }
+
+/** Instructions placed at the top of values.yml while `envs edit` waits for the editor. */
+const EDIT_NOTICE = `# ──────────────────────────────────────────────────────────────
+# Close this file when your changes are ready, then they are pushed.
+# To cancel the edit, press Ctrl+C in the terminal and then close this file.
+# ──────────────────────────────────────────────────────────────
+`;
 
 /** Runs a command; resolves with the process exit code. */
 export async function run(
