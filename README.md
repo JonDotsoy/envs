@@ -39,6 +39,7 @@ Run the commands inside the repo or any of its worktrees. Inside a worktree, `.e
 | Command | What it does |
 | --- | --- |
 | `envs edit` | Runs `init` if `.envs/values.yml` does not exist yet, then runs `pull`, opens `values.yml` with `code -w` and, when the editor closes, runs `push`. If the editor fails, it does not `push`. |
+| `envs edit --ui` | Same `init` and `pull`, but instead of VS Code it starts a local server (`127.0.0.1`, random port) and opens a React web editor with the values of `values.yml` (worktree profiles, defaults and per-worktree values). The **Save** button in the top right corner writes `values.yml` and runs `push`. Stop the server with Ctrl+C. |
 | `envs init` | Creates `.envs/`, `.envs/.gitignore` (containing `*`) and an empty `.envs/values.yml`. Does not overwrite existing files. |
 | `envs pull` | Reads the `.env` of the main repo and of each worktree and writes it to `values.yml`. Variables that are no longer in a `.env` are removed from `values.yml` for that worktree. |
 | `envs push` | Writes `values.yml` to the `.env` of each worktree. Updates existing variables in place, appends new ones at the end, and keeps comments and variables that are not in `values.yml`. |
