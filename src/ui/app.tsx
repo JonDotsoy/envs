@@ -43,8 +43,8 @@ const fromVarRows = (rows: VarRow[]): Profile => {
 };
 
 /** Variables × columns: the default value, then the selected worktree (or every worktree). */
-function VarsEditor(props: { rows: VarRow[]; onChange(rows: VarRow[]): void; columns: string[] }) {
-  const { rows, onChange, columns } = props;
+function VarsEditor(props: { rows: VarRow[]; onChange(rows: VarRow[]): void; columns: string[]; worktrees: string[] }) {
+  const { rows, onChange, columns, worktrees } = props;
   const set = (i: number, patch: (row: VarRow) => VarRow) =>
     onChange(rows.map((row, j) => (j === i ? patch(row) : row)));
   return (
@@ -65,7 +65,20 @@ function VarsEditor(props: { rows: VarRow[]; onChange(rows: VarRow[]): void; col
             {rows.map((row, i) => (
               <tr key={i}>
                 <td><input aria-label="Variable name" value={row.key} onChange={(e) => set(i, (r) => ({ ...r, key: e.target.value }))} /></td>
-                <td><input aria-label={`${row.key || "Variable"} default`} value={row.def} placeholder="—" onChange={(e) => set(i, (r) => ({ ...r, def: e.target.value }))} /></td>
+                <td>
+                  <div className="with-action">
+                    <input aria-label={`${row.key || "Variable"} default`} value={row.def} placeholder="—" onChange={(e) => set(i, (r) => ({ ...r, def: e.target.value }))} />
+                    <button
+                      className="apply-all"
+                      title="Apply this value to every worktree"
+                      aria-label={`Apply ${row.key || "variable"} default to all worktrees`}
+                      disabled={row.def === ""}
+                      onClick={() => set(i, (r) => ({ ...r, byWorktree: { ...r.byWorktree, ...Object.fromEntries(worktrees.map((w) => [w, r.def])) } }))}
+                    >
+                      → All
+                    </button>
+                  </div>
+                </td>
                 {columns.map((w) => (
                   <td key={w}>
                     <input
@@ -196,6 +209,7 @@ function App() {
             rows={vars[profile] ?? []}
             onChange={(rows) => setVars({ ...vars, [profile]: rows })}
             columns={worktree ? [worktree] : loaded.worktrees}
+            worktrees={loaded.worktrees}
           />
         </section>
 
