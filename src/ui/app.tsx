@@ -49,36 +49,39 @@ function VarsEditor(props: { rows: VarRow[]; onChange(rows: VarRow[]): void; col
     onChange(rows.map((row, j) => (j === i ? patch(row) : row)));
   return (
     <>
-      <table>
-        <thead>
-          <tr>
-            <th>Variable</th>
-            <th>Default</th>
-            {columns.map((w) => (
-              <th key={w}>{w}</th>
-            ))}
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={i}>
-              <td><input value={row.key} onChange={(e) => set(i, (r) => ({ ...r, key: e.target.value }))} /></td>
-              <td><input value={row.def} placeholder="—" onChange={(e) => set(i, (r) => ({ ...r, def: e.target.value }))} /></td>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Variable</th>
+              <th>Default</th>
               {columns.map((w) => (
-                <td key={w}>
-                  <input
-                    value={row.byWorktree[w] ?? ""}
-                    placeholder={row.def === "" ? "—" : "default"}
-                    onChange={(e) => set(i, (r) => ({ ...r, byWorktree: { ...r.byWorktree, [w]: e.target.value } }))}
-                  />
-                </td>
+                <th key={w}>{w}</th>
               ))}
-              <td className="x"><button className="remove" title="Remove" onClick={() => onChange(rows.filter((_, j) => j !== i))}>×</button></td>
+              <th />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i}>
+                <td><input aria-label="Variable name" value={row.key} onChange={(e) => set(i, (r) => ({ ...r, key: e.target.value }))} /></td>
+                <td><input aria-label={`${row.key || "Variable"} default`} value={row.def} placeholder="—" onChange={(e) => set(i, (r) => ({ ...r, def: e.target.value }))} /></td>
+                {columns.map((w) => (
+                  <td key={w}>
+                    <input
+                      aria-label={`${row.key || "Variable"} in ${w}`}
+                      value={row.byWorktree[w] ?? ""}
+                      placeholder={row.def === "" ? "—" : "default"}
+                      onChange={(e) => set(i, (r) => ({ ...r, byWorktree: { ...r.byWorktree, [w]: e.target.value } }))}
+                    />
+                  </td>
+                ))}
+                <td className="x"><button className="remove" title="Remove" aria-label={`Remove ${row.key || "variable"}`} onClick={() => onChange(rows.filter((_, j) => j !== i))}>×</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <button className="ghost" onClick={() => onChange([...rows, { key: "", def: "", byWorktree: {} }])}>+ Add variable</button>
     </>
   );
@@ -136,18 +139,16 @@ function App() {
   return (
     <>
       <header>
-        <span className="brand">envs<span className="dim"> / values.yml</span></span>
-        {result && (
-          <span className={`status ${result.ok ? "ok" : "err"}`}>
-            {result.ok ? "Saved and pushed" : "Save failed"}
-          </span>
-        )}
+        <span className="brand"><span className="mosaic" aria-hidden="true" />envs<span className="dim"> / values.yml</span></span>
+        <span role="status" className={`status ${result?.ok ? "ok" : "err"}`}>
+          {result && (result.ok ? "Saved and pushed" : "Save failed")}
+        </span>
         <button className="primary" onClick={save} disabled={saving}>
           {saving ? "Saving…" : "Save"}
         </button>
       </header>
       <main>
-        <section className="card light">
+        <section className="card">
           <p className="eyebrow">Worktrees</p>
           <h2>Profile of each worktree</h2>
           <table>
@@ -159,7 +160,7 @@ function App() {
                 <tr key={w}>
                   <td className="name">{w}</td>
                   <td>
-                    <select value={uses[w] ?? "default"} onChange={(e) => setUses({ ...uses, [w]: e.target.value })}>
+                    <select aria-label={`Profile of ${w}`} value={uses[w] ?? "default"} onChange={(e) => setUses({ ...uses, [w]: e.target.value })}>
                       {profileNames.map((n) => (
                         <option key={n} value={n}>{n}</option>
                       ))}
@@ -171,7 +172,7 @@ function App() {
           </table>
         </section>
 
-        <section className="card dark">
+        <section className="card inset">
           <p className="eyebrow">View</p>
           <div className="selectors">
             <label>
@@ -195,7 +196,7 @@ function App() {
           </div>
         </section>
 
-        <section className="card light">
+        <section className="card">
           <p className="eyebrow">Variables</p>
           <h2>{profile}{worktree && ` · ${worktree}`}</h2>
           <VarsEditor
