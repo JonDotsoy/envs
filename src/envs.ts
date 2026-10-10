@@ -525,7 +525,10 @@ export async function edit(ctx: Context, options: { ui?: boolean } = {}): Promis
 export async function loadUiState(ctx: Context) {
   const read = await readValues(ctx);
   if (!read) throw new Error("Run `envs init` first.");
-  const worktrees = (await listWorktrees(ctx.cwd)).map(({ name }) => name);
+  // The main workspace comes first, the rest in natural order (fix-2 before fix-10).
+  const [main, ...others] = (await listWorktrees(ctx.cwd)).map(({ name }) => name);
+  others.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const worktrees = main === undefined ? [] : [main, ...others];
   return { ...normalizeValues(read.values), worktrees };
 }
 

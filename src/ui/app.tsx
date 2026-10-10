@@ -56,7 +56,7 @@ function VarsEditor(props: { rows: VarRow[]; onChange(rows: VarRow[]): void; col
               <th>Variable</th>
               <th>Default</th>
               {columns.map((w) => (
-                <th key={w}>{w}</th>
+                <th key={w}><span className="th-clip" title={w}>{w}</span></th>
               ))}
               <th />
             </tr>
@@ -151,25 +151,18 @@ function App() {
         <section className="card">
           <p className="eyebrow">Worktrees</p>
           <h2>Profile of each worktree</h2>
-          <table>
-            <thead>
-              <tr><th>Worktree</th><th>Profile</th></tr>
-            </thead>
-            <tbody>
-              {loaded.worktrees.map((w) => (
-                <tr key={w}>
-                  <td className="name">{w}</td>
-                  <td>
-                    <select aria-label={`Profile of ${w}`} value={uses[w] ?? "default"} onChange={(e) => setUses({ ...uses, [w]: e.target.value })}>
-                      {profileNames.map((n) => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ul className="wt-grid">
+            {loaded.worktrees.map((w) => (
+              <li key={w}>
+                <span className="name" title={w}>{w}</span>
+                <select aria-label={`Profile of ${w}`} value={uses[w] ?? "default"} onChange={(e) => setUses({ ...uses, [w]: e.target.value })}>
+                  {profileNames.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </li>
+            ))}
+          </ul>
         </section>
 
         <section className="card inset">
