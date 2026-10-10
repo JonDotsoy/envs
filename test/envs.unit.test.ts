@@ -548,6 +548,28 @@ describe("profiles", () => {
     );
   });
 
+  test("edit records only the changes in .envs/h/<hash>.json and a line in history.ndjson", async () => {
+    await reset("uses:\n  main: default\n  feature-x: default\nprofiles:\n  default:\n    defaults:\n      A: one\n    envs: {}\n");
+    expect((await edit("uses:\n  main: default\n  feature-x: default\nprofiles:\n  default:\n    defaults:\n      A: two\n      B: new\n    envs: {}\n")).code).toBe(0);
+    const lines = (await Bun.file(join(ws.main, ".envs/history.ndjson")).text()).trim().split("\n");
+    expect(lines).toHaveLength(1);
+    const entry = JSON.parse(lines[0]!);
+    expect(Object.keys(entry).sort()).toEqual(["hash", "timestamp"]);
+    expect(new Date(entry.timestamp).toISOString()).toBe(entry.timestamp);
+    expect(await Bun.file(join(ws.main, ".envs/h", `${entry.hash}.json`)).json()).toEqual({
+      changes: [
+        { path: ["profiles", "default", "defaults", "A"], from: "one", to: "two" },
+        { path: ["profiles", "default", "defaults", "B"], to: "new" },
+      ],
+    });
+  });
+
+  test("edit without changes writes no history", async () => {
+    await reset("");
+    expect((await edit()).code).toBe(0);
+    expect(await Bun.file(join(ws.main, ".envs/history.ndjson")).exists()).toBe(false);
+  });
+
   test("edit in a new project with no .env writes uses and an empty default profile", async () => {
     await reset("");
     expect((await edit()).code).toBe(0);

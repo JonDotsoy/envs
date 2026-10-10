@@ -47,6 +47,10 @@ Run the commands inside the repo or any of its worktrees. Inside a worktree, `.e
 | `envs lint` | Checks security and prints a warning for each problem. Exits with code 1 if there is any (useful in CI). See below. |
 | `envs help` | Shows the help (also `--help`, `-h`, or no command). |
 
+### History
+
+Each `envs edit` (and each Save in `envs edit --ui`) that changes `values.yml` records the edit: `.envs/h/<hash>.json` contains only the changes (`{"changes": [{"path": [...], "from": ..., "to": ...}]}`; `from` is absent for added entries, `to` for removed ones) and `.envs/history.ndjson` gets one `{"hash", "timestamp"}` line per edit. Like the rest of `.envs/`, it is ignored by git.
+
 `pull`, `push` and `lint` need `.envs/values.yml` to exist: if it is missing they exit with code 1 and ask you to run `envs init` (or just use `envs edit`, which creates it).
 
 Worktrees are identified by their branch name (or their folder name if they are in detached HEAD). The main repo uses its branch name, for example `main`.
