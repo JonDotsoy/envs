@@ -12,6 +12,7 @@ Commands:
   push    Write defaults and .envs/values.yml into the .env of each worktree
   lint    Warn about insecure values and unprotected secret files
   edit    Pull, open .envs/values.yml in VS Code (code -w), then push
+  use     Select the profile of the current worktree (envs use <profile>), or list them
   help    Show this help message
 `;
 
@@ -52,9 +53,130 @@ export const defaultContext = (): Context => ({
 /** YAML scalar accepted as a value; numbers and booleans are written to .env as their string form. */
 type Value = string | number | boolean;
 
-interface Values {
+/** Values of one profile: `defaults` for every worktree and `envs.<VAR>.<worktree>` overrides. */
+interface Profile {
   defaults?: Record<string, Value>;
   envs?: Record<string, Record<string, Value>>;
+}
+
+/** values.yml as written. Root-level `defaults`/`envs` are the legacy form of `profiles.default`. */
+interface Values extends Profile {
+  /** Profile of each worktree; worktrees that are not listed use `default`. */
+  uses?: Record<string, string>;
+  profiles?: Record<string, Profile>;
+}
+
+interface ResolvedProfile {
+  defaults: Record<string, Value>;
+  envs: Record<string, Record<string, Value>>;
+}
+
+/** values.yml with the legacy form folded into `profiles.default`; `default` always exists. */
+export interface NormalizedValues {
+  uses: Record<string, string>;
+  profiles: Record<string, ResolvedProfile>;
+}
+
+const DEFAULT_PROFILE = "default";
+const hasProfile = (values: NormalizedValues, name: string) =>
+  Object.hasOwn(values.profiles, name);
+
+/** Folds root-level `defaults`/`envs` into `profiles.default` (an explicit `profiles.default` wins). */
+export function normalizeValues(raw: Values): NormalizedValues {
+  const profiles: Record<string, ResolvedProfile> = {};
+  // A hand-written profile can be null (`dev:`) or lack a section; it always ends up with both.
+  const add = (name: string, profile?: Profile | null) => {
+    const target = (profiles[name] ??= { defaults: {}, envs: {} });
+    Object.assign(target.defaults, profile?.defaults);
+    for (const [key, byWorktree] of Object.entries(profile?.envs ?? {})) {
+      Object.assign((target.envs[key] ??= {}), byWorktree);
+    }
+  };
+  add(DEFAULT_PROFILE, { defaults: raw.defaults, envs: raw.envs });
+  for (const [name, profile] of Object.entries(raw.profiles ?? {})) {
+    add(name, profile);
+  }
+  return { uses: { ...raw.uses }, profiles };
+}
+
+/**
+ * Creates every profile named in `uses` that does not exist yet as a copy of `default`.
+ * A profile exists as soon as its key is in `profiles`, even if it is empty.
+ * Returns the names of the created profiles.
+ */
+export function materializeProfiles(values: NormalizedValues): string[] {
+  const created: string[] = [];
+  for (const name of Object.values(values.uses).map(String)) {
+    if (hasProfile(values, name)) continue;
+    values.profiles[name] = structuredClone(values.profiles[DEFAULT_PROFILE]!);
+    created.push(name);
+  }
+  return created;
+}
+
+/**
+ * The variables a worktree receives. Precedence, lowest first: `default` defaults,
+ * `default` envs, the profile's defaults, the profile's envs.
+ * `includeProfileEnvs: false` leaves out the last layer (what `pull` compares against).
+ */
+export function resolveEntries(
+  values: NormalizedValues,
+  worktree: string,
+  profile: string,
+  includeProfileEnvs = true,
+): Record<string, string> {
+  const entries: Record<string, string> = {};
+  for (const name of new Set([DEFAULT_PROFILE, profile])) {
+    const layer = values.profiles[name]!;
+    for (const [key, value] of Object.entries(layer.defaults)) {
+      entries[key] = String(value);
+    }
+    if (name === profile && !includeProfileEnvs) continue;
+    for (const [key, byWorktree] of Object.entries(layer.envs)) {
+      if (byWorktree && worktree in byWorktree) {
+        entries[key] = String(byWorktree[worktree]);
+      }
+    }
+  }
+  return entries;
+}
+
+/** Whether every profile as written has both `defaults` and `envs` (so nothing needs rewriting). */
+const hasCompleteProfiles = (raw: Values) =>
+  Object.values(raw.profiles ?? {}).every(
+    (profile) => typeof profile?.defaults === "object" && profile.defaults !== null && typeof profile.envs === "object" && profile.envs !== null,
+  );
+
+/** The text written to values.yml: only `uses` and `profiles`; every profile has `defaults` and `envs`. */
+function stringifyValues(values: NormalizedValues): string {
+  const profiles = Object.fromEntries(
+    Object.entries(values.profiles).map(([name, { defaults, envs }]) => {
+      const kept = Object.fromEntries(
+        Object.entries(envs).filter(([, byWorktree]) => Object.keys(byWorktree).length > 0),
+      );
+      return [name, { defaults, envs: kept }];
+    }),
+  );
+  const out = Object.keys(values.uses).length > 0 ? { uses: values.uses, profiles } : { profiles };
+  return Bun.YAML.stringify(out, null, 2);
+}
+
+/** Reports every worktree whose profile does not exist; true when all are known. */
+function checkProfiles(
+  ctx: Context,
+  values: NormalizedValues,
+  worktrees: Worktree[],
+): boolean {
+  let ok = true;
+  for (const { name } of worktrees) {
+    const profile = values.uses[name] ?? DEFAULT_PROFILE;
+    if (hasProfile(values, profile)) continue;
+    ok = false;
+    ctx.error(
+      `Unknown profile "${profile}" for worktree ${name}. Available: ${Object.keys(values.profiles).join(", ")}. Run \`envs edit\` to create it.`,
+    );
+  }
+  return ok;
 }
 
 export interface Worktree {
@@ -177,22 +299,23 @@ export async function init(ctx: Context): Promise<number> {
   return 0;
 }
 
-export async function push(ctx: Context): Promise<number> {
+/** Writes the values of each worktree's profile to its `.env`; `only` limits it to one worktree. */
+export async function push(ctx: Context, only?: string): Promise<number> {
   const read = await readValues(ctx);
   if (!read) return 1;
-  const { values } = read;
+  const values = normalizeValues(read.values);
+  const worktrees = (await listWorktrees(ctx.cwd)).filter(
+    ({ name }) => only === undefined || name === only,
+  );
+  if (!checkProfiles(ctx, values, worktrees)) return 1;
   // Changed variables, grouped by `KEY=VALUE` so each log line lists every branch it changed in.
   const changes = new Map<string, string[]>();
-  for (const { name, path } of await listWorktrees(ctx.cwd)) {
-    // Defaults apply to every worktree; per-worktree values override them.
-    const entries: Record<string, string> = {};
-    for (const [key, value] of Object.entries(values.defaults ?? {})) {
-      entries[key] = String(value);
-    }
-    for (const [key, byWorktree] of Object.entries(values.envs ?? {})) {
-      if (name in byWorktree) entries[key] = String(byWorktree[name]);
-    }
+  for (const { name, path } of worktrees) {
+    const profile = values.uses[name] ?? DEFAULT_PROFILE;
+    const entries = resolveEntries(values, name, profile);
     if (Object.keys(entries).length === 0) continue;
+    // Worktrees on a profile other than `default` are labelled in the log.
+    const label = profile === DEFAULT_PROFILE ? name : `${name} [${profile}]`;
     const dotenv = Bun.file(join(path, ".env"));
     const current = (await dotenv.exists()) ? await dotenv.text() : "";
     const existing = parseDotenv(current);
@@ -201,7 +324,7 @@ export async function push(ctx: Context): Promise<number> {
       const shown = isMaskedKey(key) ? MASK : formatDotenvValue(value);
       const line = `${key}=${shown}`;
       // Different secret values share a masked line, so group by what is printed.
-      changes.set(line, [...(changes.get(line) ?? []), name]);
+      changes.set(line, [...(changes.get(line) ?? []), label]);
     }
     await Bun.write(dotenv, updateDotenv(current, entries));
   }
@@ -214,37 +337,37 @@ export async function push(ctx: Context): Promise<number> {
 export async function pull(ctx: Context): Promise<number> {
   const read = await readValues(ctx);
   if (!read) return 1;
-  const { path: valuesPath, values } = read;
-  const envs = (values.envs ??= {});
-  const defaults = values.defaults ?? {};
+  const values = normalizeValues(read.values);
+  const worktrees = await listWorktrees(ctx.cwd);
+  // A profile named in `uses` that does not exist yet starts as a copy of `default`.
+  materializeProfiles(values);
   const pulledNames: string[] = [];
   const pulledKeys = new Set<string>();
-  for (const { name, path } of await listWorktrees(ctx.cwd)) {
+  for (const { name, path } of worktrees) {
+    const profile = (values.uses[name] ??= DEFAULT_PROFILE);
     const dotenv = Bun.file(join(path, ".env"));
     if (!(await dotenv.exists())) continue;
     const parsed = parseDotenv(await dotenv.text());
     pulledNames.push(name);
     for (const key of Object.keys(parsed)) pulledKeys.add(key);
+    const { envs } = values.profiles[profile]!;
     // Drop keys that are no longer in this worktree's .env.
     for (const [key, byWorktree] of Object.entries(envs)) {
       if (!(key in parsed)) delete byWorktree[name];
     }
+    // What the worktree would get without its own entries in this profile.
+    const base = resolveEntries(values, name, profile, false);
     for (const [key, value] of Object.entries(parsed)) {
       const parsedValue = parseValue(value);
-      // A value equal to its default is already covered by `defaults:`.
-      const fromDefaults =
-        key in defaults && String(defaults[key]) === String(parsedValue);
-      if (fromDefaults) {
+      // A value equal to what the profile already provides needs no entry.
+      if (key in base && base[key] === String(parsedValue)) {
         if (envs[key]) delete envs[key]![name];
       } else {
         (envs[key] ??= {})[name] = parsedValue;
       }
     }
   }
-  for (const [key, byWorktree] of Object.entries(envs)) {
-    if (Object.keys(byWorktree).length === 0) delete envs[key];
-  }
-  await Bun.write(valuesPath, Bun.YAML.stringify(values, null, 2));
+  await Bun.write(read.path, stringifyValues(values));
   if (pulledNames.length > 0) {
     ctx.log(
       green(
@@ -253,6 +376,38 @@ export async function pull(ctx: Context): Promise<number> {
     );
   }
   return 0;
+}
+
+/** Selects the profile of the current worktree and pushes it; without a profile, lists the profile of each worktree. */
+export async function use(ctx: Context, profile?: string): Promise<number> {
+  const read = await readValues(ctx);
+  if (!read) return 1;
+  const values = normalizeValues(read.values);
+  const worktrees = await listWorktrees(ctx.cwd);
+  if (profile === undefined) {
+    for (const { name } of worktrees) {
+      ctx.log(`${name}: ${values.uses[name] ?? DEFAULT_PROFILE}`);
+    }
+    return 0;
+  }
+  if (!hasProfile(values, profile)) {
+    ctx.error(
+      `Unknown profile "${profile}". Available: ${Object.keys(values.profiles).join(", ")}. Add it in \`envs edit\` first.`,
+    );
+    return 1;
+  }
+  const top = await $`git rev-parse --show-toplevel`.cwd(ctx.cwd).nothrow().quiet();
+  const current = worktrees.find(
+    ({ path }) => path === top.stdout.toString().trim(),
+  );
+  if (!current) {
+    ctx.error("Run `envs use` inside a git worktree.");
+    return 1;
+  }
+  for (const { name } of worktrees) values.uses[name] ??= DEFAULT_PROFILE;
+  values.uses[current.name] = profile;
+  await Bun.write(read.path, stringifyValues(values));
+  return await push(ctx, current.name);
 }
 
 /** Whether git ignores `file` inside `dir` (true when it would not be committed). */
@@ -326,6 +481,17 @@ export async function edit(ctx: Context): Promise<number> {
     await Bun.write(valuesPath, edited.slice(EDIT_NOTICE.length));
   }
   if (code !== 0) return code;
+  // A profile newly named in `uses` starts as a copy of `default`.
+  const raw = (Bun.YAML.parse(await Bun.file(valuesPath).text()) ?? {}) as Values;
+  const values = normalizeValues(raw);
+  const created = materializeProfiles(values);
+  // Rewrite only when something changed, so comments and formatting survive otherwise.
+  if (created.length > 0 || !hasCompleteProfiles(raw)) {
+    await Bun.write(valuesPath, stringifyValues(values));
+  }
+  if (created.length > 0) {
+    ctx.log(green(`+ created ${created.join(", ")} from ${DEFAULT_PROFILE}`));
+  }
   return await push(ctx);
 }
 
@@ -358,6 +524,8 @@ export async function run(
       return await lint(ctx);
     case "edit":
       return await edit(ctx);
+    case "use":
+      return await use(ctx, args[1]);
     default:
       ctx.error(`Unknown command: ${command}\n\n${HELP}`);
       return 1;

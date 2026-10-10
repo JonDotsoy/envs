@@ -2,29 +2,107 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/JonDotsoy/envs/schema/values.schema.json",
   "title": "envs values.yml",
-  "description": "Values of the environment variables per worktree, stored in .envs/values.yml.",
+  "description": "Values of the environment variables per profile and worktree, stored in .envs/values.yml.",
   "type": "object",
   "properties": {
+    "uses": {
+      "description": "Profile used by each worktree, keyed by worktree name. A worktree that is not listed uses `default`.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "profiles": {
+      "description": "Profiles by name. `default` applies to every worktree; the profile a worktree uses is applied on top of it.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/profile"
+      }
+    },
     "defaults": {
-      "description": "Default value of each environment variable, written to every worktree's .env on push unless envs overrides it.",
+      "description": "Legacy form of profiles.default.defaults; `envs edit` migrates it.",
       "type": "object",
       "additionalProperties": {
         "description": "Default value of the environment variable.",
-        "anyOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }]
-      }
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "deprecated": true
     },
     "envs": {
-      "description": "Environment variables by name.",
+      "description": "Legacy form of profiles.default.envs; `envs edit` migrates it.",
       "type": "object",
       "additionalProperties": {
         "description": "Values of one environment variable, keyed by worktree name.",
         "type": "object",
         "additionalProperties": {
           "description": "Value of the environment variable in that worktree.",
-          "anyOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }]
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
         }
-      }
+      },
+      "deprecated": true
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "definitions": {
+    "value": {
+      "description": "Value of an environment variable.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        }
+      ]
+    },
+    "profile": {
+      "description": "Values of one profile.",
+      "type": "object",
+      "required": ["defaults", "envs"],
+      "properties": {
+        "defaults": {
+          "description": "Default value of each environment variable, written to every worktree that uses the profile unless envs overrides it.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/value"
+          }
+        },
+        "envs": {
+          "description": "Environment variables by name.",
+          "type": "object",
+          "additionalProperties": {
+            "description": "Values of one environment variable, keyed by worktree name.",
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/definitions/value"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
 }

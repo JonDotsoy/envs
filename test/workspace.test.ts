@@ -110,15 +110,15 @@ test("envs pull", async () => {
   const first = await $`bun ${bin} pull`.cwd(dir).quiet();
   expect(first.exitCode).toBe(0);
   let values = await readValues();
-  expect(values.envs.FOO).toEqual({ main: "main", "worktree-1": "one" });
-  expect(values.envs.BAR).toEqual({ "worktree-1": "two words" });
+  expect(values.profiles.default.envs.FOO).toEqual({ main: "main", "worktree-1": "one" });
+  expect(values.profiles.default.envs.BAR).toEqual({ "worktree-1": "two words" });
 
   // Modify the .env of one worktree: the change is reflected in values.yml.
   await Bun.write(join(dir, ".env"), "FOO=changed\n");
   await $`bun ${bin} pull`.cwd(dir).quiet();
   values = await readValues();
-  expect(values.envs.FOO).toEqual({ main: "main", "worktree-1": "changed" });
-  expect(values.envs.BAR).toBeUndefined();
+  expect(values.profiles.default.envs.FOO).toEqual({ main: "main", "worktree-1": "changed" });
+  expect(values.profiles.default.envs.BAR).toBeUndefined();
 });
 
 test("envs pull skips values equal to defaults", async () => {
@@ -134,8 +134,8 @@ test("envs pull skips values equal to defaults", async () => {
   const result = await $`bun ${bin} pull`.cwd(dir).quiet();
   expect(result.exitCode).toBe(0);
   const values = Bun.YAML.parse(await Bun.file(valuesPath).text()) as any;
-  expect(values.defaults).toEqual({ FOO: "tar" });
-  expect(values.envs?.FOO).toBeUndefined();
+  expect(values.profiles.default.defaults).toEqual({ FOO: "tar" });
+  expect(values.profiles.default.envs?.FOO).toBeUndefined();
 });
 
 test("envs push", async () => {

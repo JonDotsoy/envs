@@ -10,6 +10,15 @@ export interface LintContext {
   values: {
     defaults?: Record<string, unknown>;
     envs?: Record<string, Record<string, unknown>>;
+    /** Profile of each worktree. */
+    uses?: Record<string, string>;
+    profiles?: Record<
+      string,
+      {
+        defaults?: Record<string, unknown>;
+        envs?: Record<string, Record<string, unknown>>;
+      } | null
+    >;
   };
   /** Root of the main workspace, where `.envs/` lives. */
   root: string;
@@ -71,21 +80,30 @@ interface Entry {
   shared: boolean;
 }
 
-/** Every value of values.yml: defaults first, then each worktree's. */
+/** Every value of values.yml: the legacy root, then each profile; defaults first, then each worktree's. */
 function entries({ values }: LintContext): Entry[] {
   const result: Entry[] = [];
-  for (const [key, value] of Object.entries(values.defaults ?? {})) {
-    result.push({ key, text: String(value), location: `defaults.${key}`, shared: true });
-  }
-  for (const [key, byWorktree] of Object.entries(values.envs ?? {})) {
-    for (const [worktree, value] of Object.entries(byWorktree ?? {})) {
-      result.push({
-        key,
-        text: String(value),
-        location: `envs.${key}.${worktree}`,
-        shared: false,
-      });
+  const collect = (
+    prefix: string,
+    section?: { defaults?: Record<string, unknown>; envs?: Record<string, Record<string, unknown>> } | null,
+  ) => {
+    for (const [key, value] of Object.entries(section?.defaults ?? {})) {
+      result.push({ key, text: String(value), location: `${prefix}defaults.${key}`, shared: true });
     }
+    for (const [key, byWorktree] of Object.entries(section?.envs ?? {})) {
+      for (const [worktree, value] of Object.entries(byWorktree ?? {})) {
+        result.push({
+          key,
+          text: String(value),
+          location: `${prefix}envs.${key}.${worktree}`,
+          shared: false,
+        });
+      }
+    }
+  };
+  collect("", values);
+  for (const [name, profile] of Object.entries(values.profiles ?? {})) {
+    collect(`profiles.${name}.`, profile);
   }
   return result;
 }
@@ -228,7 +246,7 @@ export const rules: Rule[] = [
   },
   {
     id: "shared-secret",
-    description: "A sensitive variable is in defaults, so it goes to every worktree.",
+    description: "A sensitive variable is in defaults, so it goes to every worktree using that profile.",
     check: (ctx) =>
       entries(ctx)
         .filter((e) => e.shared && isSensitiveKey(e.key))
@@ -274,6 +292,20 @@ export const rules: Rule[] = [
         .map((e) => ({
           location: e.location,
           message: `${e.key} uses ${parseUrl(e.text)!.scheme}:// instead of an encrypted protocol.`,
+        })),
+  },
+  {
+    id: "unknown-profile",
+    description: "A worktree uses a profile that is not defined.",
+    check: ({ values }) =>
+      Object.entries(values.uses ?? {})
+        .filter(
+          ([, profile]) =>
+            profile !== "default" && !Object.hasOwn(values.profiles ?? {}, profile),
+        )
+        .map(([worktree, profile]) => ({
+          location: `uses.${worktree}`,
+          message: `Profile "${profile}" is not defined under profiles; \`envs edit\` creates it from default.`,
         })),
   },
 ];

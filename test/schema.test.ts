@@ -16,6 +16,31 @@ envs:
   expect(validate(values)).toBe(true);
 });
 
+test("values.yml schema accepts uses and profiles", () => {
+  const values = Bun.YAML.parse(`
+uses:
+  main: local
+profiles:
+  default:
+    defaults:
+      FOO: tar
+    envs:
+      PORT:
+        main: 3000
+  local:
+    defaults: {}
+    envs: {}
+`);
+  expect(validate(values)).toBe(true);
+  // A profile is never null and always has both sections.
+  expect(validate({ profiles: { local: null } })).toBe(false);
+  expect(validate({ profiles: { dev: {} } })).toBe(false);
+  expect(validate({ profiles: { dev: { defaults: {} } } })).toBe(false);
+  expect(validate({ uses: { main: 1 } })).toBe(false);
+  expect(validate({ profiles: { dev: { other: {} } } })).toBe(false);
+  expect(validate({ profiles: { dev: { defaults: { A: null } } } })).toBe(false);
+});
+
 test("values.yml schema accepts an empty document", () => {
   expect(validate({})).toBe(true);
 });
