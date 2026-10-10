@@ -19,3 +19,6 @@ td.x { width:32px; }
 .status { font-size:13px; }
 .status.ok { color:var(--ok); } .status.err { color:var(--danger); }
 pre { background:color-mix(in srgb, var(--fg) 6%, transparent); padding:8px 12px; border-radius:6px; margin:12px 0 0; white-space:pre-wrap; }
+.selectors { display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+.selectors label { display:flex; gap:8px; align-items:center; color:var(--muted); }
+select { font:inherit; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }

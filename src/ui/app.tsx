@@ -83,8 +83,8 @@ const fromEnvRows = (rows: EnvRow[]): Profile["envs"] => {
   return envs;
 };
 
-function EnvsEditor(props: { rows: EnvRow[]; onChange(rows: EnvRow[]): void; worktrees: string[] }) {
-  const { rows, onChange, worktrees } = props;
+function EnvsEditor(props: { rows: EnvRow[]; onChange(rows: EnvRow[]): void; worktrees: string[]; worktree: string }) {
+  const { rows, onChange, worktrees, worktree } = props;
   const set = (i: number, patch: Partial<EnvRow>) =>
     onChange(rows.map((row, j) => (j === i ? { ...row, ...patch } : row)));
   return (
@@ -99,17 +99,17 @@ function EnvsEditor(props: { rows: EnvRow[]; onChange(rows: EnvRow[]): void; wor
           <tr><th>Variable</th><th>Worktree</th><th>Value</th><th /></tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
+          {rows.map((row, i) => (worktree === "" || row.worktree === worktree ? (
             <tr key={i}>
               <td><input value={row.key} onChange={(e) => set(i, { key: e.target.value })} /></td>
               <td><input list="worktrees" value={row.worktree} onChange={(e) => set(i, { worktree: e.target.value })} /></td>
               <td><input value={row.value} onChange={(e) => set(i, { value: e.target.value })} /></td>
               <td className="x"><button title="Remove" onClick={() => onChange(rows.filter((_, j) => j !== i))}>×</button></td>
             </tr>
-          ))}
+          ) : null))}
         </tbody>
       </table>
-      <button onClick={() => onChange([...rows, { key: "", worktree: "", value: "" }])}>+ Add</button>
+      <button onClick={() => onChange([...rows, { key: "", worktree, value: "" }])}>+ Add</button>
     </>
   );
 }
@@ -120,6 +120,7 @@ function App() {
   const [defaults, setDefaults] = useState<Record<string, Rows>>({});
   const [envs, setEnvs] = useState<Record<string, EnvRow[]>>({});
   const [profile, setProfile] = useState("default");
+  const [worktree, setWorktree] = useState("");
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<SaveResult | { ok: false; errors: string[]; logs: string[]; created: string[] }>();
 
@@ -182,14 +183,26 @@ function App() {
         <h2>Profile of each worktree (uses)</h2>
         <RowsEditor rows={uses} onChange={setUses} keyLabel="Worktree" valueLabel="Profile" keyOptions={loaded.worktrees} />
 
-        <h2>Profiles</h2>
-        <div className="tabs">
-          {profileNames.map((n) => (
-            <button key={n} className={n === profile ? "active" : ""} onClick={() => setProfile(n)}>
-              {n}
-            </button>
-          ))}
+        <h2>View</h2>
+        <div className="selectors">
+          <label>
+            Profile
+            <select value={profile} onChange={(e) => setProfile(e.target.value)}>
+              {profileNames.map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
           <button onClick={addProfile}>+ Profile</button>
+          <label>
+            Worktree
+            <select value={worktree} onChange={(e) => setWorktree(e.target.value)}>
+              <option value="">All worktrees</option>
+              {loaded.worktrees.map((w) => (
+                <option key={w} value={w}>{w}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <h2>Defaults (every worktree using “{profile}”)</h2>
@@ -200,11 +213,12 @@ function App() {
           valueLabel="Value"
         />
 
-        <h2>Per-worktree values</h2>
+        <h2>Per-worktree values{worktree && ` · ${worktree}`}</h2>
         <EnvsEditor
           rows={envs[profile] ?? []}
           onChange={(rows) => setEnvs({ ...envs, [profile]: rows })}
           worktrees={loaded.worktrees}
+          worktree={worktree}
         />
 
         {result && (result.logs.length > 0 || result.errors.length > 0 || result.created.length > 0) && (
