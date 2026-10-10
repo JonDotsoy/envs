@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `envs edit --ui` serves a web editor (React) on `127.0.0.1` with the values of `.envs/values.yml`: the profile of each worktree, profile selector, worktree filter and one variables table with a default column and a column per worktree. The **Save** button (or Ctrl/Cmd+S) writes `values.yml` and runs `push`; Ctrl+C stops the server.
+- The web editor has a **→ All** button that copies a default value to every worktree, a compact mode for many worktrees and an "Unsaved changes" indicator.
+- The build bundles the web editor into `dist/ui`.
+
 ### Changed
 
 - `envs edit` runs `envs init` first when `.envs/values.yml` does not exist, so `bunx @jondotsoy/envs edit` works without prior setup.
