@@ -23,6 +23,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Publish JSON schema
+        run: cp schema/values.schema.json sites/schema.json
       - uses: actions/upload-pages-artifact@v3
         with:
           path: sites
