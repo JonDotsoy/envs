@@ -137,10 +137,10 @@ Write a profile that does not exist yet in `uses.<worktree>` while running `envs
 
 Files with `defaults` and `envs` at the root keep working: they are read as `profiles.default.defaults` and `profiles.default.envs`, and the next `envs edit` or `envs pull` rewrites the file in the new format.
 
-The schema (JSON Schema) is at [`schema/values.schema.json`](schema/values.schema.json). To have VS Code validate the file with the YAML extension, add this at the top of `values.yml`:
+The schema (JSON Schema) is at [`schema/values.schema.json`](schema/values.schema.json). It is also published at <https://jondotsoy.github.io/envs/schema.json>. `init`, `pull` and `edit` write this line at the top of `values.yml`, so VS Code validates the file with the YAML extension:
 
 ```yaml
-# yaml-language-server: $schema=../schema/values.schema.json
+# yaml-language-server: $schema=https://jondotsoy.github.io/envs/schema.json
 ```
 
 ## Development

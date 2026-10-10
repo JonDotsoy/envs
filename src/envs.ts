@@ -158,8 +158,11 @@ function stringifyValues(values: NormalizedValues): string {
     }),
   );
   const out = Object.keys(values.uses).length > 0 ? { uses: values.uses, profiles } : { profiles };
-  return Bun.YAML.stringify(out, null, 2);
+  return SCHEMA_COMMENT + Bun.YAML.stringify(out, null, 2);
 }
+
+/** Modeline that makes the YAML language server validate values.yml against the published schema. */
+const SCHEMA_COMMENT = "# yaml-language-server: $schema=https://jondotsoy.github.io/envs/schema.json\n";
 
 /** Reports every worktree whose profile does not exist; true when all are known. */
 function checkProfiles(
@@ -285,7 +288,7 @@ async function readValues(
 
 export async function init(ctx: Context): Promise<number> {
   const root = await findRoot(ctx.cwd);
-  const files = { ".envs/.gitignore": "*\n", ".envs/values.yml": "" };
+  const files = { ".envs/.gitignore": "*\n", ".envs/values.yml": SCHEMA_COMMENT };
   await mkdir(join(root, ".envs"), { recursive: true });
   for (const [name, content] of Object.entries(files)) {
     const path = join(root, name);

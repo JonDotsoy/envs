@@ -540,6 +540,14 @@ describe("profiles", () => {
     return { code: await run(["edit"], ctx), logs };
   };
 
+  test("edit writes the published schema modeline at the top of values.yml", async () => {
+    await reset("");
+    expect((await edit()).code).toBe(0);
+    expect(await Bun.file(valuesPath()).text()).toStartWith(
+      "# yaml-language-server: $schema=https://jondotsoy.github.io/envs/schema.json\n",
+    );
+  });
+
   test("edit in a new project with no .env writes uses and an empty default profile", async () => {
     await reset("");
     expect((await edit()).code).toBe(0);
