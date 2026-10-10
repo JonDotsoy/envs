@@ -58,6 +58,23 @@ describe("value rules", () => {
     expect(await run("insecure-url", { defaults: { API: "https://api.example.com" } })).toEqual([]);
   });
 
+  test("profile values are checked with their location", async () => {
+    const values = {
+      profiles: {
+        dev: { defaults: { API_KEY: "x" }, envs: { DB_PASSWORD: { main: "changeme" } } },
+        empty: null,
+      },
+    };
+    expect(await run("shared-secret", values)).toEqual(["profiles.dev.defaults.API_KEY"]);
+    expect(await run("weak-secret", values)).toEqual(["profiles.dev.envs.DB_PASSWORD.main"]);
+  });
+
+  test("unknown-profile flags uses that point to a missing profile", async () => {
+    const values = { uses: { main: "default", a: "dev", b: "nope" }, profiles: { dev: null } };
+    expect(await run("unknown-profile", values)).toEqual(["uses.b"]);
+    expect(await run("unknown-profile", {})).toEqual([]);
+  });
+
   test("numbers, booleans and empty values.yml are clean", async () => {
     const values = { defaults: { DEBUG: true }, envs: { PORT: { main: 3000 } } };
     for (const rule of rules) expect(await rule.check(context(values))).toEqual([]);

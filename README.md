@@ -42,6 +42,7 @@ Run the commands inside the repo or any of its worktrees. Inside a worktree, `.e
 | `envs init` | Creates `.envs/`, `.envs/.gitignore` (containing `*`) and an empty `.envs/values.yml`. Does not overwrite existing files. |
 | `envs pull` | Reads the `.env` of the main repo and of each worktree and writes it to `values.yml`. Variables that are no longer in a `.env` are removed from `values.yml` for that worktree. |
 | `envs push` | Writes `values.yml` to the `.env` of each worktree. Updates existing variables in place, appends new ones at the end, and keeps comments and variables that are not in `values.yml`. |
+| `envs use [profile]` | Sets the profile of the current worktree (`uses.<worktree>`) and pushes that worktree. Without arguments it lists the profile of each worktree. The profile must already exist in `values.yml`. |
 | `envs lint` | Checks security and prints a warning for each problem. Exits with code 1 if there is any (useful in CI). See below. |
 | `envs help` | Shows the help (also `--help`, `-h`, or no command). |
 
@@ -87,28 +88,52 @@ It never prints values, only the variable and its location (`envs.DB_PASSWORD.ma
 | `executable-files` | `values.yml` or a `.env` has the execute permission (use `chmod -x`). |
 | `writable-files` | `values.yml` or a `.env` is writable by the group or other users (use `chmod go-w`). |
 | `weak-secret` | Sensitive variable (`PASSWORD`, `TOKEN`, `SECRET`, `API_KEY`…) that is empty or has a typical value (`changeme`, `admin`…). |
-| `shared-secret` | Sensitive variable in `defaults`, which is written to all worktrees. |
+| `shared-secret` | Sensitive variable in `defaults`, which is written to all worktrees using that profile. |
+| `unknown-profile` | `uses` names a profile that is not in `profiles`. |
 | `secret-pattern` | Value with a known secret format (AWS, GitHub, Slack, `sk-…`, private key). |
 | `url-credentials`, `insecure-url` | Remote URL with an embedded password, or using `http://`, `ws://` or `ftp://`. |
 
 ## `values.yml` format
 
 ```yaml
-defaults:
-  LOG_LEVEL: info
-
-envs:
-  DATABASE_URL:
-    main: postgres://localhost/main
-    feature-x: postgres://localhost/feature_x
-  PORT:
-    main: "3000"
-    feature-x: "3001"
+uses:
+  main: local
+  feature-x: dev
+profiles:
+  default:
+    defaults:
+      LOG_LEVEL: info
+    envs:
+      PORT:
+        main: 3000
+        feature-x: 3001
+  local:
+    defaults:
+      DATABASE_URL: postgres://localhost/app
+  dev:
+    defaults:
+      DATABASE_URL: postgres://dev.internal/app
+    envs:
+      PORT:
+        feature-x: 4001
 ```
 
-- `defaults`: default value of each variable. `push` writes it to the `.env` of all worktrees.
-- `envs.<VARIABLE>.<worktree>`: value of the variable in that worktree. It overrides the value from `defaults`.
+- `profiles.<profile>.defaults`: default value of each variable for the worktrees that use the profile.
+- `profiles.<profile>.envs.<VARIABLE>.<worktree>`: value of the variable in that worktree. It overrides the profile's `defaults`.
+- `uses.<worktree>`: profile of that worktree. A worktree that is not listed uses `default`; `pull` adds it as `default`.
 - Values can be strings, numbers or booleans (`PORT: 3000`, `DEBUG: true`); `push` writes them to the `.env` as text (`PORT=3000`, `DEBUG=true`). `pull` converts `true`/`false` and canonical numbers (`3000`, `0.5`) to booleans and numbers; anything else (`007`, `1e3`) stays a string.
+
+A worktree receives, from lowest to highest precedence: `default` defaults, `default` envs, its profile's defaults, its profile's envs. With the `default` profile only the first two apply.
+
+The `.env` files are the source of truth: `pull` (and `edit`) rewrites `values.yml` from them, keeping only `uses` and `profiles`.
+
+### Creating a profile
+
+Write a profile that does not exist yet in `uses.<worktree>` while running `envs edit`: when you close the editor it is created as a copy of `default` (and the worktree receives it). A profile you add by hand under `profiles`, with values or empty, is never touched. `envs push` and `envs use` do not create profiles: they fail with an unknown profile error. `envs lint` reports it as `unknown-profile`.
+
+### Previous format
+
+Files with `defaults` and `envs` at the root keep working: they are read as `profiles.default.defaults` and `profiles.default.envs`, and the next `envs edit` or `envs pull` rewrites the file in the new format.
 
 The schema (JSON Schema) is at [`schema/values.schema.json`](schema/values.schema.json). To have VS Code validate the file with the YAML extension, add this at the top of `values.yml`:
 
