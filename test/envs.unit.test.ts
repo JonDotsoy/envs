@@ -730,3 +730,58 @@ describe("profiles", () => {
     expect(bad.errors[0]).toContain('Unknown profile "nope"');
   });
 });
+
+describe("history on the first edit of a project", () => {
+  let ws: Workspace;
+  beforeAll(async () => {
+    ws = await createWorkspace({ worktrees: ["feature-x"] });
+  });
+  afterAll(() => ws.cleanup());
+
+  /** The whole history: its ndjson lines (timestamps checked, then masked) and every point file by hash. */
+  const readHistory = async () => {
+    const lines = (await Bun.file(join(ws.main, ".envs/history.ndjson")).text())
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    for (const line of lines) {
+      expect(new Date(line.timestamp).toISOString()).toBe(line.timestamp);
+      line.timestamp = "<timestamp>";
+    }
+    const points: Record<string, unknown> = {};
+    for (const { hash } of lines) {
+      points[hash] = await Bun.file(join(ws.main, ".envs/h", `${hash}.json`)).json();
+    }
+    return { lines, points };
+  };
+
+  test("the first edit initializes the history with the whole state", async () => {
+    await rm(join(ws.main, ".envs"), { recursive: true, force: true });
+    await Bun.write(join(ws.main, ".env"), "LOG=info\nPORT=3000\n");
+    await Bun.write(join(ws.worktrees["feature-x"]!, ".env"), "LOG=info\nPORT=3001\n");
+
+    const { ctx } = testContext(ws.main);
+    expect(await run(["edit"], ctx)).toBe(0);
+
+    const history = await readHistory();
+    expect(history.lines).toHaveLength(1);
+    expect(history.lines[0].prev).toBeNull();
+    expect(history).toMatchSnapshot();
+  });
+
+  test("later edits chain to the initial point", async () => {
+    const { ctx } = testContext(ws.main, {
+      openEditor: async (path) => {
+        const text = (await Bun.file(path).text()).replace("main: 3000", "main: 4000");
+        await Bun.write(path, text);
+        return 0;
+      },
+    });
+    expect(await run(["edit"], ctx)).toBe(0);
+
+    const history = await readHistory();
+    expect(history.lines).toHaveLength(2);
+    expect(history.lines[1].prev).toBe(history.lines[0].hash);
+    expect(history).toMatchSnapshot();
+  });
+});
