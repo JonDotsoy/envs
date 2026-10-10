@@ -521,6 +521,11 @@ export async function pull(ctx: Context): Promise<number> {
     }
   }
   await Bun.write(read.path, stringifyValues(values));
+  // The first pull initializes the history with the whole state as its first point.
+  const root = await findRoot(ctx.cwd);
+  if (!(await Bun.file(join(root, ".envs/history.ndjson")).exists())) {
+    await recordHistory(root, { uses: {}, profiles: {} }, values);
+  }
   if (pulledNames.length > 0) {
     ctx.log(
       green(

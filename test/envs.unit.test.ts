@@ -548,40 +548,49 @@ describe("profiles", () => {
     );
   });
 
-  test("edit records only the changes in .envs/h/<hash>.json and a line in history.ndjson", async () => {
+  const history = async () =>
+    (await Bun.file(join(ws.main, ".envs/history.ndjson")).text()).trim().split("\n").map((l) => JSON.parse(l));
+  const point = (hash: string) => Bun.file(join(ws.main, ".envs/h", `${hash}.json`)).json();
+
+  test("the first pull initializes the history with the whole state", async () => {
     await reset("uses:\n  main: default\n  feature-x: default\nprofiles:\n  default:\n    defaults:\n      A: one\n    envs: {}\n");
-    expect((await edit("uses:\n  main: default\n  feature-x: default\nprofiles:\n  default:\n    defaults:\n      A: two\n      B: new\n    envs: {}\n")).code).toBe(0);
-    const lines = (await Bun.file(join(ws.main, ".envs/history.ndjson")).text()).trim().split("\n");
-    expect(lines).toHaveLength(1);
-    const entry = JSON.parse(lines[0]!);
-    expect(Object.keys(entry).sort()).toEqual(["hash", "prev", "timestamp"]);
-    expect(entry.prev).toBeNull();
-    expect(new Date(entry.timestamp).toISOString()).toBe(entry.timestamp);
-    expect(await Bun.file(join(ws.main, ".envs/h", `${entry.hash}.json`)).json()).toEqual({
-      prev: null,
+    expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
+    const [first, ...rest] = await history();
+    expect(rest).toHaveLength(0);
+    expect(Object.keys(first).sort()).toEqual(["hash", "prev", "timestamp"]);
+    expect(first.prev).toBeNull();
+    expect(new Date(first.timestamp).toISOString()).toBe(first.timestamp);
+    expect((await point(first.hash)).changes).toContainEqual({ path: ["profiles", "default", "defaults", "A"], to: "one" });
+    // Later pulls do not add points.
+    expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
+    expect(await history()).toHaveLength(1);
+  });
+
+  test("edit records only the changes in .envs/h/<hash>.json, chained to the previous point", async () => {
+    const head = "uses:\n  main: default\n  feature-x: default\nprofiles:\n  default:\n    defaults:\n";
+    await reset(head + "      A: one\n    envs: {}\n");
+    expect((await edit(head + "      A: two\n      B: new\n    envs: {}\n")).code).toBe(0);
+    const [first, second, ...rest] = await history();
+    expect(rest).toHaveLength(0);
+    expect(first.prev).toBeNull();
+    expect(second.prev).toBe(first.hash);
+    expect(await point(second.hash)).toEqual({
+      prev: first.hash,
       changes: [
         { path: ["profiles", "default", "defaults", "A"], from: "one", to: "two" },
         { path: ["profiles", "default", "defaults", "B"], to: "new" },
       ],
     });
+    await edit(head + "      A: three\n      B: new\n    envs: {}\n");
+    const third = (await history())[2];
+    expect(third.prev).toBe(second.hash);
+    expect((await point(third.hash)).prev).toBe(second.hash);
   });
 
-  test("each history point keeps the hash of the previous one", async () => {
-    const head = "uses:\n  main: default\n  feature-x: default\nprofiles:\n  default:\n    defaults:\n";
-    await reset(head + "      A: one\n    envs: {}\n");
-    await edit(head + "      A: two\n    envs: {}\n");
-    await edit(head + "      A: three\n    envs: {}\n");
-    const [first, second] = (await Bun.file(join(ws.main, ".envs/history.ndjson")).text())
-      .trim().split("\n").map((l) => JSON.parse(l));
-    expect(first.prev).toBeNull();
-    expect(second.prev).toBe(first.hash);
-    expect((await Bun.file(join(ws.main, ".envs/h", `${second.hash}.json`)).json()).prev).toBe(first.hash);
-  });
-
-  test("edit without changes writes no history", async () => {
+  test("edit without changes adds no point after the initial one", async () => {
     await reset("");
     expect((await edit()).code).toBe(0);
-    expect(await Bun.file(join(ws.main, ".envs/history.ndjson")).exists()).toBe(false);
+    expect(await history()).toHaveLength(1);
   });
 
   test("edit in a new project with no .env writes uses and an empty default profile", async () => {
