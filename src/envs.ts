@@ -168,7 +168,7 @@ export function diffValues(before: NormalizedValues, after: NormalizedValues): C
 
 /**
  * Records an edit of values.yml: `.envs/h/<hash>.json` holds only the changes and
- * `.envs/history.ndjson` gets one `{hash, timestamp}` line. Nothing is written when nothing changed.
+ * `.envs/history.ndjson` gets one `{hash, prev, timestamp}` line. Nothing is written when nothing changed.
  */
 export async function recordHistory(
   root: string,
@@ -178,11 +178,18 @@ export async function recordHistory(
 ): Promise<string | undefined> {
   const changes = diffValues(before, after);
   if (changes.length === 0) return undefined;
-  const body = JSON.stringify({ changes }, null, 2) + "\n";
+  // Each point keeps the hash of the previous one (null for the first) and the hash covers it, so the history is a chain.
+  const historyPath = join(root, ".envs/history.ndjson");
+  const last = (await Bun.file(historyPath).exists() ? await Bun.file(historyPath).text() : "")
+    .trimEnd()
+    .split("\n")
+    .at(-1);
+  const prev: string | null = last ? JSON.parse(last).hash : null;
+  const body = JSON.stringify({ prev, changes }, null, 2) + "\n";
   const hash = createHash("sha256").update(body).digest("hex").slice(0, 12);
   await Bun.write(join(root, ".envs/h", `${hash}.json`), body);
-  const line = JSON.stringify({ hash, timestamp: now.toISOString() }) + "\n";
-  await appendFile(join(root, ".envs/history.ndjson"), line);
+  const line = JSON.stringify({ hash, prev, timestamp: now.toISOString() }) + "\n";
+  await appendFile(historyPath, line);
   return hash;
 }
 

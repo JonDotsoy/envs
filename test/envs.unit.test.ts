@@ -554,14 +554,28 @@ describe("profiles", () => {
     const lines = (await Bun.file(join(ws.main, ".envs/history.ndjson")).text()).trim().split("\n");
     expect(lines).toHaveLength(1);
     const entry = JSON.parse(lines[0]!);
-    expect(Object.keys(entry).sort()).toEqual(["hash", "timestamp"]);
+    expect(Object.keys(entry).sort()).toEqual(["hash", "prev", "timestamp"]);
+    expect(entry.prev).toBeNull();
     expect(new Date(entry.timestamp).toISOString()).toBe(entry.timestamp);
     expect(await Bun.file(join(ws.main, ".envs/h", `${entry.hash}.json`)).json()).toEqual({
+      prev: null,
       changes: [
         { path: ["profiles", "default", "defaults", "A"], from: "one", to: "two" },
         { path: ["profiles", "default", "defaults", "B"], to: "new" },
       ],
     });
+  });
+
+  test("each history point keeps the hash of the previous one", async () => {
+    const head = "uses:\n  main: default\n  feature-x: default\nprofiles:\n  default:\n    defaults:\n";
+    await reset(head + "      A: one\n    envs: {}\n");
+    await edit(head + "      A: two\n    envs: {}\n");
+    await edit(head + "      A: three\n    envs: {}\n");
+    const [first, second] = (await Bun.file(join(ws.main, ".envs/history.ndjson")).text())
+      .trim().split("\n").map((l) => JSON.parse(l));
+    expect(first.prev).toBeNull();
+    expect(second.prev).toBe(first.hash);
+    expect((await Bun.file(join(ws.main, ".envs/h", `${second.hash}.json`)).json()).prev).toBe(first.hash);
   });
 
   test("edit without changes writes no history", async () => {
