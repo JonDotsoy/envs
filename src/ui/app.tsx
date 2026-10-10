@@ -74,12 +74,12 @@ function VarsEditor(props: { rows: VarRow[]; onChange(rows: VarRow[]): void; col
                   />
                 </td>
               ))}
-              <td className="x"><button title="Remove" onClick={() => onChange(rows.filter((_, j) => j !== i))}>×</button></td>
+              <td className="x"><button className="remove" title="Remove" onClick={() => onChange(rows.filter((_, j) => j !== i))}>×</button></td>
             </tr>
           ))}
         </tbody>
       </table>
-      <button onClick={() => onChange([...rows, { key: "", def: "", byWorktree: {} }])}>+ Add variable</button>
+      <button className="ghost" onClick={() => onChange([...rows, { key: "", def: "", byWorktree: {} }])}>+ Add variable</button>
     </>
   );
 }
@@ -136,7 +136,7 @@ function App() {
   return (
     <>
       <header>
-        <h1>envs · values.yml</h1>
+        <span className="brand">envs<span className="dim"> / values.yml</span></span>
         {result && (
           <span className={`status ${result.ok ? "ok" : "err"}`}>
             {result.ok ? "Saved and pushed" : "Save failed"}
@@ -147,55 +147,63 @@ function App() {
         </button>
       </header>
       <main>
-        <h2>Profile of each worktree (uses)</h2>
-        <table>
-          <thead>
-            <tr><th>Worktree</th><th>Profile</th></tr>
-          </thead>
-          <tbody>
-            {loaded.worktrees.map((w) => (
-              <tr key={w}>
-                <td>{w}</td>
-                <td>
-                  <select value={uses[w] ?? "default"} onChange={(e) => setUses({ ...uses, [w]: e.target.value })}>
-                    {profileNames.map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <h2>View</h2>
-        <div className="selectors">
-          <label>
-            Profile
-            <select value={profile} onChange={(e) => setProfile(e.target.value)}>
-              {profileNames.map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          </label>
-          <button onClick={addProfile}>+ Profile</button>
-          <label>
-            Worktree
-            <select value={worktree} onChange={(e) => setWorktree(e.target.value)}>
-              <option value="">All worktrees</option>
+        <section className="card light">
+          <p className="eyebrow">Worktrees</p>
+          <h2>Profile of each worktree</h2>
+          <table>
+            <thead>
+              <tr><th>Worktree</th><th>Profile</th></tr>
+            </thead>
+            <tbody>
               {loaded.worktrees.map((w) => (
-                <option key={w} value={w}>{w}</option>
+                <tr key={w}>
+                  <td className="name">{w}</td>
+                  <td>
+                    <select value={uses[w] ?? "default"} onChange={(e) => setUses({ ...uses, [w]: e.target.value })}>
+                      {profileNames.map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
               ))}
-            </select>
-          </label>
-        </div>
+            </tbody>
+          </table>
+        </section>
 
-        <h2>Variables · {profile}{worktree && ` · ${worktree}`}</h2>
-        <VarsEditor
-          rows={vars[profile] ?? []}
-          onChange={(rows) => setVars({ ...vars, [profile]: rows })}
-          columns={worktree ? [worktree] : loaded.worktrees}
-        />
+        <section className="card dark">
+          <p className="eyebrow">View</p>
+          <div className="selectors">
+            <label>
+              Profile
+              <select value={profile} onChange={(e) => setProfile(e.target.value)}>
+                {profileNames.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </label>
+            <button className="ghost" onClick={addProfile}>+ Profile</button>
+            <label>
+              Worktree
+              <select value={worktree} onChange={(e) => setWorktree(e.target.value)}>
+                <option value="">All worktrees</option>
+                {loaded.worktrees.map((w) => (
+                  <option key={w} value={w}>{w}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section className="card light">
+          <p className="eyebrow">Variables</p>
+          <h2>{profile}{worktree && ` · ${worktree}`}</h2>
+          <VarsEditor
+            rows={vars[profile] ?? []}
+            onChange={(rows) => setVars({ ...vars, [profile]: rows })}
+            columns={worktree ? [worktree] : loaded.worktrees}
+          />
+        </section>
 
         {result && (result.logs.length > 0 || result.errors.length > 0 || result.created.length > 0) && (
           <pre>
