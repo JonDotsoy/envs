@@ -1,6 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { appendFile } from "node:fs/promises";
 import { $ } from "bun";
 import { isSensitiveKey, rules, type LintContext } from "./lint-rules";
 
@@ -131,6 +133,56 @@ export function materializeProfiles(values: NormalizedValues): string[] {
     created.push(name);
   }
   return created;
+}
+
+/** One difference between two versions of values.yml; `from`/`to` are absent when the entry was added/removed. */
+export interface Change {
+  path: string[];
+  from?: Value;
+  to?: Value;
+}
+
+/** Leaf-level differences between two normalized values (`uses`, then each profile's `defaults` and `envs`). */
+export function diffValues(before: NormalizedValues, after: NormalizedValues): Change[] {
+  const changes: Change[] = [];
+  const compare = (path: string[], a?: Value, b?: Value) => {
+    if (a !== b) changes.push({ path, ...(a !== undefined && { from: a }), ...(b !== undefined && { to: b }) });
+  };
+  const keys = (a?: object, b?: object) => [...new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])];
+  for (const w of keys(before.uses, after.uses)) compare(["uses", w], before.uses[w], after.uses[w]);
+  for (const p of keys(before.profiles, after.profiles)) {
+    const a = before.profiles[p];
+    const b = after.profiles[p];
+    for (const k of keys(a?.defaults, b?.defaults)) {
+      compare(["profiles", p, "defaults", k], a?.defaults[k], b?.defaults[k]);
+    }
+    for (const k of keys(a?.envs, b?.envs)) {
+      for (const w of keys(a?.envs[k], b?.envs[k])) {
+        compare(["profiles", p, "envs", k, w], a?.envs[k]?.[w], b?.envs[k]?.[w]);
+      }
+    }
+  }
+  return changes;
+}
+
+/**
+ * Records an edit of values.yml: `.envs/h/<hash>.json` holds only the changes and
+ * `.envs/history.ndjson` gets one `{hash, timestamp}` line. Nothing is written when nothing changed.
+ */
+export async function recordHistory(
+  root: string,
+  before: NormalizedValues,
+  after: NormalizedValues,
+  now = new Date(),
+): Promise<string | undefined> {
+  const changes = diffValues(before, after);
+  if (changes.length === 0) return undefined;
+  const body = JSON.stringify({ changes }, null, 2) + "\n";
+  const hash = createHash("sha256").update(body).digest("hex").slice(0, 12);
+  await Bun.write(join(root, ".envs/h", `${hash}.json`), body);
+  const line = JSON.stringify({ hash, timestamp: now.toISOString() }) + "\n";
+  await appendFile(join(root, ".envs/history.ndjson"), line);
+  return hash;
 }
 
 /**
@@ -499,6 +551,7 @@ export async function edit(ctx: Context, options: { ui?: boolean } = {}): Promis
     return await serveUi(ctx);
   }
   const original = await Bun.file(valuesPath).text();
+  const before = normalizeValues((Bun.YAML.parse(original) ?? {}) as Values);
   await Bun.write(valuesPath, EDIT_NOTICE + original);
   const code = await ctx.openEditor(valuesPath);
   // Drop the notice so it never lingers in the file (or reaches `push`).
@@ -518,6 +571,7 @@ export async function edit(ctx: Context, options: { ui?: boolean } = {}): Promis
   if (created.length > 0) {
     ctx.log(green(`+ created ${created.join(", ")} from ${DEFAULT_PROFILE}`));
   }
+  await recordHistory(await findRoot(ctx.cwd), before, values);
   return await push(ctx);
 }
 
@@ -539,8 +593,13 @@ export async function saveUiState(
 ): Promise<{ created: string[]; code: number }> {
   const values = normalizeValues({ uses: input.uses, profiles: input.profiles });
   const created = materializeProfiles(values);
-  const path = join(await findRoot(ctx.cwd), ".envs/values.yml");
+  const root = await findRoot(ctx.cwd);
+  const path = join(root, ".envs/values.yml");
+  const before = normalizeValues(
+    ((await Bun.file(path).exists() ? Bun.YAML.parse(await Bun.file(path).text()) : undefined) ?? {}) as Values,
+  );
   await Bun.write(path, stringifyValues(values));
+  await recordHistory(root, before, values);
   return { created, code: await push(ctx) };
 }
 
