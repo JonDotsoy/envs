@@ -36,6 +36,8 @@ The examples below use `envs`; without a global install, replace it with `bunx @
 
 Run the commands inside the repo or any of its worktrees. Inside a worktree, `.envs/` always lives in the main repo.
 
+![Web editor started with envs edit --ui](docs/assets/images/edit-ui.png)
+
 | Command | What it does |
 | --- | --- |
 | `envs edit` | Runs `init` if `.envs/values.yml` does not exist yet, then runs `pull`, opens `values.yml` with `code -w` and, when the editor closes, runs `push`. If the editor fails, it does not `push`. |

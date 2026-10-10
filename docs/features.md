@@ -25,6 +25,9 @@ Resumen de las funcionalidades de `@jondotsoy/envs`. Para el detalle de uso, con
 
 - **VS Code** (`envs edit`): abre `values.yml` con `code -w`; si el editor falla, no se hace `push`.
 - **Editor web** (`envs edit --ui`): servidor local (`127.0.0.1`, puerto aleatorio) con una interfaz React para perfiles, valores por defecto y valores por worktree. El botón **Save** guarda y hace `push`.
+
+![Editor web iniciado con envs edit --ui](assets/images/edit-ui.png)
+
 - Validación en el editor mediante JSON Schema ([`schema/values.schema.json`](../schema/values.schema.json)), publicado en <https://jondotsoy.github.io/envs/schema.json>.
 
 ## Perfiles
