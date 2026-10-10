@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- Edit history: when `envs edit` (or the web editor's Save) changes `values.yml`, `.envs/h/<hash>.json` stores only the changes (`path`, `from`, `to`) and `.envs/history.ndjson` gets a `{"hash", "timestamp"}` line. Nothing is written when nothing changed.
 - GitHub Pages workflow: every push to `develop` publishes `sites/` (landing page in `sites/index.html`) and serves the values schema at <https://jondotsoy.github.io/envs/schema.json>.
 - `envs init`, `envs pull` and `envs edit` write `# yaml-language-server: $schema=https://jondotsoy.github.io/envs/schema.json` at the top of `values.yml`, so editors validate it against the published schema.
 - `envs edit --ui` serves a web editor (React) on `127.0.0.1` with the values of `.envs/values.yml`: the profile of each worktree, profile selector, worktree filter and one variables table with a default column and a column per worktree. The **Save** button (or Ctrl/Cmd+S) writes `values.yml` and runs `push`; Ctrl+C stops the server.
