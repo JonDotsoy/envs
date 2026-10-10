@@ -17,6 +17,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Changed
 
 - `envs edit` runs `envs init` first when `.envs/values.yml` does not exist, so `bunx @jondotsoy/envs edit` works without prior setup.
+- The `$id` of the values schema is now its published URL, <https://jondotsoy.github.io/envs/schema.json>.
 - README: the schema section points to the published URL.
 - README: the quick start uses `bunx @jondotsoy/envs edit`; the global install is optional.
 

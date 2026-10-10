@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/JonDotsoy/envs/schema/values.schema.json",
+  "$id": "https://jondotsoy.github.io/envs/schema.json",
   "title": "envs values.yml",
   "description": "Values of the environment variables per profile and worktree, stored in .envs/values.yml.",
   "type": "object",
