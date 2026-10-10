@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { Logo } from "./logo";
 
 type Value = string | number | boolean;
 interface Profile {
@@ -216,7 +217,7 @@ function App() {
   return (
     <>
       <header>
-        <span className="brand"><span className="mosaic" aria-hidden="true" />envs<span className="dim"> / values.yml</span></span>
+        <span className="brand"><Logo state={saving ? "saving" : result ? (result.ok ? "saved" : "error") : "idle"} />envs<span className="dim"> / values.yml</span></span>
         <span role="status" className={`status ${status?.kind ?? ""}`}>
           {status?.text}
         </span>

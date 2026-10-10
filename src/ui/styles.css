@@ -52,8 +52,6 @@
   --focus-outline: 2px solid var(--color-volt-violet);
 
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='m1 1 4 4 4-4' stroke='%23666d80' stroke-width='1.5'/%3E%3C/svg%3E");
-  /* The one ornament: a tiny pixel mosaic next to the brand. */
-  --mosaic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='4' height='4' fill='%235e4cff'/%3E%3Crect x='8' width='4' height='4' fill='%23c8ccf3'/%3E%3Crect x='4' y='4' width='4' height='4' fill='%23dfdbff'/%3E%3Crect x='12' y='4' width='4' height='4' fill='%235e4cff'/%3E%3Crect y='8' width='4' height='4' fill='%23c8ccf3'/%3E%3Crect x='8' y='8' width='4' height='4' fill='%235e4cff'/%3E%3Crect x='4' y='12' width='4' height='4' fill='%235e4cff'/%3E%3Crect x='12' y='12' width='4' height='4' fill='%23dfdbff'/%3E%3C/svg%3E");
 
   color-scheme: light;
 }
@@ -94,7 +92,6 @@ header {
   color: var(--color-graphite);
 }
 .brand .dim { color: var(--color-slate-body); font-weight: 400; }
-.mosaic { width: 16px; height: 16px; flex: none; background: var(--mosaic) no-repeat; }
 
 main {
   max-width: var(--page-max-width);
@@ -311,3 +308,66 @@ button.apply-all:disabled { visibility: hidden; }
 .empty { padding: var(--space-8) var(--space-6); border: 1px dashed var(--color-mist-border); border-radius: var(--radius-cards); background: var(--color-cloud-mist); text-align: center; font-size: 14px; color: var(--color-slate-body); }
 .empty p { margin: 0 0 var(--space-4); }
 .empty .empty-title { margin-bottom: var(--space-1); font: 500 16px/1.4 var(--font-display); letter-spacing: -0.02em; color: var(--color-graphite); }
+
+/* The one ornament: a 4x4 pixel mosaic next to the brand (src/ui/logo.tsx). Its tiles breathe in a
+   slow diagonal wave, hurry while the brand is hovered and ripple out from the pointer; while saving
+   they scan and trade places, a save lights them violet for a moment, a failure shakes and greys
+   them to Lavender. Only opacity, transform and fill move. Violet stays a few tiles. */
+button.logo-btn {
+  flex: none;
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  line-height: 0;
+}
+button.logo-btn:hover:not(:disabled), button.logo-btn:active:not(:disabled) { background: none; }
+.logo { --breathe: 7.2s; width: 20px; height: 20px; overflow: visible; shape-rendering: crispEdges; }
+.brand:hover .logo { --breathe: 2.4s; }
+.logo rect {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: fill 0.24s ease;
+  animation: logo-breathe var(--breathe) ease-in-out calc(var(--d) * -0.45s) infinite;
+}
+.logo rect[data-tone="v"] { fill: var(--color-volt-violet); }
+.logo rect[data-tone="lv"] { fill: var(--color-lavender); }
+.logo rect[data-tone="li"] { fill: var(--color-lilac); }
+.logo rect[data-tone="w"] { fill: var(--color-canvas); }
+@keyframes logo-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* Ripple: two identical keyframes so a new ripple restarts without touching layout. */
+.logo[data-ripple] rect { animation: logo-breathe var(--breathe) ease-in-out calc(var(--d) * -0.45s) infinite, logo-ripple-a 0.5s ease-out calc(var(--r) * 70ms) both; }
+.logo[data-ripple="b"] rect { animation-name: logo-breathe, logo-ripple-b; }
+.logo[data-ripple] rect[data-tone="w"] { fill: var(--color-lilac); transition-duration: 0.5s; }
+@keyframes logo-ripple-a { 40% { transform: scale(0.55); } }
+@keyframes logo-ripple-b { 40% { transform: scale(0.55); } }
+
+/* Saving: a quick diagonal scan while the tiles shuffle (driven from JS). */
+.logo[data-state="saving"] rect { animation: logo-scan 0.9s linear calc(var(--d) * 0.11s) infinite; }
+@keyframes logo-scan { 0%, 100% { opacity: 0.35; } 20% { opacity: 1; } }
+
+/* Saved: every tile flashes violet, then relaxes back along the diagonal. */
+.logo[data-fx="burst"] rect { animation: logo-burst 0.6s ease-out calc(var(--d) * 40ms) both; }
+@keyframes logo-burst {
+  0% { fill: var(--color-volt-violet); transform: scale(0.6); opacity: 1; }
+  20% { fill: var(--color-volt-violet); transform: scale(1); }
+}
+
+/* Failed: a short shake, and the violet tiles go Lavender while the failure stands. */
+.logo[data-fx="shake"] { animation: logo-shake 0.45s ease-in-out; }
+.logo[data-state="error"] rect[data-tone="v"] { fill: var(--color-lavender); }
+@keyframes logo-shake {
+  20% { transform: translateX(-2px); }
+  40% { transform: translateX(2px); }
+  60% { transform: translateX(-1.5px); }
+  80% { transform: translateX(1px); }
+}
+
+/* Reduced motion: the static mosaic; saving dims it and a failure greys it, nothing moves. */
+@media (prefers-reduced-motion: reduce) {
+  .logo, .logo rect, .logo[data-fx] rect, .logo[data-ripple] rect, .logo[data-state] rect { animation: none; transition: none; }
+  .logo[data-ripple] rect[data-tone="w"] { fill: var(--color-canvas); }
+  .logo[data-state="saving"] rect { opacity: 0.5; }
+}
