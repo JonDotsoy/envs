@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@jondotsoy/envs</title>
+    <meta
+      name="description"
+      content="CLI that keeps the .env values of every git worktree in a single file."
+    />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #1a1a1a;
+        --muted: #666666;
+        --code-bg: #f4f4f5;
+        --accent: #2563eb;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #111113;
+          --fg: #ececec;
+          --muted: #9a9aa0;
+          --code-bg: #1e1e22;
+          --accent: #60a5fa;
+        }
+      }
+      body {
+        margin: 0;
+        padding: 0 16px;
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.6 system-ui, sans-serif;
+      }
+      main {
+        max-width: 42rem;
+        margin: 0 auto;
+        padding: 4rem 0;
+      }
+      h1 {
+        margin: 0 0 0.25rem;
+      }
+      p.lead {
+        color: var(--muted);
+        margin-top: 0;
+      }
+      pre {
+        background: var(--code-bg);
+        padding: 1rem;
+        border-radius: 8px;
+        overflow-x: auto;
+      }
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>@jondotsoy/envs</h1>
+      <p class="lead">
+        Keep the <code>.env</code> values of every git worktree in a single
+        file.
+      </p>
+      <p>
+        Edit all values together and distribute them to each worktree, or
+        collect them from the existing <code>.env</code> files. Requires
+        <a href="https://bun.com">Bun</a> and git.
+      </p>
+      <h2>Quick start</h2>
+      <pre><code>bunx @jondotsoy/envs edit</code></pre>
+      <h2>Links</h2>
+      <ul>
+        <li><a href="https://github.com/jondotsoy/envs">GitHub</a></li>
+        <li>
+          <a href="https://www.npmjs.com/package/@jondotsoy/envs">npm</a>
+        </li>
+      </ul>
+    </main>
+  </body>
+</html>
