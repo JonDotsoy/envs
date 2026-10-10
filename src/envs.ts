@@ -63,7 +63,7 @@ interface Profile {
 interface Values extends Profile {
   /** Profile of each worktree; worktrees that are not listed use `default`. */
   uses?: Record<string, string>;
-  profiles?: Record<string, Profile | null>;
+  profiles?: Record<string, Profile>;
 }
 
 interface ResolvedProfile {
@@ -84,6 +84,7 @@ const hasProfile = (values: NormalizedValues, name: string) =>
 /** Folds root-level `defaults`/`envs` into `profiles.default` (an explicit `profiles.default` wins). */
 export function normalizeValues(raw: Values): NormalizedValues {
   const profiles: Record<string, ResolvedProfile> = {};
+  // A hand-written profile can be null (`dev:`) or lack a section; it always ends up with both.
   const add = (name: string, profile?: Profile | null) => {
     const target = (profiles[name] ??= { defaults: {}, envs: {} });
     Object.assign(target.defaults, profile?.defaults);
@@ -140,14 +141,20 @@ export function resolveEntries(
   return entries;
 }
 
-/** The text written to values.yml: only `uses` and `profiles`, without empty `envs`. */
+/** Whether every profile as written has both `defaults` and `envs` (so nothing needs rewriting). */
+const hasCompleteProfiles = (raw: Values) =>
+  Object.values(raw.profiles ?? {}).every(
+    (profile) => typeof profile?.defaults === "object" && profile.defaults !== null && typeof profile.envs === "object" && profile.envs !== null,
+  );
+
+/** The text written to values.yml: only `uses` and `profiles`; every profile has `defaults` and `envs`. */
 function stringifyValues(values: NormalizedValues): string {
   const profiles = Object.fromEntries(
     Object.entries(values.profiles).map(([name, { defaults, envs }]) => {
       const kept = Object.fromEntries(
         Object.entries(envs).filter(([, byWorktree]) => Object.keys(byWorktree).length > 0),
       );
-      return [name, Object.keys(kept).length > 0 ? { defaults, envs: kept } : { defaults }];
+      return [name, { defaults, envs: kept }];
     }),
   );
   const out = Object.keys(values.uses).length > 0 ? { uses: values.uses, profiles } : { profiles };
@@ -475,12 +482,14 @@ export async function edit(ctx: Context): Promise<number> {
   }
   if (code !== 0) return code;
   // A profile newly named in `uses` starts as a copy of `default`.
-  const values = normalizeValues(
-    (Bun.YAML.parse(await Bun.file(valuesPath).text()) ?? {}) as Values,
-  );
+  const raw = (Bun.YAML.parse(await Bun.file(valuesPath).text()) ?? {}) as Values;
+  const values = normalizeValues(raw);
   const created = materializeProfiles(values);
-  if (created.length > 0) {
+  // Rewrite only when something changed, so comments and formatting survive otherwise.
+  if (created.length > 0 || !hasCompleteProfiles(raw)) {
     await Bun.write(valuesPath, stringifyValues(values));
+  }
+  if (created.length > 0) {
     ctx.log(green(`+ created ${created.join(", ")} from ${DEFAULT_PROFILE}`));
   }
   return await push(ctx);

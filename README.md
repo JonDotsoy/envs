@@ -110,6 +110,7 @@ profiles:
   local:
     defaults:
       DATABASE_URL: postgres://localhost/app
+    envs: {}
   dev:
     defaults:
       DATABASE_URL: postgres://dev.internal/app
@@ -118,6 +119,7 @@ profiles:
         feature-x: 4001
 ```
 
+- Every profile is written with both `defaults` and `envs` (empty when it has nothing); a profile is never `null`.
 - `profiles.<profile>.defaults`: default value of each variable for the worktrees that use the profile.
 - `profiles.<profile>.envs.<VARIABLE>.<worktree>`: value of the variable in that worktree. It overrides the profile's `defaults`.
 - `uses.<worktree>`: profile of that worktree. A worktree that is not listed uses `default`; `pull` adds it as `default`.
@@ -129,7 +131,7 @@ The `.env` files are the source of truth: `pull` (and `edit`) rewrites `values.y
 
 ### Creating a profile
 
-Write a profile that does not exist yet in `uses.<worktree>` while running `envs edit`: when you close the editor it is created as a copy of `default` (and the worktree receives it). A profile you add by hand under `profiles`, with values or empty, is never touched. `envs push` and `envs use` do not create profiles: they fail with an unknown profile error. `envs lint` reports it as `unknown-profile`.
+Write a profile that does not exist yet in `uses.<worktree>` while running `envs edit`: when you close the editor it is created as a copy of `default` (and the worktree receives it). A profile you add by hand under `profiles`, with values or empty, keeps what you wrote (nothing is copied from `default`) and is completed with an empty `defaults`/`envs` if one is missing. `envs push` and `envs use` do not create profiles: they fail with an unknown profile error. `envs lint` reports it as `unknown-profile`.
 
 ### Previous format
 

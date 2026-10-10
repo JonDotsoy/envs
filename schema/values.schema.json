@@ -80,10 +80,8 @@
     },
     "profile": {
       "description": "Values of one profile.",
-      "type": [
-        "object",
-        "null"
-      ],
+      "type": "object",
+      "required": ["defaults", "envs"],
       "properties": {
         "defaults": {
           "description": "Default value of each environment variable, written to every worktree that uses the profile unless envs overrides it.",

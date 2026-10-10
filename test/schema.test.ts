@@ -28,9 +28,14 @@ profiles:
       PORT:
         main: 3000
   local:
-  empty: {}
+    defaults: {}
+    envs: {}
 `);
   expect(validate(values)).toBe(true);
+  // A profile is never null and always has both sections.
+  expect(validate({ profiles: { local: null } })).toBe(false);
+  expect(validate({ profiles: { dev: {} } })).toBe(false);
+  expect(validate({ profiles: { dev: { defaults: {} } } })).toBe(false);
   expect(validate({ uses: { main: 1 } })).toBe(false);
   expect(validate({ profiles: { dev: { other: {} } } })).toBe(false);
   expect(validate({ profiles: { dev: { defaults: { A: null } } } })).toBe(false);

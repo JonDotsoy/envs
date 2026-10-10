@@ -346,7 +346,7 @@ describe("commands (in-process)", () => {
     // Legacy root keys are migrated; worktrees are registered even without a .env.
     expect(values).toEqual({
       uses: { main: "default", one: "default" },
-      profiles: { default: { defaults: { D: "d" } } },
+      profiles: { default: { defaults: { D: "d" }, envs: {} } },
     });
   });
 
@@ -545,7 +545,7 @@ describe("profiles", () => {
     expect((await edit()).code).toBe(0);
     expect(await read()).toEqual({
       uses: { main: "default", "feature-x": "default" },
-      profiles: { default: { defaults: {} } },
+      profiles: { default: { defaults: {}, envs: {} } },
     });
   });
 
@@ -622,11 +622,20 @@ describe("profiles", () => {
         `uses:\n  feature-x: staging\nprofiles:\n  default:\n    defaults: { A: 1 }\n  staging:${manual}`,
       );
       const { profiles } = await read();
-      // Left as written: nothing is copied from default.
-      expect(Object.hasOwn(profiles, "staging")).toBe(true);
-      expect(profiles.staging ?? {}).toEqual(manual.includes("Z") ? { defaults: { Z: 9 } } : {});
+      // Never null, and nothing is copied from default.
+      expect(profiles.staging).toEqual({
+        defaults: manual.includes("Z") ? { Z: 9 } : {},
+        envs: {},
+      });
       expect(logs.some((l) => l.includes("created"))).toBe(false);
     }
+  });
+
+  test("edit keeps comments when every profile is already complete and nothing is created", async () => {
+    await reset("profiles:\n  default:\n    defaults: {}\n    envs: {}\n");
+    const yaml = "# mine\nprofiles:\n  default:\n    defaults: { A: 1 } # note\n    envs: {}\n";
+    expect((await edit(yaml)).code).toBe(0);
+    expect(await Bun.file(valuesPath()).text()).toBe(yaml);
   });
 
   test("edit does not create the profile when the editor fails", async () => {
@@ -644,11 +653,11 @@ describe("profiles", () => {
     expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
     const values = await read();
     expect(values.profiles.dev.envs).toEqual({ B: { "feature-x": "own" } });
-    expect(values.profiles.default.envs).toBeUndefined();
+    expect(values.profiles.default.envs).toEqual({});
     // A key removed from the .env disappears from the profile.
     await Bun.write(join(ws.worktrees["feature-x"]!, ".env"), "A=devval\n");
     await run(["pull"], testContext(ws.main).ctx);
-    expect((await read()).profiles.dev.envs).toBeUndefined();
+    expect((await read()).profiles.dev.envs).toEqual({});
   });
 
   test("use sets the profile of the current worktree and pushes only that worktree", async () => {
