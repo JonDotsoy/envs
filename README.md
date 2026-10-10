@@ -2,7 +2,7 @@
 
 CLI that keeps the `.env` values of every git worktree in a single file (`.envs/values.yml`). Edit all values together and distribute them to each worktree, or collect them from the existing `.env` files.
 
-Requires [Bun](https://bun.com) and git.
+Requires [Bun](https://bun.com) and git. See [docs/features.md](docs/features.md) for a summary of all features.
 
 ![Each worktree keeps its own .env; envs edit and envs push sync the shared values across them](docs/assets/images/worktrees-sync.svg)
 
