@@ -12,6 +12,7 @@ Commands:
   push    Write defaults and .envs/values.yml into the .env of each worktree
   lint    Warn about insecure values and unprotected secret files
   edit    Pull, open .envs/values.yml in VS Code (code -w), then push
+          With --ui, serve a web editor instead; its Save button pushes
   use     Select the profile of the current worktree (envs use <profile>), or list them
   help    Show this help message
 `;
@@ -23,6 +24,10 @@ export interface Context {
   error(message: string): void;
   /** Opens a file in the editor and resolves with its exit code once closed. */
   openEditor(path: string): Promise<number>;
+  /** Opens a URL in the default browser (best effort). */
+  openUrl?(url: string): Promise<void>;
+  /** Resolves when the `--ui` server should stop (Ctrl+C by default). */
+  waitForExit?(): Promise<void>;
 }
 
 /** Colors are skipped when NO_COLOR (https://no-color.org) is set to a non-empty value. */
@@ -48,6 +53,20 @@ export const defaultContext = (): Context => ({
     });
     return await proc.exited;
   },
+  openUrl: async (url) => {
+    const opener =
+      process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
+    try {
+      await Bun.spawn([opener, url], { stdio: ["ignore", "ignore", "ignore"] }).exited;
+    } catch {
+      // No opener available: the URL is already printed.
+    }
+  },
+  waitForExit: () =>
+    new Promise<void>((resolve) => {
+      process.once("SIGINT", () => resolve());
+      process.once("SIGTERM", () => resolve());
+    }),
 });
 
 /** YAML scalar accepted as a value; numbers and booleans are written to .env as their string form. */
@@ -148,7 +167,7 @@ const hasCompleteProfiles = (raw: Values) =>
   );
 
 /** The text written to values.yml: only `uses` and `profiles`; every profile has `defaults` and `envs`. */
-function stringifyValues(values: NormalizedValues): string {
+export function stringifyValues(values: NormalizedValues): string {
   const profiles = Object.fromEntries(
     Object.entries(values.profiles).map(([name, { defaults, envs }]) => {
       const kept = Object.fromEntries(
@@ -470,11 +489,15 @@ export async function lint(ctx: Context): Promise<number> {
   return 1;
 }
 
-export async function edit(ctx: Context): Promise<number> {
+export async function edit(ctx: Context, options: { ui?: boolean } = {}): Promise<number> {
   const valuesPath = join(await findRoot(ctx.cwd), ".envs/values.yml");
   if (!(await Bun.file(valuesPath).exists())) await init(ctx);
   const pulled = await pull(ctx);
   if (pulled !== 0) return pulled;
+  if (options.ui) {
+    const { serveUi } = await import("./ui/server");
+    return await serveUi(ctx);
+  }
   const original = await Bun.file(valuesPath).text();
   await Bun.write(valuesPath, EDIT_NOTICE + original);
   const code = await ctx.openEditor(valuesPath);
@@ -496,6 +519,26 @@ export async function edit(ctx: Context): Promise<number> {
     ctx.log(green(`+ created ${created.join(", ")} from ${DEFAULT_PROFILE}`));
   }
   return await push(ctx);
+}
+
+/** State the web editor shows: the normalized values plus the worktree names. */
+export async function loadUiState(ctx: Context) {
+  const read = await readValues(ctx);
+  if (!read) throw new Error("Run `envs init` first.");
+  const worktrees = (await listWorktrees(ctx.cwd)).map(({ name }) => name);
+  return { ...normalizeValues(read.values), worktrees };
+}
+
+/** Writes values sent by the web editor to values.yml (creating profiles named in `uses`), then pushes. */
+export async function saveUiState(
+  ctx: Context,
+  input: NormalizedValues,
+): Promise<{ created: string[]; code: number }> {
+  const values = normalizeValues({ uses: input.uses, profiles: input.profiles });
+  const created = materializeProfiles(values);
+  const path = join(await findRoot(ctx.cwd), ".envs/values.yml");
+  await Bun.write(path, stringifyValues(values));
+  return { created, code: await push(ctx) };
 }
 
 /** Instructions placed at the top of values.yml while `envs edit` waits for the editor. */
@@ -526,7 +569,7 @@ export async function run(
     case "lint":
       return await lint(ctx);
     case "edit":
-      return await edit(ctx);
+      return await edit(ctx, { ui: args.includes("--ui") });
     case "use":
       return await use(ctx, args[1]);
     default:
