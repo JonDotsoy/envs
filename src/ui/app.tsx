@@ -18,56 +18,6 @@ interface SaveResult {
   errors: string[];
 }
 
-/** Rows of a key → value table; rows keep their order and tolerate duplicate/empty keys while editing. */
-type Rows = [string, string][];
-const toRows = (record: Record<string, Value>): Rows =>
-  Object.entries(record).map(([k, v]) => [k, String(v)]);
-const fromRows = (rows: Rows): Record<string, string> =>
-  Object.fromEntries(rows.filter(([k]) => k.trim() !== "").map(([k, v]) => [k.trim(), v]));
-
-function RowsEditor(props: {
-  rows: Rows;
-  onChange(rows: Rows): void;
-  keyLabel: string;
-  valueLabel: string;
-  keyOptions?: string[];
-}) {
-  const { rows, onChange, keyLabel, valueLabel, keyOptions } = props;
-  const set = (i: number, col: 0 | 1, text: string) =>
-    onChange(rows.map((row, j) => (j === i ? (col === 0 ? [text, row[1]] : [row[0], text]) : row) as [string, string]));
-  const listId = keyOptions ? `keys-${keyLabel}` : undefined;
-  return (
-    <>
-      {keyOptions && (
-        <datalist id={listId}>
-          {keyOptions.map((o) => (
-            <option key={o} value={o} />
-          ))}
-        </datalist>
-      )}
-      <table>
-        <thead>
-          <tr>
-            <th>{keyLabel}</th>
-            <th>{valueLabel}</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(([k, v], i) => (
-            <tr key={i}>
-              <td><input list={listId} value={k} onChange={(e) => set(i, 0, e.target.value)} /></td>
-              <td><input value={v} onChange={(e) => set(i, 1, e.target.value)} /></td>
-              <td className="x"><button title="Remove" onClick={() => onChange(rows.filter((_, j) => j !== i))}>×</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <button onClick={() => onChange([...rows, ["", ""]])}>+ Add</button>
-    </>
-  );
-}
-
 /** One variable of a profile: its default and its override per worktree (missing/empty = not set). */
 type VarRow = { key: string; def: string; byWorktree: Record<string, string> };
 const toVarRows = (profile: Profile): VarRow[] => {
@@ -136,7 +86,7 @@ function VarsEditor(props: { rows: VarRow[]; onChange(rows: VarRow[]): void; col
 
 function App() {
   const [loaded, setLoaded] = useState<State>();
-  const [uses, setUses] = useState<Rows>([]);
+  const [uses, setUses] = useState<Record<string, string>>({});
   const [vars, setVars] = useState<Record<string, VarRow[]>>({});
   const [profile, setProfile] = useState("default");
   const [worktree, setWorktree] = useState("");
@@ -145,7 +95,7 @@ function App() {
 
   const load = (state: State) => {
     setLoaded(state);
-    setUses(toRows(state.uses));
+    setUses(state.uses);
     setVars(Object.fromEntries(Object.entries(state.profiles).map(([n, p]) => [n, toVarRows(p)])));
   };
   useEffect(() => {
@@ -171,7 +121,7 @@ function App() {
       const res = await fetch("/api/values", {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ uses: fromRows(uses), profiles }),
+        body: JSON.stringify({ uses, profiles }),
       });
       const body = (await res.json()) as SaveResult & { error?: string };
       setResult(res.ok ? body : { ok: false, created: [], logs: [], errors: body.errors ?? [body.error ?? "Save failed"] });
@@ -198,7 +148,25 @@ function App() {
       </header>
       <main>
         <h2>Profile of each worktree (uses)</h2>
-        <RowsEditor rows={uses} onChange={setUses} keyLabel="Worktree" valueLabel="Profile" keyOptions={loaded.worktrees} />
+        <table>
+          <thead>
+            <tr><th>Worktree</th><th>Profile</th></tr>
+          </thead>
+          <tbody>
+            {loaded.worktrees.map((w) => (
+              <tr key={w}>
+                <td>{w}</td>
+                <td>
+                  <select value={uses[w] ?? "default"} onChange={(e) => setUses({ ...uses, [w]: e.target.value })}>
+                    {profileNames.map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
         <h2>View</h2>
         <div className="selectors">
