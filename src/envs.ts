@@ -179,6 +179,8 @@ export async function recordHistory(
   after: NormalizedValues,
   now: () => Date = () => new Date(),
 ): Promise<string | undefined> {
+  // `envs config set history false` turns the history off; it is on unless set to false.
+  if ((await readConfig(join(root, ".envs/config.yml"))).history === false) return undefined;
   const changes = diffValues(before, after);
   if (changes.length === 0) return undefined;
   const historyPath = join(root, ".envs/history.ndjson");

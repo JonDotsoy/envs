@@ -838,4 +838,43 @@ describe("history on the first edit of a project", () => {
     expect(await readHistory()).toHaveLength(history.length);
     expect(await readHistory()).toMatchSnapshot();
   });
+
+  test("the history is active by default and `config set history false` turns it off", async () => {
+    const history = () => Bun.file(join(ws.main, ".envs/history.ndjson"));
+    const length = async () => (await readHistory()).length;
+    const before = await length();
+    // Nothing configured: active.
+    expect(await run(["config", "get", "history"], testContext(ws.main).ctx)).toBe(1);
+
+    expect(await run(["config", "set", "history", "false"], testContext(ws.main).ctx)).toBe(0);
+    await Bun.write(join(ws.worktrees["feature-x"]!, ".env"), "LOG=info\nPORT=3004\n");
+    expect(await run(["pull"], testContext(ws.main, { now }).ctx)).toBe(0);
+    expect(await length()).toBe(before);
+    // values.yml is still updated.
+    const values = Bun.YAML.parse(await Bun.file(join(ws.main, ".envs/values.yml")).text()) as any;
+    expect(values.profiles.default.envs.PORT["feature-x"]).toBe(3004);
+
+    expect(await run(["config", "set", "history", "true"], testContext(ws.main).ctx)).toBe(0);
+    await Bun.write(join(ws.worktrees["feature-x"]!, ".env"), "LOG=info\nPORT=3005\n");
+    expect(await run(["pull"], testContext(ws.main, { now }).ctx)).toBe(0);
+    const entries = await readHistory();
+    expect(entries).toHaveLength(before + 1);
+    // The change made while it was off has no point; the new one goes from what values.yml had.
+    expect(entries.at(-1).changes).toEqual([
+      { path: ["profiles", "default", "envs", "PORT", "feature-x"], from: 3004, to: 3005 },
+    ]);
+    expect(await history().exists()).toBe(true);
+  });
+
+  test("with the history off no history file is created", async () => {
+    const dir = await createWorkspace({ worktrees: [] });
+    try {
+      await Bun.write(join(dir.main, ".env"), "A=1\n");
+      expect(await run(["config", "set", "history", "false"], testContext(dir.main).ctx)).toBe(0);
+      expect(await run(["edit"], testContext(dir.main).ctx)).toBe(0);
+      expect(await Bun.file(join(dir.main, ".envs/history.ndjson")).exists()).toBe(false);
+    } finally {
+      await dir.cleanup();
+    }
+  });
 });

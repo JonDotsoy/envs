@@ -134,6 +134,17 @@ A point is written only when `values.yml` actually changed.
 
 Applying the points in order, from the first one, rebuilds the snapshot as it was after each of them. Because the first point contains the whole initial state, the result after the last point equals `values.yml`. The exception is a manual edit of `values.yml` made outside these commands: it is part of the snapshot but has no point.
 
+### Turning it off
+
+The history is active by default. It reads the `history` setting of `.envs/config.yml`: only an explicit `false` turns it off, and `values.yml` keeps being updated as usual.
+
+```sh
+envs config set history false   # stop recording
+envs config set history true    # record again (or `envs config delete history`)
+```
+
+Changes made while it is off get no point: when you turn it on again, the next point starts from the `values.yml` of that moment.
+
 The file is created with mode `600` because it holds variable values. Like the rest of `.envs/`, it is ignored by git.
 
 ## `values.yml` format
