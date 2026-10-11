@@ -708,6 +708,18 @@ export async function saveUiState(
   input: NormalizedValues,
 ): Promise<{ created: string[]; code: number }> {
   const values = normalizeValues({ uses: input.uses, profiles: input.profiles });
+  // The editor sends every value as text: give `3000`/`true` their type back (as `pull` does),
+  // so an untouched number is not saved, or recorded in the history, as a change to a string.
+  for (const profile of Object.values(values.profiles)) {
+    for (const [key, value] of Object.entries(profile.defaults)) {
+      if (typeof value === "string") profile.defaults[key] = parseValue(value);
+    }
+    for (const byWorktree of Object.values(profile.envs)) {
+      for (const [worktree, value] of Object.entries(byWorktree)) {
+        if (typeof value === "string") byWorktree[worktree] = parseValue(value);
+      }
+    }
+  }
   const created = materializeProfiles(values);
   const root = await findRoot(ctx.cwd);
   const path = join(root, ".envs/values.yml");

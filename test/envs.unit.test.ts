@@ -17,8 +17,10 @@ import {
   formatDotenvValue,
   HELP,
   listWorktrees,
+  loadUiState,
   parseDotenv,
   run,
+  saveUiState,
   updateDotenv,
   type Context,
 } from "../src/envs";
@@ -940,5 +942,54 @@ describe("restore", () => {
     }
     const length = (await readHistory()).length;
     expect(length).toBe(6);
+  });
+});
+
+describe("saving from the web editor keeps value types", () => {
+  let ws: Workspace;
+  beforeAll(async () => {
+    ws = await createWorkspace();
+  });
+  afterAll(() => ws.cleanup());
+
+  /** What the editor sends: every value as text. */
+  const asText = (state: Awaited<ReturnType<typeof loadUiState>>) => {
+    const { worktrees: _, ...values } = state;
+    const text = structuredClone(values) as any;
+    for (const profile of Object.values<any>(text.profiles)) {
+      for (const k of Object.keys(profile.defaults)) profile.defaults[k] = String(profile.defaults[k]);
+      for (const byWorktree of Object.values<any>(profile.envs)) {
+        for (const w of Object.keys(byWorktree)) byWorktree[w] = String(byWorktree[w]);
+      }
+    }
+    return text;
+  };
+
+  test("an untouched number or boolean saved as text is neither rewritten nor recorded", async () => {
+    await run(["init"], testContext(ws.main).ctx);
+    await Bun.write(join(ws.main, ".env"), "PORT=3000\nDEBUG=true\nCODE=007\n");
+    expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
+    const lines = async () =>
+      (await Bun.file(join(ws.main, ".envs/history.ndjson")).text()).trim().split("\n").map((l) => JSON.parse(l));
+    expect(await lines()).toHaveLength(1);
+
+    const state = await loadUiState(testContext(ws.main).ctx);
+    expect((await saveUiState(testContext(ws.main).ctx, asText(state))).code).toBe(0);
+
+    expect(await lines()).toHaveLength(1);
+    const values = Bun.YAML.parse(await Bun.file(join(ws.main, ".envs/values.yml")).text()) as any;
+    expect(values.profiles.default.envs.PORT.main).toBe(3000);
+    expect(values.profiles.default.envs.DEBUG.main).toBe(true);
+    expect(values.profiles.default.envs.CODE.main).toBe("007");
+
+    // A real change is recorded with its type.
+    const edited = asText(state);
+    edited.profiles.default.envs.PORT.main = "3001";
+    expect((await saveUiState(testContext(ws.main).ctx, edited)).code).toBe(0);
+    const all = await lines();
+    expect(all).toHaveLength(2);
+    expect(all[1].changes).toEqual([
+      { path: ["profiles", "default", "envs", "PORT", "main"], from: 3000, to: 3001 },
+    ]);
   });
 });
