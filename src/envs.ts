@@ -189,7 +189,8 @@ export async function recordHistory(
   const prev: string | null = last ? JSON.parse(last).hash : null;
   const point = { prev, timestamp: now().toISOString(), changes };
   const hash = createHash("sha256").update(JSON.stringify(point)).digest("hex").slice(0, 12);
-  await appendFile(historyPath, JSON.stringify({ hash, ...point }) + "\n");
+  // The history holds variable values, so it is created readable only by the owner.
+  await appendFile(historyPath, JSON.stringify({ hash, ...point }) + "\n", { mode: 0o600 });
   return hash;
 }
 

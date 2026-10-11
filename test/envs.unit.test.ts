@@ -8,7 +8,7 @@ import {
   test,
 } from "bun:test";
 import { $ } from "bun";
-import { chmod, mkdtemp, realpath, rm } from "node:fs/promises";
+import { chmod, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -775,6 +775,10 @@ describe("history on the first edit of a project", () => {
     const history = await readHistory();
     expect(history).toHaveLength(1);
     expect(history[0].prev).toBeNull();
+    // The history holds variable values: only the owner can read or write it, and it stays so after appends.
+    if (process.platform !== "win32") {
+      expect((await stat(join(ws.main, ".envs/history.ndjson"))).mode & 0o777).toBe(0o600);
+    }
     expect(history).toMatchSnapshot();
   });
 
@@ -792,6 +796,9 @@ describe("history on the first edit of a project", () => {
     const history = await readHistory();
     expect(history).toHaveLength(2);
     expect(history[1].prev).toBe(history[0].hash);
+    if (process.platform !== "win32") {
+      expect((await stat(join(ws.main, ".envs/history.ndjson"))).mode & 0o777).toBe(0o600);
+    }
     expect(history).toMatchSnapshot();
   });
 
