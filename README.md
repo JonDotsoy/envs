@@ -52,10 +52,6 @@ Run the commands inside the repo or any of its worktrees. Inside a worktree, `.e
 | `envs lint` | Checks security and prints a warning for each problem. Exits with code 1 if there is any (useful in CI). See below. |
 | `envs help` | Shows the help (also `--help`, `-h`, or no command). |
 
-### History
-
-Each `envs edit`, each Save in `envs edit --ui` and each `envs use` that changes `values.yml` appends one line to `.envs/history.ndjson` (append-only): `{"hash", "prev", "timestamp", "changes"}`. `changes` lists only what changed (`{"path": [...], "from": ..., "to": ...}`; `from` is absent for added entries, `to` for removed ones). `prev` is the hash of the previous point (`null` for the first) and `hash` covers `prev`, `timestamp` and `changes`, so the file is a hash chain: altering or removing a point breaks every later one. The first `envs pull` (also run by `envs edit`) creates the first point, with the whole initial state of `values.yml`; any later `pull` that changes `values.yml` (for example because you edited a worktree's `.env` by hand) adds a point with just that change. The file is created with mode `600` (it holds variable values). Like the rest of `.envs/`, it is ignored by git.
-
 `pull`, `push` and `lint` need `.envs/values.yml` to exist: if it is missing they exit with code 1 and ask you to run `envs init` (or just use `envs edit`, which creates it).
 
 Worktrees are identified by their branch name (or their folder name if they are in detached HEAD). The main repo uses its branch name, for example `main`.
@@ -102,6 +98,43 @@ It never prints values, only the variable and its location (`envs.DB_PASSWORD.ma
 | `unknown-profile` | `uses` names a profile that is not in `profiles`. |
 | `secret-pattern` | Value with a known secret format (AWS, GitHub, Slack, `sk-…`, private key). |
 | `url-credentials`, `insecure-url` | Remote URL with an embedded password, or using `http://`, `ws://` or `ftp://`. |
+
+## History
+
+`envs` keeps a record of how `values.yml` evolved. It works with two separate concepts:
+
+| Concept | Where | What it is |
+| --- | --- | --- |
+| **Snapshot** | `.envs/values.yml` | The complete current state: every profile, default and per-worktree value. It is the file you edit, and it is the only thing `push` reads. |
+| **Changes** | `.envs/history.ndjson` | An append-only log. Each line is a *point* holding only what changed between two states, never a full copy of the file. |
+
+The snapshot answers "what are the values now?"; the changes answer "what changed, when, and from what?". The history never replaces `values.yml`: if you delete `history.ndjson`, `envs` keeps working and the next `pull` starts a new history.
+
+### A point
+
+One JSON object per line:
+
+```json
+{"hash":"3f9a1c0b7d2e","prev":"e7c8ebe462f1","timestamp":"2026-01-01T00:02:00.000Z","changes":[{"path":["profiles","default","envs","PORT","feature-x"],"from":3001,"to":3002}]}
+```
+
+- `changes` lists the differences. `path` locates the value inside the snapshot (`uses.<worktree>`, `profiles.<profile>.defaults.<VAR>` or `profiles.<profile>.envs.<VAR>.<worktree>`). `from` is absent when the entry was added and `to` is absent when it was removed.
+- `prev` is the hash of the previous point (`null` for the first one) and `hash` is the first 12 hex characters of the sha256 of `prev`, `timestamp` and `changes`. The file is a hash chain: altering or removing a point breaks every later one.
+
+### When a point is added
+
+A point is written only when `values.yml` actually changed.
+
+- The **first** `envs pull` (also run by `envs edit`) creates the first point. Its `changes` describe the whole initial snapshot, as if it had been built from nothing.
+- Any later `envs pull` adds a point with what it changed, for example after you edited a worktree's `.env` by hand.
+- `envs edit` adds a point with what you changed in the editor, and so does Save in `envs edit --ui`.
+- `envs use <profile>` adds a point with the profile change.
+
+### Reading it
+
+Applying the points in order, from the first one, rebuilds the snapshot as it was after each of them. Because the first point contains the whole initial state, the result after the last point equals `values.yml`. The exception is a manual edit of `values.yml` made outside these commands: it is part of the snapshot but has no point.
+
+The file is created with mode `600` because it holds variable values. Like the rest of `.envs/`, it is ignored by git.
 
 ## `values.yml` format
 
