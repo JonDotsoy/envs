@@ -28,6 +28,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- Web editor: the sticky header is no longer covered by the sticky columns of the variables table when scrolling.
 - `envs pull` no longer writes to `envs:` the values that are equal to their entry in `defaults:`.
 
 ## [0.1.0] - 2026-10-08
