@@ -5,6 +5,19 @@ import { createHash } from "node:crypto";
 import { appendFile } from "node:fs/promises";
 import { $ } from "bun";
 import { isSensitiveKey, rules, type LintContext } from "./lint-rules";
+import {
+  DEFAULT_PROFILE,
+  diffValues,
+  findHistoryPoint,
+  stateAfter,
+  type HistoryPoint,
+  type NormalizedValues,
+  type ResolvedProfile,
+  type Value,
+} from "./history";
+
+export { applyChanges, compareStates, diffValues, findHistoryPoint, stateAfter } from "./history";
+export type { Change, HistoryPoint, NormalizedValues, StateDiff } from "./history";
 
 export const HELP = `Usage: envs <command>
 
@@ -75,9 +88,6 @@ export const defaultContext = (): Context => ({
     }),
 });
 
-/** YAML scalar accepted as a value; numbers and booleans are written to .env as their string form. */
-type Value = string | number | boolean;
-
 /** Values of one profile: `defaults` for every worktree and `envs.<VAR>.<worktree>` overrides. */
 interface Profile {
   defaults?: Record<string, Value>;
@@ -91,18 +101,6 @@ interface Values extends Profile {
   profiles?: Record<string, Profile>;
 }
 
-interface ResolvedProfile {
-  defaults: Record<string, Value>;
-  envs: Record<string, Record<string, Value>>;
-}
-
-/** values.yml with the legacy form folded into `profiles.default`; `default` always exists. */
-export interface NormalizedValues {
-  uses: Record<string, string>;
-  profiles: Record<string, ResolvedProfile>;
-}
-
-const DEFAULT_PROFILE = "default";
 const hasProfile = (values: NormalizedValues, name: string) =>
   Object.hasOwn(values.profiles, name);
 
@@ -139,36 +137,6 @@ export function materializeProfiles(values: NormalizedValues): string[] {
   return created;
 }
 
-/** One difference between two versions of values.yml; `from`/`to` are absent when the entry was added/removed. */
-export interface Change {
-  path: string[];
-  from?: Value;
-  to?: Value;
-}
-
-/** Leaf-level differences between two normalized values (`uses`, then each profile's `defaults` and `envs`). */
-export function diffValues(before: NormalizedValues, after: NormalizedValues): Change[] {
-  const changes: Change[] = [];
-  const compare = (path: string[], a?: Value, b?: Value) => {
-    if (a !== b) changes.push({ path, ...(a !== undefined && { from: a }), ...(b !== undefined && { to: b }) });
-  };
-  const keys = (a?: object, b?: object) => [...new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])];
-  for (const w of keys(before.uses, after.uses)) compare(["uses", w], before.uses[w], after.uses[w]);
-  for (const p of keys(before.profiles, after.profiles)) {
-    const a = before.profiles[p];
-    const b = after.profiles[p];
-    for (const k of keys(a?.defaults, b?.defaults)) {
-      compare(["profiles", p, "defaults", k], a?.defaults[k], b?.defaults[k]);
-    }
-    for (const k of keys(a?.envs, b?.envs)) {
-      for (const w of keys(a?.envs[k], b?.envs[k])) {
-        compare(["profiles", p, "envs", k, w], a?.envs[k]?.[w], b?.envs[k]?.[w]);
-      }
-    }
-  }
-  return changes;
-}
-
 /**
  * Appends one point to `.envs/history.ndjson`: `{prev, timestamp, changes, hash}` on one line.
  * `prev` is the hash of the previous point (null for the first) and `hash` covers the rest of the
@@ -180,8 +148,7 @@ export async function recordHistory(
   after: NormalizedValues,
   now: () => Date = () => new Date(),
 ): Promise<string | undefined> {
-  // `envs config set history false` turns the history off; it is on unless set to false.
-  if ((await readConfig(join(root, ".envs/config.yml"))).history === false) return undefined;
+  if (!(await historyEnabled(root))) return undefined;
   const changes = diffValues(before, after);
   if (changes.length === 0) return undefined;
   const historyPath = join(root, ".envs/history.ndjson");
@@ -195,6 +162,11 @@ export async function recordHistory(
   // The history holds variable values, so it is created readable only by the owner.
   await appendFile(historyPath, JSON.stringify({ hash, ...point }) + "\n", { mode: 0o600 });
   return hash;
+}
+
+/** `envs config set history false` turns the history off; it is on unless set to false. */
+export async function historyEnabled(root: string): Promise<boolean> {
+  return (await readConfig(join(root, ".envs/config.yml"))).history !== false;
 }
 
 /**
@@ -575,45 +547,14 @@ export async function use(ctx: Context, profile?: string): Promise<number> {
   return await push(ctx, current.name);
 }
 
-/** A line of .envs/history.ndjson. */
-interface HistoryPoint {
-  hash: string;
-  prev: string | null;
-  timestamp: string;
-  changes: Change[];
-}
-
-async function readHistoryPoints(root: string): Promise<HistoryPoint[]> {
+/** The points of .envs/history.ndjson, oldest first (none when the file does not exist). */
+export async function readHistoryPoints(root: string): Promise<HistoryPoint[]> {
   const file = Bun.file(join(root, ".envs/history.ndjson"));
   if (!(await file.exists())) return [];
   return (await file.text())
     .split("\n")
     .filter((line) => line.trim() !== "")
     .map((line) => JSON.parse(line));
-}
-
-/** Applies a point's changes to a state: `to` sets the entry, a missing `to` removes it. */
-export function applyChanges(state: NormalizedValues, changes: Change[]): void {
-  for (const { path, to } of changes) {
-    const [section, ...rest] = path;
-    if (section === "uses") {
-      const [worktree] = rest as [string];
-      if (to === undefined) delete state.uses[worktree];
-      else state.uses[worktree] = String(to);
-      continue;
-    }
-    const [profileName, kind, variable, worktree] = rest as [string, string, string, string?];
-    const profile = (state.profiles[profileName] ??= { defaults: {}, envs: {} });
-    if (kind === "defaults") {
-      if (to === undefined) delete profile.defaults[variable];
-      else profile.defaults[variable] = to;
-    } else {
-      const byWorktree = (profile.envs[variable] ??= {});
-      if (to === undefined) delete byWorktree[worktree!];
-      else byWorktree[worktree!] = to;
-      if (Object.keys(byWorktree).length === 0) delete profile.envs[variable];
-    }
-  }
 }
 
 /**
@@ -630,26 +571,17 @@ export async function restore(ctx: Context, hash?: string): Promise<number> {
   if (!read) return 1;
   const root = await findRoot(ctx.cwd);
   const points = await readHistoryPoints(root);
-  const matches = points.filter((point) => point.hash.startsWith(hash));
-  if (matches.length !== 1) {
+  const found = findHistoryPoint(points, hash);
+  if ("error" in found) {
     ctx.error(
-      matches.length === 0
+      found.error === "none"
         ? `No history point matches "${hash}". Run \`envs restore\` with a hash from .envs/history.ndjson.`
-        : `"${hash}" matches ${matches.length} history points; use more characters.`,
+        : `"${hash}" matches ${found.matches} history points; use more characters.`,
     );
     return 1;
   }
-  const target = matches[0]!;
-  const restored: NormalizedValues = { uses: {}, profiles: {} };
-  for (const point of points) {
-    applyChanges(restored, point.changes);
-    if (point === target) break;
-  }
-  // `default` always exists, and a profile in use that has no values is empty (not a copy of `default`).
-  restored.profiles[DEFAULT_PROFILE] ??= { defaults: {}, envs: {} };
-  for (const name of Object.values(restored.uses)) {
-    restored.profiles[name] ??= { defaults: {}, envs: {} };
-  }
+  const target = found.point;
+  const restored = stateAfter(points, target);
   const current = normalizeValues(read.values);
   await Bun.write(read.path, stringifyValues(restored));
   const added = await recordHistory(root, current, restored, ctx.now);
@@ -761,6 +693,13 @@ export async function loadUiState(ctx: Context) {
   others.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const worktrees = main === undefined ? [] : [main, ...others];
   return { ...normalizeValues(read.values), worktrees };
+}
+
+/** History the web editor shows: whether it is on and its points, oldest first (none while it is off). */
+export async function loadUiHistory(ctx: Context): Promise<{ enabled: boolean; points: HistoryPoint[] }> {
+  const root = await findRoot(ctx.cwd);
+  const enabled = await historyEnabled(root);
+  return { enabled, points: enabled ? await readHistoryPoints(root) : [] };
 }
 
 /** Writes values sent by the web editor to values.yml (creating profiles named in `uses`), then pushes. */
