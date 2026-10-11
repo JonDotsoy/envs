@@ -16,6 +16,7 @@ Commands:
   edit    Pull, open .envs/values.yml in VS Code (code -w), then push
           With --ui, serve a web editor instead; its Save button pushes
   use     Select the profile of the current worktree (envs use <profile>), or list them
+  restore Restore values.yml to the state after a history point (envs restore <hash>), adding a new point
   config  Read or change .envs/config.yml (config set <key> <value>, config get [key], config delete <key>)
   help    Show this help message
 `;
@@ -574,6 +575,92 @@ export async function use(ctx: Context, profile?: string): Promise<number> {
   return await push(ctx, current.name);
 }
 
+/** A line of .envs/history.ndjson. */
+interface HistoryPoint {
+  hash: string;
+  prev: string | null;
+  timestamp: string;
+  changes: Change[];
+}
+
+async function readHistoryPoints(root: string): Promise<HistoryPoint[]> {
+  const file = Bun.file(join(root, ".envs/history.ndjson"));
+  if (!(await file.exists())) return [];
+  return (await file.text())
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => JSON.parse(line));
+}
+
+/** Applies a point's changes to a state: `to` sets the entry, a missing `to` removes it. */
+export function applyChanges(state: NormalizedValues, changes: Change[]): void {
+  for (const { path, to } of changes) {
+    const [section, ...rest] = path;
+    if (section === "uses") {
+      const [worktree] = rest as [string];
+      if (to === undefined) delete state.uses[worktree];
+      else state.uses[worktree] = String(to);
+      continue;
+    }
+    const [profileName, kind, variable, worktree] = rest as [string, string, string, string?];
+    const profile = (state.profiles[profileName] ??= { defaults: {}, envs: {} });
+    if (kind === "defaults") {
+      if (to === undefined) delete profile.defaults[variable];
+      else profile.defaults[variable] = to;
+    } else {
+      const byWorktree = (profile.envs[variable] ??= {});
+      if (to === undefined) delete byWorktree[worktree!];
+      else byWorktree[worktree!] = to;
+      if (Object.keys(byWorktree).length === 0) delete profile.envs[variable];
+    }
+  }
+}
+
+/**
+ * `envs restore <hash>`: rebuilds the state values.yml had after that history point (a unique
+ * prefix of the hash is enough), writes it, records the difference as a new point and pushes.
+ * Existing points are never removed or rewritten.
+ */
+export async function restore(ctx: Context, hash?: string): Promise<number> {
+  if (!hash) {
+    ctx.error("Usage: envs restore <hash>");
+    return 1;
+  }
+  const read = await readValues(ctx);
+  if (!read) return 1;
+  const root = await findRoot(ctx.cwd);
+  const points = await readHistoryPoints(root);
+  const matches = points.filter((point) => point.hash.startsWith(hash));
+  if (matches.length !== 1) {
+    ctx.error(
+      matches.length === 0
+        ? `No history point matches "${hash}". Run \`envs restore\` with a hash from .envs/history.ndjson.`
+        : `"${hash}" matches ${matches.length} history points; use more characters.`,
+    );
+    return 1;
+  }
+  const target = matches[0]!;
+  const restored: NormalizedValues = { uses: {}, profiles: {} };
+  for (const point of points) {
+    applyChanges(restored, point.changes);
+    if (point === target) break;
+  }
+  // `default` always exists, and a profile in use that has no values is empty (not a copy of `default`).
+  restored.profiles[DEFAULT_PROFILE] ??= { defaults: {}, envs: {} };
+  for (const name of Object.values(restored.uses)) {
+    restored.profiles[name] ??= { defaults: {}, envs: {} };
+  }
+  const current = normalizeValues(read.values);
+  await Bun.write(read.path, stringifyValues(restored));
+  const added = await recordHistory(root, current, restored, ctx.now);
+  ctx.log(
+    added
+      ? green(`↺ restored ${target.hash} - new history point ${added}`)
+      : `Already at ${target.hash}: nothing to restore`,
+  );
+  return await push(ctx);
+}
+
 /** Whether git ignores `file` inside `dir` (true when it would not be committed). */
 async function isIgnored(dir: string, file: string): Promise<boolean> {
   const result = await $`git check-ignore -q ${file}`
@@ -724,6 +811,8 @@ export async function run(
       return await edit(ctx, { ui: args.includes("--ui") });
     case "use":
       return await use(ctx, args[1]);
+    case "restore":
+      return await restore(ctx, args[1]);
     case "config":
       return await config(ctx, args.slice(1));
     default:

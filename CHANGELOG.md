@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- `envs restore <hash>` restores `values.yml` to the state after a history point, adds a new point with the difference (no point is ever removed) and pushes.
 - Edit history: when `envs edit`, the web editor's Save or `envs use` changes `values.yml`, one line `{"hash", "prev", "timestamp", "changes"}` is appended to `.envs/history.ndjson`. `changes` has only the differences (`path`, `from`, `to`); `prev` is the hash of the previous point and `hash` covers the rest of the line, forming a chain. The first `envs pull` creates the first point with the initial state, and later pulls add a point when they change `values.yml` (e.g. after a manual `.env` edit). The file is created with mode `600`. The history is active by default; `envs config set history false` turns it off. Nothing is written when nothing changed.
 - GitHub Pages workflow: every push to `develop` publishes `sites/` (landing page in `sites/index.html`) and serves the values schema at <https://jondotsoy.github.io/envs/schema.json>.
 - `envs init`, `envs pull` and `envs edit` write `# yaml-language-server: $schema=https://jondotsoy.github.io/envs/schema.json` at the top of `values.yml`, so editors validate it against the published schema.

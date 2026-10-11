@@ -74,6 +74,7 @@ Un punto se escribe solo si `values.yml` cambió realmente.
 | `envs edit` | Lo que cambiaste en el editor. |
 | **Save** en `envs edit --ui` | Lo que cambiaste en la interfaz web. |
 | `envs use <perfil>` | El cambio de perfil del worktree. |
+| `envs restore <hash>` | La diferencia entre el estado actual y el restablecido (ver más abajo). |
 | `envs push`, `envs lint`, `envs use` sin argumentos | Ninguno. |
 
 Editar `values.yml` a mano fuera de estos comandos no genera un punto: forma parte del snapshot, pero no queda en los cambios.
@@ -87,6 +88,25 @@ Para recuperar un valor anterior, busca en `changes` el `path` y toma su `from`:
 ```sh
 grep '"PORT","feature-x"' .envs/history.ndjson
 ```
+
+## Restablecer un estado
+
+```sh
+envs restore <hash>
+```
+
+Restablece `values.yml` al estado que tenía justo después del punto `<hash>` (basta con un prefijo único del hash).
+
+1. Reconstruye ese estado aplicando los puntos en orden hasta el indicado.
+2. Escribe el resultado en `values.yml`.
+3. Registra la diferencia entre el estado actual y el restablecido como un **punto nuevo** al final del historial.
+4. Ejecuta `push` para actualizar los `.env`.
+
+Nunca se borra ni se reescribe un punto: si el historial tiene 4 puntos, después de restablecer tiene 5, y el último dice, con `from` y `to`, cómo se volvió atrás. Si el estado actual ya es el pedido, no se agrega nada.
+
+Falla con código 1 si no se indica el hash, si ninguno coincide o si el prefijo coincide con varios puntos. Con el historial desactivado, restablece `values.yml` pero no agrega el punto.
+
+Un perfil que no tiene valores en el estado restablecido queda vacío; no se copia de `default`.
 
 ## Activar o desactivar
 

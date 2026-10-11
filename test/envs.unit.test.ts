@@ -878,3 +878,67 @@ describe("history on the first edit of a project", () => {
     }
   });
 });
+
+describe("restore", () => {
+  let ws: Workspace;
+  beforeAll(async () => {
+    ws = await createWorkspace();
+  });
+  afterAll(() => ws.cleanup());
+
+  const historyText = () => Bun.file(join(ws.main, ".envs/history.ndjson")).text();
+  const readHistory = async () =>
+    (await historyText()).trim().split("\n").map((l) => JSON.parse(l));
+  let tick = 0;
+  const now = () => new Date(Date.UTC(2026, 0, 1, 0, tick++));
+
+  test("restore applies a point's state and adds a point without removing any", async () => {
+    // 4 points: the initial state, then A=2, A=3 and A=4.
+    expect(await run(["init"], testContext(ws.main).ctx)).toBe(0);
+    for (const a of [1, 2, 3, 4]) {
+      await Bun.write(join(ws.main, ".env"), `A=${a}\n`);
+      expect(await run(["pull"], testContext(ws.main, { now }).ctx)).toBe(0);
+    }
+    const before = await readHistory();
+    expect(before).toHaveLength(4);
+    const beforeText = await historyText();
+
+    const { ctx, logs } = testContext(ws.main, { now });
+    expect(await run(["restore", before[1].hash], ctx)).toBe(0);
+
+    const after = await readHistory();
+    expect(after).toHaveLength(5);
+    // The first 4 points are untouched; the new one chains to the last.
+    expect(await historyText()).toStartWith(beforeText);
+    expect(after[4].prev).toBe(before[3].hash);
+    expect(after[4].changes).toEqual([
+      { path: ["profiles", "default", "envs", "A", "main"], from: 4, to: 2 },
+    ]);
+    expect(logs[0]).toContain(`restored ${before[1].hash}`);
+    // values.yml and the .env go back to A=2.
+    const values = Bun.YAML.parse(await Bun.file(join(ws.main, ".envs/values.yml")).text()) as any;
+    expect(values.profiles.default.envs.A.main).toBe(2);
+    expect(await Bun.file(join(ws.main, ".env")).text()).toBe("A=2\n");
+
+    // A unique prefix of the hash is enough; restoring the state it already has adds nothing.
+    const again = testContext(ws.main, { now });
+    expect(await run(["restore", before[1].hash.slice(0, 6)], again.ctx)).toBe(0);
+    expect(again.logs[0]).toContain("nothing to restore");
+    expect(await readHistory()).toHaveLength(5);
+
+    // Going back to the first point adds a sixth.
+    expect(await run(["restore", before[0].hash], testContext(ws.main, { now }).ctx)).toBe(0);
+    expect(await readHistory()).toHaveLength(6);
+    expect(await Bun.file(join(ws.main, ".env")).text()).toBe("A=1\n");
+  });
+
+  test("restore fails on a missing or unknown hash", async () => {
+    for (const args of [["restore"], ["restore", "zzzz"], ["restore", ""]]) {
+      const { ctx, errors } = testContext(ws.main);
+      expect(await run(args, ctx)).toBe(1);
+      expect(errors).toHaveLength(1);
+    }
+    const length = (await readHistory()).length;
+    expect(length).toBe(6);
+  });
+});
