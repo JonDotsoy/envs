@@ -829,5 +829,6 @@ describe("history on the first edit of a project", () => {
     // Pulling again with the .env untouched adds nothing.
     expect(await run(["pull"], testContext(ws.main, { now }).ctx)).toBe(0);
     expect(await readHistory()).toHaveLength(history.length);
+    expect(await readHistory()).toMatchSnapshot();
   });
 });
