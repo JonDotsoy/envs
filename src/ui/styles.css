@@ -155,6 +155,12 @@ button.primary { padding: 12px 24px; border-color: transparent; background: var(
 button.primary:hover:not(:disabled), button.primary:active:not(:disabled) { border-color: transparent; background: var(--color-midnight-ink); }
 button:disabled { opacity: 0.6; cursor: not-allowed; }
 button.primary:disabled { cursor: progress; }
+/* Header link to the history card: ghost button with a count pill. */
+button.header-link { display: inline-flex; align-items: center; gap: var(--space-2); padding: 10px 16px; }
+button.header-link .count { min-width: 20px; padding: 0 6px; border-radius: var(--radius-pills); background: var(--color-lilac); color: var(--color-graphite); font: 500 12px/20px var(--font-body); text-align: center; }
+/* The sticky header would cover the top of the card the link scrolls to. */
+#history { scroll-margin-top: calc(var(--nav-height) + var(--space-4)); }
+#history-title:focus { outline: none; }
 /* Toggle pill (Compact): lilac when on. */
 button.toggle { padding: 6px 14px; border-radius: var(--radius-pills); font-size: 13px; color: var(--color-slate-body); }
 button.toggle::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: var(--space-2); border: 1.5px solid currentColor; border-radius: 50%; vertical-align: 0; }

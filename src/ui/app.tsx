@@ -194,6 +194,15 @@ function App() {
     setProfile(name);
   };
 
+  /** Scrolls to the history card (below the variables) and moves focus there for keyboard and screen reader users. */
+  const goToHistory = () => {
+    const card = document.getElementById("history");
+    if (!card) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    card.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    document.getElementById("history-title")?.focus({ preventScroll: true });
+  };
+
   const busy = saving || restoring;
   const save = async () => {
     if (busy) return;
@@ -261,6 +270,12 @@ function App() {
         <span role="status" className={`status ${status?.kind ?? ""}`}>
           {status?.text}
         </span>
+        <button className="header-link" onClick={goToHistory} title={history?.enabled === false ? "The history is off" : "Go to the history panel"}>
+          History
+          {history?.enabled !== false && history && history.points.length > 0 && (
+            <span className="count" aria-label={`${history.points.length} points`}>{history.points.length}</span>
+          )}
+        </button>
         <button className="primary" onClick={save} disabled={busy} aria-keyshortcuts="Control+S Meta+S" title="Save and push (Ctrl+S)">
           {saving ? "Saving…" : "Save"}
         </button>
@@ -324,9 +339,9 @@ function App() {
           />
         </section>
 
-        <section className="card" aria-labelledby="history-title">
+        <section className="card" id="history" aria-labelledby="history-title">
           <p className="eyebrow">History</p>
-          <h2 id="history-title">Points of <code>.envs/history.ndjson</code></h2>
+          <h2 id="history-title" tabIndex={-1}>Points of <code>.envs/history.ndjson</code></h2>
           <p className="lede">
             Hover or click a point to see what restoring it would change: <span className="key-removed">red</span> is removed,{" "}
             <span className="key-changed">green</span> is changed or added. Restoring adds a new point; none is ever deleted.

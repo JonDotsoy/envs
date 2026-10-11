@@ -16,6 +16,7 @@ Ejecuta `init` (si hace falta) y `pull`, y levanta un servidor en `127.0.0.1` co
 
 ![Vista general del editor](assets/images/ui/ui-01-overview.png)
 
+- **Encabezado:** el estado (por ejemplo *Unsaved changes*), el botón **History** y **Save**. **History** lleva al panel del historial, que está al final de la página, y muestra cuántos puntos hay; el foco pasa al título del panel. Con el historial desactivado, el botón sigue ahí y el panel lo explica.
 - **Worktrees:** el perfil de cada worktree.
 - **View:** el perfil y el worktree que se muestran, y el modo compacto.
 - **Variables:** una tabla con una columna de valor por defecto y una columna por worktree.
