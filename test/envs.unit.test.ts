@@ -560,7 +560,7 @@ describe("profiles", () => {
     expect(first.prev).toBeNull();
     expect(new Date(first.timestamp).toISOString()).toBe(first.timestamp);
     expect(first.changes).toContainEqual({ path: ["profiles", "default", "defaults", "A"], to: "one" });
-    // Later pulls do not add points.
+    // A later pull that changes nothing does not add a point.
     expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
     expect(await history()).toHaveLength(1);
   });
@@ -792,6 +792,22 @@ describe("history on the first edit of a project", () => {
     const history = await readHistory();
     expect(history).toHaveLength(2);
     expect(history[1].prev).toBe(history[0].hash);
+    expect(history).toMatchSnapshot();
+  });
+
+  test("a manual change to a worktree's .env is recorded by the next edit", async () => {
+    const before = await readHistory();
+    await Bun.write(join(ws.worktrees["feature-x"]!, ".env"), "LOG=info\nPORT=3002\n");
+
+    const { ctx } = testContext(ws.main, { now });
+    expect(await run(["edit"], ctx)).toBe(0);
+
+    const history = await readHistory();
+    expect(history).toHaveLength(before.length + 1);
+    expect(history.at(-1).prev).toBe(before.at(-1).hash);
+    expect(history.at(-1).changes).toEqual([
+      { path: ["profiles", "default", "envs", "PORT", "feature-x"], from: 3001, to: 3002 },
+    ]);
     expect(history).toMatchSnapshot();
   });
 });

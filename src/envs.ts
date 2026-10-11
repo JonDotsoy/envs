@@ -177,7 +177,7 @@ export async function recordHistory(
   root: string,
   before: NormalizedValues,
   after: NormalizedValues,
-  now = new Date(),
+  now: () => Date = () => new Date(),
 ): Promise<string | undefined> {
   const changes = diffValues(before, after);
   if (changes.length === 0) return undefined;
@@ -187,7 +187,7 @@ export async function recordHistory(
     .split("\n")
     .at(-1);
   const prev: string | null = last ? JSON.parse(last).hash : null;
-  const point = { prev, timestamp: now.toISOString(), changes };
+  const point = { prev, timestamp: now().toISOString(), changes };
   const hash = createHash("sha256").update(JSON.stringify(point)).digest("hex").slice(0, 12);
   await appendFile(historyPath, JSON.stringify({ hash, ...point }) + "\n");
   return hash;
@@ -491,6 +491,7 @@ export async function pull(ctx: Context): Promise<number> {
   const read = await readValues(ctx);
   if (!read) return 1;
   const values = normalizeValues(read.values);
+  const before = structuredClone(values);
   const worktrees = await listWorktrees(ctx.cwd);
   // A profile named in `uses` that does not exist yet starts as a copy of `default`.
   materializeProfiles(values);
@@ -521,11 +522,11 @@ export async function pull(ctx: Context): Promise<number> {
     }
   }
   await Bun.write(read.path, stringifyValues(values));
-  // The first pull initializes the history with the whole state as its first point.
+  // What the pull changed (e.g. a manual edit of a .env) is recorded. The first pull initializes
+  // the history, so it records the whole state instead of only what it changed.
   const root = await findRoot(ctx.cwd);
-  if (!(await Bun.file(join(root, ".envs/history.ndjson")).exists())) {
-    await recordHistory(root, { uses: {}, profiles: {} }, values, ctx.now?.());
-  }
+  const initial = !(await Bun.file(join(root, ".envs/history.ndjson")).exists());
+  await recordHistory(root, initial ? { uses: {}, profiles: {} } : before, values, ctx.now);
   if (pulledNames.length > 0) {
     ctx.log(
       green(
@@ -566,7 +567,7 @@ export async function use(ctx: Context, profile?: string): Promise<number> {
   for (const { name } of worktrees) values.uses[name] ??= DEFAULT_PROFILE;
   values.uses[current.name] = profile;
   await Bun.write(read.path, stringifyValues(values));
-  await recordHistory(await findRoot(ctx.cwd), before, values, ctx.now?.());
+  await recordHistory(await findRoot(ctx.cwd), before, values, ctx.now);
   return await push(ctx, current.name);
 }
 
@@ -657,7 +658,7 @@ export async function edit(ctx: Context, options: { ui?: boolean } = {}): Promis
   if (created.length > 0) {
     ctx.log(green(`+ created ${created.join(", ")} from ${DEFAULT_PROFILE}`));
   }
-  await recordHistory(await findRoot(ctx.cwd), before, values, ctx.now?.());
+  await recordHistory(await findRoot(ctx.cwd), before, values, ctx.now);
   return await push(ctx);
 }
 
@@ -685,7 +686,7 @@ export async function saveUiState(
     ((await Bun.file(path).exists() ? Bun.YAML.parse(await Bun.file(path).text()) : undefined) ?? {}) as Values,
   );
   await Bun.write(path, stringifyValues(values));
-  await recordHistory(root, before, values, ctx.now?.());
+  await recordHistory(root, before, values, ctx.now);
   return { created, code: await push(ctx) };
 }
 

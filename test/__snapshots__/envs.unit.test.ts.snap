@@ -354,6 +354,7 @@ exports[`push with many branches logs one line when the same value changes in 10
 `;
 
 
+
 exports[`history on the first edit of a project the first edit initializes the history with the whole state 1`] = `
 [
   {
@@ -497,8 +498,110 @@ exports[`history on the first edit of a project later edits chain to the initial
         "to": 4000,
       },
     ],
-    "hash": "f8ae032e201e",
+    "hash": "e7c8ebe462f1",
     "prev": "670608492435",
+    "timestamp": "2026-01-01T00:01:00.000Z",
+  },
+]
+`;
+
+exports[`history on the first edit of a project a manual change to a worktree's .env is recorded by the next edit 1`] = `
+[
+  {
+    "changes": [
+      {
+        "path": [
+          "uses",
+          "main",
+        ],
+        "to": "default",
+      },
+      {
+        "path": [
+          "uses",
+          "feature-x",
+        ],
+        "to": "default",
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "LOG",
+          "main",
+        ],
+        "to": "info",
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "LOG",
+          "feature-x",
+        ],
+        "to": "info",
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "PORT",
+          "main",
+        ],
+        "to": 3000,
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "PORT",
+          "feature-x",
+        ],
+        "to": 3001,
+      },
+    ],
+    "hash": "670608492435",
+    "prev": null,
+    "timestamp": "2026-01-01T00:00:00.000Z",
+  },
+  {
+    "changes": [
+      {
+        "from": 3000,
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "PORT",
+          "main",
+        ],
+        "to": 4000,
+      },
+    ],
+    "hash": "e7c8ebe462f1",
+    "prev": "670608492435",
+    "timestamp": "2026-01-01T00:01:00.000Z",
+  },
+  {
+    "changes": [
+      {
+        "from": 3001,
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "PORT",
+          "feature-x",
+        ],
+        "to": 3002,
+      },
+    ],
+    "hash": "c38bb52e6a29",
+    "prev": "e7c8ebe462f1",
     "timestamp": "2026-01-01T00:02:00.000Z",
   },
 ]
