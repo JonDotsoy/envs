@@ -2,7 +2,7 @@
 
 CLI that keeps the `.env` values of every git worktree in a single file (`.envs/values.yml`). Edit all values together and distribute them to each worktree, or collect them from the existing `.env` files.
 
-Requires [Bun](https://bun.com) and git.
+Requires [Bun](https://bun.com) and git. See [docs/features.md](docs/features.md) for a summary of all features.
 
 ![Each worktree keeps its own .env; envs edit and envs push sync the shared values across them](docs/assets/images/worktrees-sync.svg)
 
@@ -35,6 +35,8 @@ The examples below use `envs`; without a global install, replace it with `bunx @
 ## Usage
 
 Run the commands inside the repo or any of its worktrees. Inside a worktree, `.envs/` always lives in the main repo.
+
+![Web editor started with envs edit --ui](docs/assets/images/edit-ui.png)
 
 | Command | What it does |
 | --- | --- |
