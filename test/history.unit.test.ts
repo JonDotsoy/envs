@@ -3,6 +3,7 @@ import {
   compareStates,
   findHistoryPoint,
   stateAfter,
+  statesAfterEach,
   type HistoryPoint,
   type NormalizedValues,
 } from "../src/history";
@@ -59,6 +60,11 @@ describe("stateAfter", () => {
       },
     });
   });
+});
+
+test("statesAfterEach matches stateAfter for every point", () => {
+  expect(statesAfterEach(points)).toEqual(points.map((p) => stateAfter(points, p)));
+  expect(statesAfterEach([])).toEqual([]);
 });
 
 describe("compareStates", () => {

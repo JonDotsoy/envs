@@ -107,6 +107,18 @@ export function stateAfter(points: HistoryPoint[], target: HistoryPoint): Normal
   return state;
 }
 
+/** The state after each point, in the same order as `points` (`stateAfter` for every point in one pass). */
+export function statesAfterEach(points: HistoryPoint[]): NormalizedValues[] {
+  const state: NormalizedValues = { uses: {}, profiles: {} };
+  return points.map((point) => {
+    applyChanges(state, point.changes);
+    const copy = structuredClone(state);
+    copy.profiles[DEFAULT_PROFILE] ??= { defaults: {}, envs: {} };
+    for (const name of Object.values(copy.uses)) copy.profiles[name] ??= { defaults: {}, envs: {} };
+    return copy;
+  });
+}
+
 /**
  * How one entry would change when going from the current state to another one:
  * `removed` (only in the current state), `changed` (in both, different value) or `added` (only in the other).

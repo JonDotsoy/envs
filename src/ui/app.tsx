@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { HistoryPanel, type HistoryState } from "./history-panel";
 import { Logo } from "./logo";
 
 type Value = string | number | boolean;
@@ -18,6 +19,8 @@ interface SaveResult {
   logs: string[];
   errors: string[];
 }
+/** The outcome of the last Save or Restore, shown in the status badge and the log. */
+type ActionResult = SaveResult & { action: "save" | "restore" };
 
 /** One variable of a profile: its default and its override per worktree (missing/empty = not set). */
 type VarRow = { key: string; def: string; byWorktree: Record<string, string> };
@@ -133,7 +136,9 @@ function App() {
   const [profile, setProfile] = useState("default");
   const [worktree, setWorktree] = useState("");
   const [saving, setSaving] = useState(false);
-  const [result, setResult] = useState<SaveResult | { ok: false; errors: string[]; logs: string[]; created: string[] }>();
+  const [restoring, setRestoring] = useState(false);
+  const [result, setResult] = useState<ActionResult>();
+  const [history, setHistory] = useState<HistoryState>();
   const [baseline, setBaseline] = useState("");
   const [compactChoice, setCompactChoice] = useState<boolean>();
 
@@ -144,9 +149,20 @@ function App() {
     setVars(rows);
     setBaseline(snapshot(state.uses, rows, state.worktrees));
   };
+  const loadHistory = () =>
+    fetch("/api/history")
+      .then((r) => r.json() as Promise<HistoryState>)
+      .then(setHistory)
+      .catch(() => setHistory({ enabled: true, points: [] }));
   useEffect(() => {
     fetch("/api/values").then((r) => r.json() as Promise<State>).then(load);
+    loadHistory();
   }, []);
+  /** The editor's values as Save would send them: what the history panel compares each point with. */
+  const current = useMemo(
+    () => ({ uses, profiles: Object.fromEntries(Object.entries(vars).map(([n, rows]) => [n, fromVarRows(rows)])) }),
+    [uses, vars],
+  );
 
   const dirty = loaded !== undefined && snapshot(uses, vars, loaded.worktrees) !== baseline;
   // Warn before closing the tab with unsaved changes; Ctrl/Cmd+S saves.
@@ -178,8 +194,9 @@ function App() {
     setProfile(name);
   };
 
+  const busy = saving || restoring;
   const save = async () => {
-    if (saving) return;
+    if (busy) return;
     setSaving(true);
     try {
       const profiles = Object.fromEntries(
@@ -191,12 +208,35 @@ function App() {
         body: JSON.stringify({ uses, profiles }),
       });
       const body = (await res.json()) as SaveResult & { error?: string };
-      setResult(res.ok ? body : { ok: false, created: [], logs: [], errors: body.errors ?? [body.error ?? "Save failed"] });
+      setResult(res.ok ? { ...body, action: "save" } : { action: "save", ok: false, created: [], logs: body.logs ?? [], errors: body.errors ?? [body.error ?? "Save failed"] });
       if (res.ok) load((await (await fetch("/api/values")).json()) as State);
     } catch (error) {
-      setResult({ ok: false, created: [], logs: [], errors: [String(error)] });
+      setResult({ action: "save", ok: false, created: [], logs: [], errors: [String(error)] });
     } finally {
       setSaving(false);
+      loadHistory();
+    }
+  };
+
+  /** Restores a history point on the server (a new point is added), then reloads the editor and the history. */
+  const restorePoint = async (hash: string) => {
+    if (busy) return;
+    setRestoring(true);
+    try {
+      const res = await fetch("/api/restore", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ hash }),
+      });
+      const body = (await res.json()) as SaveResult & { error?: string };
+      setResult(res.ok ? { ...body, action: "restore" } : { action: "restore", ok: false, created: [], logs: body.logs ?? [], errors: body.errors ?? [body.error ?? "Restore failed"] });
+      // Even a failed push may have written values.yml, so the editor always reloads.
+      load((await (await fetch("/api/values")).json()) as State);
+    } catch (error) {
+      setResult({ action: "restore", ok: false, created: [], logs: [], errors: [String(error)] });
+    } finally {
+      setRestoring(false);
+      loadHistory();
     }
   };
 
@@ -204,24 +244,24 @@ function App() {
 
   const columns = worktree ? [worktree] : loaded.worktrees;
   const compact = compactChoice ?? columns.length > 6;
-  const status = saving
+  const status = busy
     ? undefined
     : result && !result.ok
-      ? { kind: "err", text: "Save failed" }
+      ? { kind: "err", text: result.action === "restore" ? "Restore failed" : "Save failed" }
       : dirty
         ? { kind: "dirty", text: "Unsaved changes" }
         : result?.ok
-          ? { kind: "ok", text: "Saved and pushed" }
+          ? { kind: "ok", text: result.action === "restore" ? "Restored and pushed" : "Saved and pushed" }
           : undefined;
 
   return (
     <>
       <header>
-        <span className="brand"><Logo state={saving ? "saving" : result ? (result.ok ? "saved" : "error") : "idle"} />envs<span className="dim"> / values.yml</span></span>
+        <span className="brand"><Logo state={busy ? "saving" : result ? (result.ok ? "saved" : "error") : "idle"} />envs<span className="dim"> / values.yml</span></span>
         <span role="status" className={`status ${status?.kind ?? ""}`}>
           {status?.text}
         </span>
-        <button className="primary" onClick={save} disabled={saving} aria-keyshortcuts="Control+S Meta+S" title="Save and push (Ctrl+S)">
+        <button className="primary" onClick={save} disabled={busy} aria-keyshortcuts="Control+S Meta+S" title="Save and push (Ctrl+S)">
           {saving ? "Saving…" : "Save"}
         </button>
       </header>
@@ -284,8 +324,18 @@ function App() {
           />
         </section>
 
+        <section className="card" aria-labelledby="history-title">
+          <p className="eyebrow">History</p>
+          <h2 id="history-title">Points of <code>.envs/history.ndjson</code></h2>
+          <p className="lede">
+            Hover or click a point to see what restoring it would change: <span className="key-removed">red</span> is removed,{" "}
+            <span className="key-changed">green</span> is changed or added. Restoring adds a new point; none is ever deleted.
+          </p>
+          <HistoryPanel history={history} current={current} dirty={dirty} busy={busy} onRestore={restorePoint} />
+        </section>
+
         {result && (result.logs.length > 0 || result.errors.length > 0 || result.created.length > 0) && (
-          <pre aria-label="Save log">
+          <pre aria-label={result.action === "restore" ? "Restore log" : "Save log"}>
             {[
               ...result.created.map((c) => `+ created ${c} from default`),
               ...result.logs,

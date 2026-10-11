@@ -16,7 +16,7 @@ import {
   type Value,
 } from "./history";
 
-export { applyChanges, compareStates, diffValues, findHistoryPoint, stateAfter } from "./history";
+export { applyChanges, compareStates, diffValues, findHistoryPoint, stateAfter, statesAfterEach } from "./history";
 export type { Change, HistoryPoint, NormalizedValues, StateDiff } from "./history";
 
 export const HELP = `Usage: envs <command>
