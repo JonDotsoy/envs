@@ -101,6 +101,8 @@ It never prints values, only the variable and its location (`envs.DB_PASSWORD.ma
 
 ## History
 
+See [docs/history.md](docs/history.md) for the full documentation (in Spanish).
+
 `envs` keeps a record of how `values.yml` evolved. It works with two separate concepts:
 
 | Concept | Where | What it is |

@@ -31,6 +31,14 @@ Resumen de las funcionalidades de `@jondotsoy/envs`. Para el detalle de uso, con
 
 - Validación en el editor mediante JSON Schema ([`schema/values.schema.json`](../schema/values.schema.json)), publicado en <https://jondotsoy.github.io/envs/schema.json>.
 
+## Historial
+
+- Registra cada cambio de `values.yml` en `.envs/history.ndjson`, un archivo append-only con un punto por línea.
+- Distingue dos conceptos: el **snapshot** (`values.yml`, el estado actual) y los **cambios** (el historial, solo las diferencias con el valor anterior `from` y el nuevo `to`).
+- Los puntos forman una cadena de hashes (`prev`/`hash`) y se crean con `pull`, `edit`, **Save** del editor web y `use`.
+- Activo por defecto; se desactiva con `envs config set history false`.
+- Detalle en [history.md](history.md).
+
 ## Perfiles
 
 - Cada worktree usa un perfil (`uses.<worktree>`); si no se indica, usa `default`.
