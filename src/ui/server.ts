@@ -1,4 +1,14 @@
-import { loadUiState, saveUiState, type Context, type NormalizedValues } from "../envs";
+import {
+  findRoot,
+  historyEnabled,
+  loadUiHistory,
+  loadUiState,
+  readHistoryPoints,
+  restore,
+  saveUiState,
+  type Context,
+  type NormalizedValues,
+} from "../envs";
 import { join } from "node:path";
 import { readdir } from "node:fs/promises";
 
@@ -20,6 +30,24 @@ function parseBody(body: unknown): NormalizedValues | undefined {
     }
   }
   return body as unknown as NormalizedValues;
+}
+
+/** Validates the JSON body of a restore request: `{hash}` with a whole point hash (12 hex characters). */
+function parseRestoreBody(body: unknown): string | undefined {
+  if (!isRecord(body) || typeof body.hash !== "string" || !/^[0-9a-f]{12}$/.test(body.hash)) return;
+  return body.hash;
+}
+
+/** A copy of `ctx` whose log and error lines are collected (without colors) for the response. */
+function capture(ctx: Context) {
+  const logs: string[] = [];
+  const errors: string[] = [];
+  const captured: Context = {
+    ...ctx,
+    log: (m) => logs.push(m.replace(ANSI, "")),
+    error: (m) => errors.push(m.replace(ANSI, "")),
+  };
+  return { ctx: captured, logs, errors };
 }
 
 /**
@@ -51,15 +79,28 @@ export async function serveUi(ctx: Context): Promise<number> {
         PUT: async (req) => {
           const values = parseBody(await req.json().catch(() => undefined));
           if (!values) return Response.json({ error: "Invalid values" }, { status: 400 });
-          const logs: string[] = [];
-          const errors: string[] = [];
-          const capture: Context = {
-            ...ctx,
-            log: (m) => logs.push(m.replace(ANSI, "")),
-            error: (m) => errors.push(m.replace(ANSI, "")),
-          };
-          const { created, code } = await saveUiState(capture, values);
+          const { ctx: captured, logs, errors } = capture(ctx);
+          const { created, code } = await saveUiState(captured, values);
           return Response.json({ ok: code === 0, created, logs, errors }, { status: code === 0 ? 200 : 500 });
+        },
+      },
+      "/api/history": {
+        GET: async () => Response.json(await loadUiHistory(ctx)),
+      },
+      // Restores values.yml to the state after a point: a new point is appended, none is removed.
+      "/api/restore": {
+        POST: async (req) => {
+          const hash = parseRestoreBody(await req.json().catch(() => undefined));
+          if (!hash) return Response.json({ error: "Invalid hash" }, { status: 400 });
+          const root = await findRoot(ctx.cwd);
+          // With the history off a restore would not be recorded, so the editor does not offer it.
+          if (!(await historyEnabled(root))) return Response.json({ error: "The history is off" }, { status: 409 });
+          if (!(await readHistoryPoints(root)).some((point) => point.hash === hash)) {
+            return Response.json({ error: "Unknown history point" }, { status: 404 });
+          }
+          const { ctx: captured, logs, errors } = capture(ctx);
+          const code = await restore(captured, hash);
+          return Response.json({ ok: code === 0, created: [], logs, errors }, { status: code === 0 ? 200 : 500 });
         },
       },
     },
