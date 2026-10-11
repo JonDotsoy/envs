@@ -810,4 +810,24 @@ describe("history on the first edit of a project", () => {
     ]);
     expect(history).toMatchSnapshot();
   });
+
+  test("pull detects a manual .env change, records a point and updates values.yml", async () => {
+    const before = await readHistory();
+    await Bun.write(join(ws.worktrees["feature-x"]!, ".env"), "LOG=info\nPORT=3003\n");
+
+    expect(await run(["pull"], testContext(ws.main, { now }).ctx)).toBe(0);
+
+    const history = await readHistory();
+    expect(history).toHaveLength(before.length + 1);
+    expect(history.at(-1).prev).toBe(before.at(-1).hash);
+    expect(history.at(-1).changes).toEqual([
+      { path: ["profiles", "default", "envs", "PORT", "feature-x"], from: 3002, to: 3003 },
+    ]);
+    const values = Bun.YAML.parse(await Bun.file(join(ws.main, ".envs/values.yml")).text()) as any;
+    expect(values.profiles.default.envs.PORT["feature-x"]).toBe(3003);
+
+    // Pulling again with the .env untouched adds nothing.
+    expect(await run(["pull"], testContext(ws.main, { now }).ctx)).toBe(0);
+    expect(await readHistory()).toHaveLength(history.length);
+  });
 });
