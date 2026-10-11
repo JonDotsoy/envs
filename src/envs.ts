@@ -31,6 +31,8 @@ export interface Context {
   openUrl?(url: string): Promise<void>;
   /** Resolves when the `--ui` server should stop (Ctrl+C by default). */
   waitForExit?(): Promise<void>;
+  /** Clock used to timestamp history points (tests pin it so hashes are stable). */
+  now?(): Date;
 }
 
 /** Colors are skipped when NO_COLOR (https://no-color.org) is set to a non-empty value. */
@@ -167,8 +169,9 @@ export function diffValues(before: NormalizedValues, after: NormalizedValues): C
 }
 
 /**
- * Records an edit of values.yml: `.envs/h/<hash>.json` holds only the changes and
- * `.envs/history.ndjson` gets one `{hash, prev, timestamp}` line. Nothing is written when nothing changed.
+ * Appends one point to `.envs/history.ndjson`: `{prev, timestamp, changes, hash}` on one line.
+ * `prev` is the hash of the previous point (null for the first) and `hash` covers the rest of the
+ * line, so the file is a hash chain. Nothing is written when nothing changed.
  */
 export async function recordHistory(
   root: string,
@@ -178,18 +181,15 @@ export async function recordHistory(
 ): Promise<string | undefined> {
   const changes = diffValues(before, after);
   if (changes.length === 0) return undefined;
-  // Each point keeps the hash of the previous one (null for the first) and the hash covers it, so the history is a chain.
   const historyPath = join(root, ".envs/history.ndjson");
   const last = (await Bun.file(historyPath).exists() ? await Bun.file(historyPath).text() : "")
     .trimEnd()
     .split("\n")
     .at(-1);
   const prev: string | null = last ? JSON.parse(last).hash : null;
-  const body = JSON.stringify({ prev, changes }, null, 2) + "\n";
-  const hash = createHash("sha256").update(body).digest("hex").slice(0, 12);
-  await Bun.write(join(root, ".envs/h", `${hash}.json`), body);
-  const line = JSON.stringify({ hash, prev, timestamp: now.toISOString() }) + "\n";
-  await appendFile(historyPath, line);
+  const point = { prev, timestamp: now.toISOString(), changes };
+  const hash = createHash("sha256").update(JSON.stringify(point)).digest("hex").slice(0, 12);
+  await appendFile(historyPath, JSON.stringify({ hash, ...point }) + "\n");
   return hash;
 }
 
@@ -524,7 +524,7 @@ export async function pull(ctx: Context): Promise<number> {
   // The first pull initializes the history with the whole state as its first point.
   const root = await findRoot(ctx.cwd);
   if (!(await Bun.file(join(root, ".envs/history.ndjson")).exists())) {
-    await recordHistory(root, { uses: {}, profiles: {} }, values);
+    await recordHistory(root, { uses: {}, profiles: {} }, values, ctx.now?.());
   }
   if (pulledNames.length > 0) {
     ctx.log(
@@ -655,7 +655,7 @@ export async function edit(ctx: Context, options: { ui?: boolean } = {}): Promis
   if (created.length > 0) {
     ctx.log(green(`+ created ${created.join(", ")} from ${DEFAULT_PROFILE}`));
   }
-  await recordHistory(await findRoot(ctx.cwd), before, values);
+  await recordHistory(await findRoot(ctx.cwd), before, values, ctx.now?.());
   return await push(ctx);
 }
 
@@ -683,7 +683,7 @@ export async function saveUiState(
     ((await Bun.file(path).exists() ? Bun.YAML.parse(await Bun.file(path).text()) : undefined) ?? {}) as Values,
   );
   await Bun.write(path, stringifyValues(values));
-  await recordHistory(root, before, values);
+  await recordHistory(root, before, values, ctx.now?.());
   return { created, code: await push(ctx) };
 }
 

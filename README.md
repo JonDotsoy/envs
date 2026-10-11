@@ -54,7 +54,7 @@ Run the commands inside the repo or any of its worktrees. Inside a worktree, `.e
 
 ### History
 
-Each `envs edit` (and each Save in `envs edit --ui`) that changes `values.yml` records the edit: `.envs/h/<hash>.json` contains only the changes (`{"prev": ..., "changes": [{"path": [...], "from": ..., "to": ...}]}`; `from` is absent for added entries, `to` for removed ones) and `.envs/history.ndjson` gets one `{"hash", "prev", "timestamp"}` line per edit. Each point keeps the hash of the previous one in `prev` (`null` for the first, also stored in the `.json` file and covered by the hash), so the history forms a chain. The first `envs pull` (also run by `envs edit`) creates the first point, with the whole initial state of `values.yml`. Like the rest of `.envs/`, it is ignored by git.
+Each `envs edit` (and each Save in `envs edit --ui`) that changes `values.yml` appends one line to `.envs/history.ndjson` (append-only): `{"hash", "prev", "timestamp", "changes"}`. `changes` lists only what changed (`{"path": [...], "from": ..., "to": ...}`; `from` is absent for added entries, `to` for removed ones). `prev` is the hash of the previous point (`null` for the first) and `hash` covers `prev`, `timestamp` and `changes`, so the file is a hash chain: altering or removing a point breaks every later one. The first `envs pull` (also run by `envs edit`) creates the first point, with the whole initial state of `values.yml`. Like the rest of `.envs/`, it is ignored by git.
 
 `pull`, `push` and `lint` need `.envs/values.yml` to exist: if it is missing they exit with code 1 and ask you to run `envs init` (or just use `envs edit`, which creates it).
 

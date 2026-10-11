@@ -353,169 +353,153 @@ exports[`push with many branches logs one line when the same value changes in 10
 ]
 `;
 
+
 exports[`history on the first edit of a project the first edit initializes the history with the whole state 1`] = `
-{
-  "lines": [
-    {
-      "hash": "7e6c85622d2d",
-      "prev": null,
-      "timestamp": "<timestamp>",
-    },
-  ],
-  "points": {
-    "7e6c85622d2d": {
-      "changes": [
-        {
-          "path": [
-            "uses",
-            "main",
-          ],
-          "to": "default",
-        },
-        {
-          "path": [
-            "uses",
-            "feature-x",
-          ],
-          "to": "default",
-        },
-        {
-          "path": [
-            "profiles",
-            "default",
-            "envs",
-            "LOG",
-            "main",
-          ],
-          "to": "info",
-        },
-        {
-          "path": [
-            "profiles",
-            "default",
-            "envs",
-            "LOG",
-            "feature-x",
-          ],
-          "to": "info",
-        },
-        {
-          "path": [
-            "profiles",
-            "default",
-            "envs",
-            "PORT",
-            "main",
-          ],
-          "to": 3000,
-        },
-        {
-          "path": [
-            "profiles",
-            "default",
-            "envs",
-            "PORT",
-            "feature-x",
-          ],
-          "to": 3001,
-        },
-      ],
-      "prev": null,
-    },
+[
+  {
+    "changes": [
+      {
+        "path": [
+          "uses",
+          "main",
+        ],
+        "to": "default",
+      },
+      {
+        "path": [
+          "uses",
+          "feature-x",
+        ],
+        "to": "default",
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "LOG",
+          "main",
+        ],
+        "to": "info",
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "LOG",
+          "feature-x",
+        ],
+        "to": "info",
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "PORT",
+          "main",
+        ],
+        "to": 3000,
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "PORT",
+          "feature-x",
+        ],
+        "to": 3001,
+      },
+    ],
+    "hash": "670608492435",
+    "prev": null,
+    "timestamp": "2026-01-01T00:00:00.000Z",
   },
-}
+]
 `;
 
 exports[`history on the first edit of a project later edits chain to the initial point 1`] = `
-{
-  "lines": [
-    {
-      "hash": "7e6c85622d2d",
-      "prev": null,
-      "timestamp": "<timestamp>",
-    },
-    {
-      "hash": "953e219de442",
-      "prev": "7e6c85622d2d",
-      "timestamp": "<timestamp>",
-    },
-  ],
-  "points": {
-    "7e6c85622d2d": {
-      "changes": [
-        {
-          "path": [
-            "uses",
-            "main",
-          ],
-          "to": "default",
-        },
-        {
-          "path": [
-            "uses",
-            "feature-x",
-          ],
-          "to": "default",
-        },
-        {
-          "path": [
-            "profiles",
-            "default",
-            "envs",
-            "LOG",
-            "main",
-          ],
-          "to": "info",
-        },
-        {
-          "path": [
-            "profiles",
-            "default",
-            "envs",
-            "LOG",
-            "feature-x",
-          ],
-          "to": "info",
-        },
-        {
-          "path": [
-            "profiles",
-            "default",
-            "envs",
-            "PORT",
-            "main",
-          ],
-          "to": 3000,
-        },
-        {
-          "path": [
-            "profiles",
-            "default",
-            "envs",
-            "PORT",
-            "feature-x",
-          ],
-          "to": 3001,
-        },
-      ],
-      "prev": null,
-    },
-    "953e219de442": {
-      "changes": [
-        {
-          "from": 3000,
-          "path": [
-            "profiles",
-            "default",
-            "envs",
-            "PORT",
-            "main",
-          ],
-          "to": 4000,
-        },
-      ],
-      "prev": "7e6c85622d2d",
-    },
+[
+  {
+    "changes": [
+      {
+        "path": [
+          "uses",
+          "main",
+        ],
+        "to": "default",
+      },
+      {
+        "path": [
+          "uses",
+          "feature-x",
+        ],
+        "to": "default",
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "LOG",
+          "main",
+        ],
+        "to": "info",
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "LOG",
+          "feature-x",
+        ],
+        "to": "info",
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "PORT",
+          "main",
+        ],
+        "to": 3000,
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "PORT",
+          "feature-x",
+        ],
+        "to": 3001,
+      },
+    ],
+    "hash": "670608492435",
+    "prev": null,
+    "timestamp": "2026-01-01T00:00:00.000Z",
   },
-}
+  {
+    "changes": [
+      {
+        "from": 3000,
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "PORT",
+          "main",
+        ],
+        "to": 4000,
+      },
+    ],
+    "hash": "f8ae032e201e",
+    "prev": "670608492435",
+    "timestamp": "2026-01-01T00:02:00.000Z",
+  },
+]
 `;

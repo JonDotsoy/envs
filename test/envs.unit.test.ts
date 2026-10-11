@@ -550,23 +550,22 @@ describe("profiles", () => {
 
   const history = async () =>
     (await Bun.file(join(ws.main, ".envs/history.ndjson")).text()).trim().split("\n").map((l) => JSON.parse(l));
-  const point = (hash: string) => Bun.file(join(ws.main, ".envs/h", `${hash}.json`)).json();
 
   test("the first pull initializes the history with the whole state", async () => {
     await reset("uses:\n  main: default\n  feature-x: default\nprofiles:\n  default:\n    defaults:\n      A: one\n    envs: {}\n");
     expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
     const [first, ...rest] = await history();
     expect(rest).toHaveLength(0);
-    expect(Object.keys(first).sort()).toEqual(["hash", "prev", "timestamp"]);
+    expect(Object.keys(first).sort()).toEqual(["changes", "hash", "prev", "timestamp"]);
     expect(first.prev).toBeNull();
     expect(new Date(first.timestamp).toISOString()).toBe(first.timestamp);
-    expect((await point(first.hash)).changes).toContainEqual({ path: ["profiles", "default", "defaults", "A"], to: "one" });
+    expect(first.changes).toContainEqual({ path: ["profiles", "default", "defaults", "A"], to: "one" });
     // Later pulls do not add points.
     expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
     expect(await history()).toHaveLength(1);
   });
 
-  test("edit records only the changes in .envs/h/<hash>.json, chained to the previous point", async () => {
+  test("edit appends only the changes, chained to the previous point", async () => {
     const head = "uses:\n  main: default\n  feature-x: default\nprofiles:\n  default:\n    defaults:\n";
     await reset(head + "      A: one\n    envs: {}\n");
     expect((await edit(head + "      A: two\n      B: new\n    envs: {}\n")).code).toBe(0);
@@ -574,17 +573,20 @@ describe("profiles", () => {
     expect(rest).toHaveLength(0);
     expect(first.prev).toBeNull();
     expect(second.prev).toBe(first.hash);
-    expect(await point(second.hash)).toEqual({
-      prev: first.hash,
-      changes: [
-        { path: ["profiles", "default", "defaults", "A"], from: "one", to: "two" },
-        { path: ["profiles", "default", "defaults", "B"], to: "new" },
-      ],
-    });
+    expect(second.changes).toEqual([
+      { path: ["profiles", "default", "defaults", "A"], from: "one", to: "two" },
+      { path: ["profiles", "default", "defaults", "B"], to: "new" },
+    ]);
     await edit(head + "      A: three\n      B: new\n    envs: {}\n");
     const third = (await history())[2];
     expect(third.prev).toBe(second.hash);
-    expect((await point(third.hash)).prev).toBe(second.hash);
+  });
+
+  test("the hash covers prev, timestamp and changes", async () => {
+    await reset("");
+    await edit();
+    const { hash, ...point } = (await history())[0];
+    expect(hash).toBe(new Bun.CryptoHasher("sha256").update(JSON.stringify(point)).digest("hex").slice(0, 12));
   });
 
   test("edit without changes adds no point after the initial one", async () => {
@@ -738,39 +740,33 @@ describe("history on the first edit of a project", () => {
   });
   afterAll(() => ws.cleanup());
 
-  /** The whole history: its ndjson lines (timestamps checked, then masked) and every point file by hash. */
-  const readHistory = async () => {
-    const lines = (await Bun.file(join(ws.main, ".envs/history.ndjson")).text())
+  /** The whole history file. Timestamps come from the pinned clock, so hashes are stable. */
+  const readHistory = async () =>
+    (await Bun.file(join(ws.main, ".envs/history.ndjson")).text())
       .trim()
       .split("\n")
       .map((l) => JSON.parse(l));
-    for (const line of lines) {
-      expect(new Date(line.timestamp).toISOString()).toBe(line.timestamp);
-      line.timestamp = "<timestamp>";
-    }
-    const points: Record<string, unknown> = {};
-    for (const { hash } of lines) {
-      points[hash] = await Bun.file(join(ws.main, ".envs/h", `${hash}.json`)).json();
-    }
-    return { lines, points };
-  };
+  let tick = 0;
+  /** A clock that advances one minute per call. */
+  const now = () => new Date(Date.UTC(2026, 0, 1, 0, tick++));
 
   test("the first edit initializes the history with the whole state", async () => {
     await rm(join(ws.main, ".envs"), { recursive: true, force: true });
     await Bun.write(join(ws.main, ".env"), "LOG=info\nPORT=3000\n");
     await Bun.write(join(ws.worktrees["feature-x"]!, ".env"), "LOG=info\nPORT=3001\n");
 
-    const { ctx } = testContext(ws.main);
+    const { ctx } = testContext(ws.main, { now });
     expect(await run(["edit"], ctx)).toBe(0);
 
     const history = await readHistory();
-    expect(history.lines).toHaveLength(1);
-    expect(history.lines[0].prev).toBeNull();
+    expect(history).toHaveLength(1);
+    expect(history[0].prev).toBeNull();
     expect(history).toMatchSnapshot();
   });
 
   test("later edits chain to the initial point", async () => {
     const { ctx } = testContext(ws.main, {
+      now,
       openEditor: async (path) => {
         const text = (await Bun.file(path).text()).replace("main: 3000", "main: 4000");
         await Bun.write(path, text);
@@ -780,8 +776,8 @@ describe("history on the first edit of a project", () => {
     expect(await run(["edit"], ctx)).toBe(0);
 
     const history = await readHistory();
-    expect(history.lines).toHaveLength(2);
-    expect(history.lines[1].prev).toBe(history.lines[0].hash);
+    expect(history).toHaveLength(2);
+    expect(history[1].prev).toBe(history[0].hash);
     expect(history).toMatchSnapshot();
   });
 });
