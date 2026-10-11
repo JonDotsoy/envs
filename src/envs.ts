@@ -14,6 +14,7 @@ Commands:
   edit    Pull, open .envs/values.yml in VS Code (code -w), then push
           With --ui, serve a web editor instead; its Save button pushes
   use     Select the profile of the current worktree (envs use <profile>), or list them
+  config  Read or change .envs/config.yml (config set <key> <value>, config get [key], config delete <key>)
   help    Show this help message
 `;
 
@@ -321,6 +322,75 @@ export async function init(ctx: Context): Promise<number> {
   return 0;
 }
 
+const CONFIG_USAGE = `Usage: envs config <set <key> <value> | get [key] | delete <key>>`;
+
+/** Settings stored in .envs/config.yml: flat key -> scalar. */
+type Config = Record<string, Value>;
+
+async function readConfig(path: string): Promise<Config> {
+  if (!(await Bun.file(path).exists())) return {};
+  return (Bun.YAML.parse(await Bun.file(path).text()) ?? {}) as Config;
+}
+
+async function writeConfig(root: string, path: string, config: Config) {
+  await mkdir(join(root, ".envs"), { recursive: true });
+  const gitignore = join(root, ".envs/.gitignore");
+  if (!(await Bun.file(gitignore).exists())) await Bun.write(gitignore, "*\n");
+  const sorted = Object.fromEntries(
+    Object.entries(config).sort(([a], [b]) => a.localeCompare(b)),
+  );
+  await Bun.write(path, Object.keys(sorted).length ? Bun.YAML.stringify(sorted, null, 2) + "\n" : "");
+}
+
+/** `envs config set|get|delete`: manages .envs/config.yml (created on first `set`). */
+export async function config(ctx: Context, args: string[]): Promise<number> {
+  const [action, key, ...rest] = args;
+  const root = await findRoot(ctx.cwd);
+  const path = join(root, ".envs/config.yml");
+  const current = await readConfig(path);
+  switch (action) {
+    case "set": {
+      if (!key || rest.length === 0) {
+        ctx.error(`${CONFIG_USAGE}\n\nMissing key or value for \`config set\`.`);
+        return 1;
+      }
+      current[key] = parseValue(rest.join(" "));
+      await writeConfig(root, path, current);
+      ctx.log(`${key}=${current[key]}`);
+      return 0;
+    }
+    case "get": {
+      if (!key) {
+        for (const [k, v] of Object.entries(current)) ctx.log(`${k}=${v}`);
+        return 0;
+      }
+      if (!(key in current)) {
+        ctx.error(`Config key not found: ${key}`);
+        return 1;
+      }
+      ctx.log(String(current[key]));
+      return 0;
+    }
+    case "delete": {
+      if (!key) {
+        ctx.error(`${CONFIG_USAGE}\n\nMissing key for \`config delete\`.`);
+        return 1;
+      }
+      if (!(key in current)) {
+        ctx.error(`Config key not found: ${key}`);
+        return 1;
+      }
+      delete current[key];
+      await writeConfig(root, path, current);
+      ctx.log(`Deleted ${key}`);
+      return 0;
+    }
+    default:
+      ctx.error(CONFIG_USAGE);
+      return 1;
+  }
+}
+
 /** Writes the values of each worktree's profile to its `.env`; `only` limits it to one worktree. */
 export async function push(ctx: Context, only?: string): Promise<number> {
   const read = await readValues(ctx);
@@ -575,6 +645,8 @@ export async function run(
       return await edit(ctx, { ui: args.includes("--ui") });
     case "use":
       return await use(ctx, args[1]);
+    case "config":
+      return await config(ctx, args.slice(1));
     default:
       ctx.error(`Unknown command: ${command}\n\n${HELP}`);
       return 1;

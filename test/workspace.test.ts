@@ -267,3 +267,25 @@ UNTOUCHED="keep me"
 NEW_KEY=added
 `);
 });
+
+test("envs config set/get/delete", async () => {
+  const bin = join(import.meta.dir, "../src/bin/envs.ts");
+  const dir = ws.worktrees["wt-2"]!;
+  const envs = (...args: string[]) =>
+    $`bun ${bin} config ${args}`.cwd(dir).nothrow().quiet();
+
+  expect((await envs("get", "port")).exitCode).toBe(1);
+  expect((await envs("set", "port", "3000")).exitCode).toBe(0);
+  expect((await envs("set", "name", "my", "app")).exitCode).toBe(0);
+  // Stored in the main workspace, not in the worktree.
+  expect(await Bun.file(join(ws.main, ".envs/config.yml")).exists()).toBe(true);
+  expect(await Bun.file(join(dir, ".envs/config.yml")).exists()).toBe(false);
+
+  expect((await envs("get", "port")).stdout.toString()).toBe("3000\n");
+  expect((await envs("get")).stdout.toString()).toBe("name=my app\nport=3000\n");
+
+  expect((await envs("delete", "port")).exitCode).toBe(0);
+  expect((await envs("delete", "port")).exitCode).toBe(1);
+  expect((await envs("get", "port")).exitCode).toBe(1);
+  expect((await envs("bogus")).exitCode).toBe(1);
+});
