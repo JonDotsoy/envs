@@ -108,6 +108,19 @@ Falla con código 1 si no se indica el hash, si ninguno coincide o si el prefijo
 
 Un perfil que no tiene valores en el estado restablecido queda vacío; no se copia de `default`.
 
+## Panel History del editor web
+
+`envs edit --ui` incluye un panel **History** con los puntos de `history.ndjson`, del más reciente al más antiguo: hash corto, fecha y cantidad de cambios.
+
+- Al pasar el mouse sobre un punto, o al hacer clic para dejarlo seleccionado (el clic nunca restablece), se compara el estado tras ese punto con los valores del editor, agrupados por perfiles de los worktrees (`uses`) y por perfil (`defaults`, `envs`):
+  - **rojo**: la propiedad existe ahora y se eliminaría;
+  - **verde**: la propiedad cambiaría (valor actual → valor en ese punto) o se agregaría (marcada como *added*).
+- Si el estado es el mismo, indica "No differences".
+- **Restore** pide confirmación (y avisa que se perderán los cambios sin guardar del editor) y hace lo mismo que `envs restore <hash>`: agrega un punto nuevo, no borra ninguno, ejecuta `push` y recarga el editor y el panel.
+- Con el historial desactivado o vacío, el panel muestra un mensaje en lugar de la lista y no permite restablecer.
+
+El servidor (solo en `127.0.0.1`) expone `GET /api/history` (`{enabled, points}`, en orden del archivo) y `POST /api/restore` con `{"hash": "<12 caracteres>"}`.
+
 ## Activar o desactivar
 
 El historial está activo por defecto. Lee la clave `history` de `.envs/config.yml`; solo un `false` explícito lo desactiva y `values.yml` se sigue actualizando con normalidad.

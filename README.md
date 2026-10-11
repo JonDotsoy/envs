@@ -41,7 +41,7 @@ Run the commands inside the repo or any of its worktrees. Inside a worktree, `.e
 | Command | What it does |
 | --- | --- |
 | `envs edit` | Runs `init` if `.envs/values.yml` does not exist yet, then runs `pull`, opens `values.yml` with `code -w` and, when the editor closes, runs `push`. If the editor fails, it does not `push`. |
-| `envs edit --ui` | Same `init` and `pull`, but instead of VS Code it starts a local server (`127.0.0.1`, random port) and opens a React web editor with the values of `values.yml` (worktree profiles, defaults and per-worktree values). The **Save** button in the top right corner writes `values.yml` and runs `push`. Stop the server with Ctrl+C. |
+| `envs edit --ui` | Same `init` and `pull`, but instead of VS Code it starts a local server (`127.0.0.1`, random port) and opens a React web editor with the values of `values.yml` (worktree profiles, defaults and per-worktree values). The **Save** button in the top right corner writes `values.yml` and runs `push`. Its **History** panel lists the history points (newest first); hovering or clicking a point shows what restoring it would change in the editor (red: removed, green: changed or added), and its **Restore** button, after a confirmation, runs `envs restore` for that point. Stop the server with Ctrl+C. |
 | `envs init` | Creates `.envs/`, `.envs/.gitignore` (containing `*`) and an empty `.envs/values.yml`. Does not overwrite existing files. |
 | `envs pull` | Reads the `.env` of the main repo and of each worktree and writes it to `values.yml`. Variables that are no longer in a `.env` are removed from `values.yml` for that worktree. |
 | `envs push` | Writes `values.yml` to the `.env` of each worktree. Updates existing variables in place, appends new ones at the end, and keeps comments and variables that are not in `values.yml`. |
@@ -147,6 +147,15 @@ envs config set history true    # record again (or `envs config delete history`)
 ```
 
 Changes made while it is off get no point: when you turn it on again, the next point starts from the `values.yml` of that moment.
+
+### In the web editor
+
+The **History** panel of `envs edit --ui` lists the points, newest first, with their short hash, time and number of changes. Hovering a point, or clicking it to keep it selected (a click never restores), compares the state after that point with the values in the editor, grouped by worktree profiles and by profile (`defaults`, `envs`):
+
+- **red**: the entry exists now and would be removed;
+- **green**: the entry would change (current value → value at that point) or would be added.
+
+When they are equal it says "No differences". **Restore** asks for confirmation (and warns that unsaved editor changes will be lost), then restores the point like `envs restore`: a new point is appended, none is removed, and the editor and the panel reload. With the history off the panel shows an empty state and offers no restore.
 
 The file is created with mode `600` because it holds variable values. Like the rest of `.envs/`, it is ignored by git.
 
