@@ -280,6 +280,7 @@ test("envs config set/get/delete", async () => {
   // Stored in the main workspace, not in the worktree.
   expect(await Bun.file(join(ws.main, ".envs/config.yml")).exists()).toBe(true);
   expect(await Bun.file(join(dir, ".envs/config.yml")).exists()).toBe(false);
+  expect((await stat(join(ws.main, ".envs/config.yml"))).mode & 0o777).toBe(0o600);
 
   expect((await envs("get", "port")).stdout.toString()).toBe("3000\n");
   expect((await envs("get")).stdout.toString()).toBe("name=my app\nport=3000\n");

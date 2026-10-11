@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { chmod, mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { stat } from "node:fs/promises";
 import { $ } from "bun";
@@ -339,7 +339,9 @@ async function writeConfig(root: string, path: string, config: Config) {
   const sorted = Object.fromEntries(
     Object.entries(config).sort(([a], [b]) => a.localeCompare(b)),
   );
-  await Bun.write(path, Object.keys(sorted).length ? Bun.YAML.stringify(sorted, null, 2) + "\n" : "");
+  await Bun.write(path, Object.keys(sorted).length ? Bun.YAML.stringify(sorted, null, 2) + "\n" : "", { mode: 0o600 });
+  // `mode` only applies on creation; also tighten a file that already existed.
+  await chmod(path, 0o600);
 }
 
 /** `envs config set|get|delete`: manages .envs/config.yml (created on first `set`). */

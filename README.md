@@ -46,7 +46,7 @@ Run the commands inside the repo or any of its worktrees. Inside a worktree, `.e
 | `envs pull` | Reads the `.env` of the main repo and of each worktree and writes it to `values.yml`. Variables that are no longer in a `.env` are removed from `values.yml` for that worktree. |
 | `envs push` | Writes `values.yml` to the `.env` of each worktree. Updates existing variables in place, appends new ones at the end, and keeps comments and variables that are not in `values.yml`. |
 | `envs use [profile]` | Sets the profile of the current worktree (`uses.<worktree>`) and pushes that worktree. Without arguments it lists the profile of each worktree. The profile must already exist in `values.yml`. |
-| `envs config set <key> <value>` | Saves a setting in `.envs/config.yml` (created on demand, along with `.envs/.gitignore` if missing). `true`, `false` and numbers are stored as such; the rest as strings. |
+| `envs config set <key> <value>` | Saves a setting in `.envs/config.yml` (created on demand with mode `600`, along with `.envs/.gitignore` if missing). `true`, `false` and numbers are stored as such; the rest as strings. |
 | `envs config get [key]` | Prints the value of a setting, or every `key=value` when no key is given. Exits with code 1 if the key does not exist. |
 | `envs config delete <key>` | Removes a setting. Exits with code 1 if the key does not exist. |
 | `envs lint` | Checks security and prints a warning for each problem. Exits with code 1 if there is any (useful in CI). See below. |
