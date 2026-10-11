@@ -731,6 +731,20 @@ describe("profiles", () => {
     expect(await run(["use", "nope"], bad.ctx)).toBe(1);
     expect(bad.errors[0]).toContain('Unknown profile "nope"');
   });
+
+  test("use records the profile change in the history", async () => {
+    await reset("uses:\n  main: default\n  feature-x: default\nprofiles:\n  default:\n    defaults: { A: 1 }\n  dev:\n    defaults: { A: 2 }\n");
+    expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
+    expect(await run(["use", "dev"], testContext(ws.worktrees["feature-x"]!).ctx)).toBe(0);
+    const [first, second, ...rest] = (await Bun.file(join(ws.main, ".envs/history.ndjson")).text())
+      .trim().split("\n").map((l) => JSON.parse(l));
+    expect(rest).toHaveLength(0);
+    expect(second.prev).toBe(first.hash);
+    expect(second.changes).toEqual([{ path: ["uses", "feature-x"], from: "default", to: "dev" }]);
+    // Selecting the profile it already has changes nothing, so no point is added.
+    expect(await run(["use", "dev"], testContext(ws.worktrees["feature-x"]!).ctx)).toBe(0);
+    expect((await Bun.file(join(ws.main, ".envs/history.ndjson")).text()).trim().split("\n")).toHaveLength(2);
+  });
 });
 
 describe("history on the first edit of a project", () => {

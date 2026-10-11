@@ -562,9 +562,11 @@ export async function use(ctx: Context, profile?: string): Promise<number> {
     ctx.error("Run `envs use` inside a git worktree.");
     return 1;
   }
+  const before = structuredClone(values);
   for (const { name } of worktrees) values.uses[name] ??= DEFAULT_PROFILE;
   values.uses[current.name] = profile;
   await Bun.write(read.path, stringifyValues(values));
+  await recordHistory(await findRoot(ctx.cwd), before, values, ctx.now?.());
   return await push(ctx, current.name);
 }
 
