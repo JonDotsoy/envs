@@ -31,6 +31,7 @@ Resumen de las funcionalidades de `@jondotsoy/envs`. Para el detalle de uso, con
 
 ![Editor web iniciado con envs edit --ui](assets/images/edit-ui.png)
 
+- Recorrido con capturas de cada acción (editar, perfiles, guardar, historial y restablecer) en [ui.md](ui.md).
 - Validación en el editor mediante JSON Schema ([`schema/values.schema.json`](../schema/values.schema.json)), publicado en <https://jondotsoy.github.io/envs/schema.json>.
 
 ## Historial
