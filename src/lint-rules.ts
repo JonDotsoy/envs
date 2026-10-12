@@ -65,12 +65,12 @@ const WEAK_VALUES = new Set([
   "xxx",
 ]);
 
-/** Well-known secret formats; the message never includes the matched value. */
+/** Well-known secret formats (not glued to a longer word: `task-…` is not `sk-…`); the message never includes the matched value. */
 const SECRET_PATTERNS: [RegExp, string][] = [
-  [/AKIA[0-9A-Z]{16}/, "an AWS access key id"],
-  [/gh[pousr]_[A-Za-z0-9]{36,}/, "a GitHub token"],
-  [/sk-[A-Za-z0-9_-]{20,}/, "an API secret key"],
-  [/xox[abprs]-[A-Za-z0-9-]{10,}/, "a Slack token"],
+  [/(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}/, "an AWS access key id"],
+  [/(?<![A-Za-z0-9])gh[pousr]_[A-Za-z0-9]{36,}/, "a GitHub token"],
+  [/(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}/, "an API secret key"],
+  [/(?<![A-Za-z0-9])xox[abprs]-[A-Za-z0-9-]{10,}/, "a Slack token"],
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, "a private key"],
 ];
 
@@ -83,8 +83,10 @@ export function dotenvProblem(key: string, text: string): string | undefined {
   if (!/^[\w.-]+$/.test(key)) {
     return "the name is not a valid variable name (only letters, digits, `_`, `.` and `-`)";
   }
-  if (text.includes("'") && text.includes('"') && text.includes("`")) {
-    return "the value has single, double and backtick quotes at once, so no .env quoting can hold it as is";
+  // `formatDotenvValue` falls back to backticks when `"` (or a literal `\n`) and `'` rule the others out.
+  const needsBackticks = text.includes("'") && (text.includes('"') || /\\[nr]/.test(text));
+  if (needsBackticks && text.includes("`")) {
+    return "the value needs backtick quoting (it has a single quote and a double quote or a literal `\\n`) and also has a backtick, so no .env quoting can hold it as is";
   }
   if (/[\r\n]/.test(text)) {
     return "the value has a line break, which a .env file cannot hold safely (write it on one line, with `\\n` escapes if the application expects them)";

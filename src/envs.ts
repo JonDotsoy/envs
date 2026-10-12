@@ -505,7 +505,7 @@ export async function listWorktrees(cwd: string): Promise<Worktree[]> {
     });
 }
 
-/** Minimal .env parser: KEY=VALUE lines, `#` comments, optional quotes and `export`. */
+/** Minimal .env parser: KEY=VALUE lines, `#` comments, optional quotes (`"`, `'` or backtick) and `export`. */
 export function parseDotenv(text: string): Record<string, string> {
   const result = dict<string>();
   for (const raw of text.split(/\r?\n/)) {
@@ -515,7 +515,7 @@ export function parseDotenv(text: string): Record<string, string> {
     if (!match) continue;
     let value = match[2]!.trim();
     const quote = value[0];
-    if ((quote === '"' || quote === "'") && value.lastIndexOf(quote) > 0) {
+    if ((quote === '"' || quote === "'" || quote === "`") && value.lastIndexOf(quote) > 0) {
       value = value.slice(1, value.lastIndexOf(quote));
     } else {
       value = value.replace(/\s+#.*$/, "");

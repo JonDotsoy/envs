@@ -54,6 +54,10 @@ describe("value rules", () => {
     const [violation] = await rules.find((r) => r.id === "secret-pattern")!.check(context(values));
     expect(violation?.message).not.toContain(token);
     expect(await run("secret-pattern", { defaults: { K: "AKIAABCDEFGHIJKLMNOP" } })).toEqual(["defaults.K"]);
+    expect(await run("secret-pattern", { defaults: { K: "sk-abcdefghijklmnopqrstuvwx" } })).toEqual(["defaults.K"]);
+    for (const name of ["task-management-service-prod", "risk-assessment-engine-eu-west", "desk-booking-frontend-staging"]) {
+      expect(await run("secret-pattern", { defaults: { K: name } })).toEqual([]);
+    }
     expect(await run("secret-pattern", { defaults: { K: "-----BEGIN RSA PRIVATE KEY-----" } })).toEqual(["defaults.K"]);
   });
 
