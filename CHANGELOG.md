@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- The token in the URL that `envs edit --ui` opens is now single-use: the first visit trades it for a session cookie with a different random value, and the URL stops working (`401`), so it is useless if read later from the browser history or the terminal. The browser is opened on a private temporary page (mode `600`, removed as soon as the token is used) that redirects to the URL, so the token never appears in the arguments of the opener process (`ps`). If the browser cannot be opened, the URL is printed with a message to open it manually. Using it prints a fresh single-use URL to stdout right away (`New single-use URL: ...`).
+
 ### Added
 
 - The web editor (`envs edit --ui`) has a **History** panel: it lists the history points newest first; hovering or clicking a point shows what restoring it would change in the editor (red: removed, green: changed or added), and **Restore** restores it after a confirmation, adding a new point. New endpoints `GET /api/history` and `POST /api/restore`.

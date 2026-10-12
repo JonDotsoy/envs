@@ -2,6 +2,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { chmod, mkdir, open, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { stat } from "node:fs/promises";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { appendFile, truncate } from "node:fs/promises";
 import { $ } from "bun";
@@ -49,8 +51,9 @@ export interface Context {
   error(message: string): void;
   /** Opens a file in the editor and resolves with its exit code once closed. */
   openEditor(path: string): Promise<number>;
-  /** Opens a URL in the default browser (best effort). */
-  openUrl?(url: string): Promise<void>;
+  /** Opens a URL in the default browser; rejects when it cannot (the caller then shows the URL).
+   * May resolve with a function that removes what it left behind; the caller runs it once the URL is used. */
+  openUrl?(url: string): Promise<void | (() => void)>;
   /** Resolves when the `--ui` server should stop (Ctrl+C by default). */
   waitForExit?(): Promise<void>;
   /** Clock used to timestamp history points (tests pin it so hashes are stable). */
@@ -99,10 +102,21 @@ export const defaultContext = (): Context => ({
   openUrl: async (url) => {
     const opener =
       process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
+    // The opener's arguments are visible to every user in `ps`, so the URL (it carries the token)
+    // never goes there: the opener gets a private local page that redirects to it.
+    const dir = mkdtempSync(join(tmpdir(), "envs-"));
+    const cleanup = () => rmSync(dir, { recursive: true, force: true });
     try {
-      await Bun.spawn([opener, url], { stdio: ["ignore", "ignore", "ignore"] }).exited;
-    } catch {
-      // No opener available: the URL is already printed.
+      const page = join(dir, "open.html");
+      writeFileSync(page, `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${url}"><script>location.replace(${JSON.stringify(url)})</script>`, { mode: 0o600 });
+      process.once("exit", cleanup);
+      setTimeout(cleanup, 60_000).unref();
+      const code = await Bun.spawn([opener, page], { stdio: ["ignore", "ignore", "ignore"] }).exited;
+      if (code !== 0) throw new Error(`${opener} exited with code ${code}`);
+      return cleanup;
+    } catch (error) {
+      cleanup();
+      throw error;
     }
   },
   waitForExit: () =>

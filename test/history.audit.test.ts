@@ -148,11 +148,12 @@ async function startUi(d: Demo) {
   });
   const done = serveUi(ctx);
   await got;
-  // The opened URL carries the access token: split it into the plain origin and the token.
+  // The opened URL carries a single-use token: trade it for the session secret, as the browser does.
   const opened = new URL(url);
+  const session = (await fetch(url, { redirect: "manual" })).headers.get("set-cookie")?.split(";")[0]?.split("=")[1] ?? "";
   return {
     url: opened.origin,
-    token: opened.searchParams.get("token")!,
+    token: session,
     stop: async () => (stop(), await done),
   };
 }

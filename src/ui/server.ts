@@ -102,14 +102,18 @@ function presentedToken(req: Request): string | undefined {
  *   rebinding sends its own host name and is refused (421).
  * - `Origin`, when present, must be this server too (403): another site cannot write to it.
  * - A random token, unique to each run and printed only in the URL that is opened, is required
- *   (401). The browser trades it for an HttpOnly, SameSite=Strict cookie on the first visit, so a
- *   program that merely finds the port cannot read or change anything.
+ *   (401). It is single-use: the first visit trades it for a session secret, set as an HttpOnly,
+ *   SameSite=Strict cookie, and the token in the URL stops working. So a program that merely finds
+ *   the port, or reads the URL later from the browser history or the terminal, gets nothing.
  * - Requests with a body must be `application/json` (415), which a cross-site form or a
  *   "simple" fetch cannot send without a preflight this server never allows.
  */
 export async function serveUi(ctx: Context): Promise<number> {
   const assets = await loadAssets();
-  const token = randomBytes(24).toString("base64url");
+  // The token in the URL, valid for one visit and then replaced by a new one; `session` is what that visit trades it for.
+  let opened: Promise<void | (() => void)> | undefined;
+  let token = randomBytes(24).toString("base64url");
+  const session = randomBytes(24).toString("base64url");
   const guard = (handler: (req: Request) => Response | Promise<Response>) => async (req: Request) => {
     const port = server.port;
     const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
@@ -121,17 +125,22 @@ export async function serveUi(ctx: Context): Promise<number> {
       return new Response("Forbidden origin", { status: 403 });
     }
     const url = new URL(req.url);
-    // First visit: trade the token in the URL for the cookie and drop it from the address bar.
+    // First visit: trade the token in the URL (once) for the cookie and drop it from the address bar.
     if (url.pathname === "/" && sameToken(url.searchParams.get("token"), token)) {
+      // The token is spent: print a fresh single-use URL right away (for another browser or after closing this one).
+      token = randomBytes(24).toString("base64url");
+      ctx.log(`New single-use URL: ${urlWith(token)}`);
+      // The page that redirected to the spent token is no longer needed.
+      void opened?.then((cleanup) => cleanup?.(), () => {});
       return new Response(null, {
         status: 302,
         headers: {
           location: "/",
-          "set-cookie": `${TOKEN_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/`,
+          "set-cookie": `${TOKEN_COOKIE}=${session}; HttpOnly; SameSite=Strict; Path=/`,
         },
       });
     }
-    if (!sameToken(presentedToken(req), token)) {
+    if (!sameToken(presentedToken(req), session)) {
       return new Response("Unauthorized: open the address printed by `envs edit --ui`.", { status: 401 });
     }
     if (req.method !== "GET" && req.method !== "HEAD" && !req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
@@ -182,9 +191,16 @@ export async function serveUi(ctx: Context): Promise<number> {
     }),
   });
   // The token travels only in this URL (printed and opened), never stored or logged elsewhere.
-  const url = `http://127.0.0.1:${server.port}/?token=${token}`;
+  const urlWith = (t: string) => `http://127.0.0.1:${server.port}/?token=${t}`;
+  const url = urlWith(token);
   ctx.log(`Web editor running at ${url} (Ctrl+C to stop)`);
-  await ctx.openUrl?.(url);
+  try {
+    opened = ctx.openUrl?.(url);
+    await opened;
+  } catch {
+    // The opener is missing or failed: the user opens the address by hand.
+    ctx.log(`Could not open the browser. Open this address manually: ${url}`);
+  }
   await (ctx.waitForExit ?? (() => new Promise<void>(() => {})))();
   await server.stop(true);
   return 0;

@@ -10,12 +10,15 @@ let uiToken = "";
 /** fetch that presents the editor's token, as the browser does with the cookie it gets from the URL. */
 const fetch = ((input: string | URL | Request, init: RequestInit = {}) =>
   realFetch(input, { ...init, headers: { "x-envs-token": uiToken, ...(init.headers as Record<string, string>) } })) as typeof globalThis.fetch;
-/** The URL `envs edit --ui` opens carries the token: remember it and return the plain origin. */
-const split = (opened: string) => {
+/** Visits the URL `envs edit --ui` opens, as the browser does: the token in it is traded for the session cookie. Returns the plain origin. */
+const split = async (opened: string) => {
   const parsed = new URL(opened);
-  uiToken = parsed.searchParams.get("token") ?? "";
+  uiToken = await redeem(opened);
   return parsed.origin;
 };
+/** Trades the single-use token in the URL for the session secret (the cookie's value). */
+const redeem = async (opened: string) =>
+  (await realFetch(opened, { redirect: "manual" })).headers.get("set-cookie")?.split(";")[0]?.split("=")[1] ?? "";
 
 let ws: Workspace;
 beforeAll(async () => {
@@ -41,7 +44,7 @@ test("edit --ui serves the values and Save writes values.yml and pushes", async 
   };
   const done = run(["edit", "--ui"], ctx);
   while (!url) await Bun.sleep(20);
-  url = split(url);
+  url = await split(url);
 
   const html = await (await fetch(url)).text();
   expect(html).toContain('<div id="root">');
@@ -87,7 +90,7 @@ async function startUi(cwd: string, now?: () => Date) {
   };
   const done = run(["edit", "--ui"], ctx);
   while (!url) await Bun.sleep(20);
-  url = split(url);
+  url = await split(url);
   return {
     url,
     stop: async () => {
@@ -282,13 +285,14 @@ describe("web editor access control", () => {
   afterAll(() => aws.cleanup());
 
   /** Starts the editor and also returns the URL exactly as it is opened (with the token). */
-  async function open() {
+  async function open({ redeemed = true } = {}) {
     let opened = "";
+    const logs: string[] = [];
     let stop!: () => void;
     const exit = new Promise<void>((resolve) => (stop = resolve));
     const done = run(["edit", "--ui"], {
       cwd: aws.main,
-      log: () => {},
+      log: (m) => logs.push(m),
       error: () => {},
       openEditor: async () => 0,
       openUrl: async (u) => {
@@ -300,21 +304,70 @@ describe("web editor access control", () => {
     const parsed = new URL(opened);
     return {
       opened,
+      logs,
       origin: parsed.origin,
       host: parsed.host,
       port: parsed.port,
-      token: parsed.searchParams.get("token")!,
+      urlToken: parsed.searchParams.get("token")!,
+      /** The session secret the URL's token was traded for (empty when \`redeemed\` is false). */
+      token: redeemed ? await redeem(opened) : "",
       stop: async () => (stop(), await done),
     };
   }
+
+  test("when the browser cannot be opened the URL is printed to open by hand", async () => {
+    const logs: string[] = [];
+    let stop!: () => void;
+    const exit = new Promise<void>((resolve) => (stop = resolve));
+    const done = run(["edit", "--ui"], {
+      cwd: aws.main,
+      log: (m) => logs.push(m),
+      error: () => {},
+      openEditor: async () => 0,
+      openUrl: async () => {
+        throw new Error("xdg-open: not found");
+      },
+      waitForExit: () => exit,
+    });
+    while (!logs.some((l) => l.includes("Could not open"))) await Bun.sleep(20);
+    stop();
+    await done;
+    const line = logs.find((l) => l.includes("Could not open"))!;
+    expect(line).toMatch(/^Could not open the browser\. Open this address manually: http:\/\/127\.0\.0\.1:\d+\/\?token=[A-Za-z0-9_-]{32}$/);
+  });
+
+  test("what the opener left behind (the temporary page) is removed as soon as the token is used", async () => {
+    let opened = "";
+    let removed = 0;
+    let stop!: () => void;
+    const exit = new Promise<void>((resolve) => (stop = resolve));
+    const done = run(["edit", "--ui"], {
+      cwd: aws.main,
+      log: () => {},
+      error: () => {},
+      openEditor: async () => 0,
+      openUrl: async (u) => {
+        opened = u;
+        return () => void removed++;
+      },
+      waitForExit: () => exit,
+    });
+    while (!opened) await Bun.sleep(20);
+    expect(removed).toBe(0);
+    await redeem(opened);
+    await Bun.sleep(20);
+    expect(removed).toBe(1);
+    stop();
+    await done;
+  });
 
   test("the opened URL carries a random token, different on every run", async () => {
     const a = await open();
     await a.stop();
     const b = await open();
     await b.stop();
-    expect(a.token).toMatch(/^[A-Za-z0-9_-]{32}$/);
-    expect(a.token).not.toBe(b.token);
+    expect(a.urlToken).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(a.urlToken).not.toBe(b.urlToken);
   });
 
   test("without the token (or with a wrong one) every route answers 401 and reveals nothing", async () => {
@@ -346,7 +399,7 @@ describe("web editor access control", () => {
   });
 
   test("the URL's token is traded for an HttpOnly SameSite=Strict cookie, and the cookie alone gives access", async () => {
-    const ui = await open();
+    const ui = await open({ redeemed: false });
     try {
       const first = await realFetch(ui.opened, { redirect: "manual" });
       expect(first.status).toBe(302);
@@ -360,6 +413,20 @@ describe("web editor access control", () => {
       expect(await page.text()).toContain('<div id="root">');
       const values = await realFetch(ui.origin + "/api/values", { headers: { cookie: pair } });
       expect(values.status).toBe(200);
+      // The token is single-use: the session secret is not the URL's token, and the URL no longer works.
+      expect(pair).not.toContain(ui.urlToken);
+      const again = await realFetch(ui.opened, { redirect: "manual" });
+      expect(again.status).toBe(401);
+      expect(again.headers.get("set-cookie")).toBeNull();
+      expect((await realFetch(ui.origin + "/api/values", { headers: { "x-envs-token": ui.urlToken } })).status).toBe(401);
+      // Using the token printed a fresh single-use URL, which works once and gives the same session.
+      const next = ui.logs.map((l) => l.match(/New single-use URL: (\S+)/)?.[1]).find(Boolean)!;
+      expect(next).toBeTruthy();
+      expect(new URL(next).searchParams.get("token")).not.toBe(ui.urlToken);
+      const second = await realFetch(next, { redirect: "manual" });
+      expect(second.status).toBe(302);
+      expect(second.headers.get("set-cookie")!.split(";")[0]).toBe(pair);
+      expect((await realFetch(next, { redirect: "manual" })).status).toBe(401);
       // A wrong token in the URL gets no cookie.
       const bad = await realFetch(ui.origin + "/?token=nope", { redirect: "manual" });
       expect(bad.status).toBe(401);
