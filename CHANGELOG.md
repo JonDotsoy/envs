@@ -29,6 +29,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- `envs push` refuses, writing nothing, a variable name that is not valid or a value with a line break (it would inject another variable into the `.env`); Save in the web editor refuses it before saving, and `envs lint` reports it as `unsafe-dotenv-value`.
+- The hash chain of the history is verified: `envs restore` refuses (unless `--force`) when a point was edited, removed or reordered, other commands warn, and the History panel flags it.
 - Variables, profiles and worktrees named `__proto__`, `constructor`, `toString`… are now ordinary names: values, history and `.env` data are held in maps without a prototype and read by own key, so they no longer pollute `Object.prototype` (through `values.yml`, the web editor API or a history file), break `pull`/`push` (a branch called `constructor`) or get silently lost (a variable called `__proto__`).
 - The web editor server refuses request bodies over 5 MiB (`413`), so a single request can no longer dump hundreds of megabytes into `values.yml`, the history and the `.env` files.
 - The web editor server (`envs edit --ui`) now checks every request: a random per-run token (in the printed URL, traded for an `HttpOnly` `SameSite=Strict` cookie), the `Host` (no DNS rebinding), the `Origin` and `application/json` bodies. Any other program, or a web page, can no longer read the secrets or write through it.

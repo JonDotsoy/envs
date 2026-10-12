@@ -21,6 +21,7 @@ Resumen de las funcionalidades de `@jondotsoy/envs`. Para el detalle de uso, con
 | `envs config set <clave> <valor>` / `get [clave]` / `delete <clave>` | Gestiona la configuración guardada en `.envs/config.yml`. |
 
 - `push` actualiza las variables existentes en su lugar, agrega las nuevas al final y conserva los comentarios.
+- `push` se niega, sin escribir nada, si un nombre de variable no es válido o un valor tiene un salto de línea (empezaría otra línea del `.env` e inyectaría otra variable). Escríbelo en una línea, con secuencias `\n` si la aplicación las espera. `envs lint` lo avisa (`unsafe-dotenv-value`) y Save en el editor web lo rechaza antes de guardar.
 - `push` también **elimina las variables huérfanas**: las que `envs` administra (están o estuvieron en `values.yml` o en su historial) pero que el worktree ya no resuelve, por ejemplo tras `envs restore`. Las variables que `envs` nunca administró no se tocan. Cada eliminación se informa en la salida (`✕ VARIABLE removed from …`), sin mostrar valores.
 - Con `envs push` solo se muestran las variables cuyo valor cambia.
 
