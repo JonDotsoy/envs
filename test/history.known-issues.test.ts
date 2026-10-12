@@ -483,7 +483,8 @@ describe("security", () => {
     }
   }, T);
 
-  bug("H19 no practical body limit: a ~20 MB PUT is accepted and dumped into values.yml, the history and the .env", async () => {
+  // Fixed: the server limits the size of a request body (413).
+  test("H19 (fixed) a ~20 MB PUT is refused instead of being dumped into values.yml, the history and the .env", async () => {
     const d = await demo();
     const ui = await startUi(d);
     try {
@@ -495,7 +496,8 @@ describe("security", () => {
         headers: { "content-type": "application/json", "x-envs-token": ui.token },
         body: JSON.stringify(state),
       });
-      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.status).toBe(413);
+      expect(await d.text()).not.toContain("JUNK_");
     } finally {
       await ui.stop();
     }

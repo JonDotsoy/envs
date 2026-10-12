@@ -51,7 +51,7 @@ Additionally:
 
 ## Web editor (`envs edit --ui`)
 
-The server listens on `127.0.0.1` only and exposes the values of every `.env`, secrets included, so each request must pass these checks: a random per-run access token (in the printed URL, then an `HttpOnly`, `SameSite=Strict` cookie), a `Host` of this server (no DNS rebinding), an `Origin` of this server and `application/json` bodies; it never answers CORS preflights. Open only the address printed by the command and do not share it: it carries the token. See [docs/ui.md](docs/ui.md).
+The server listens on `127.0.0.1` only and exposes the values of every `.env`, secrets included, so each request must pass these checks: a random per-run access token (in the printed URL, then an `HttpOnly`, `SameSite=Strict` cookie), a `Host` of this server (no DNS rebinding), an `Origin` of this server, `application/json` bodies and a body of at most 5 MiB; it never answers CORS preflights. Open only the address printed by the command and do not share it: it carries the token. See [docs/ui.md](docs/ui.md).
 
 ## The history
 

@@ -70,6 +70,13 @@ async function loadAssets(): Promise<Map<string, Blob>> {
 
 const TOKEN_COOKIE = "envs_token";
 
+/**
+ * Largest request body the server reads (Bun answers 413 beyond it). A values.yml with hundreds of
+ * variables for dozens of worktrees is a few hundred KB; the default limit of 128 MB would let one
+ * request dump that much into values.yml, the history and the .env files.
+ */
+export const MAX_BODY_BYTES = 5 * 1024 * 1024;
+
 /** Constant-time comparison of a presented token with the real one. */
 function sameToken(presented: string | null | undefined, token: string): boolean {
   if (!presented) return false;
@@ -134,6 +141,7 @@ export async function serveUi(ctx: Context): Promise<number> {
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
+    maxRequestBodySize: MAX_BODY_BYTES,
     routes: {
       "/api/values": {
         GET: guard(async () => Response.json(await loadUiState(ctx))),

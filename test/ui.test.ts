@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { $ } from "bun";
 import { compareStates, run, stateAfter, type Context } from "../src/envs";
+import { MAX_BODY_BYTES } from "../src/ui/server";
 import { createWorkspace, type Workspace } from "./fixtures/workspace";
 
 const realFetch = globalThis.fetch;
@@ -435,6 +436,32 @@ describe("web editor access control", () => {
       });
       expect(res.headers.get("access-control-allow-origin")).toBeNull();
       expect(res.status).toBeGreaterThanOrEqual(400);
+    } finally {
+      await ui.stop();
+    }
+  });
+
+  test("a request body over the limit is refused with 413 and changes nothing; one under it is accepted", async () => {
+    const ui = await open();
+    try {
+      const put = (value: string) =>
+        realFetch(ui.origin + "/api/values", {
+          method: "PUT",
+          headers: { "x-envs-token": ui.token, "content-type": "application/json" },
+          body: JSON.stringify({ uses: {}, profiles: { default: { defaults: { BIG: value }, envs: {} } } }),
+        });
+      const over = await put("x".repeat(MAX_BODY_BYTES));
+      expect(over.status).toBe(413);
+      // Also refused when the token is missing: the limit applies before anything is read.
+      const anon = await realFetch(ui.origin + "/api/values", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: "x".repeat(MAX_BODY_BYTES + 1),
+      });
+      expect(anon.status).toBe(413);
+      expect(await Bun.file(join(aws.main, ".envs/values.yml")).text()).not.toContain("BIG");
+      const under = await put("x".repeat(100_000));
+      expect(under.status).toBe(200);
     } finally {
       await ui.stop();
     }

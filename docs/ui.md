@@ -22,6 +22,7 @@ El servidor expone los valores de tus `.env` (secretos incluidos), así que cada
 | `Host` debe ser `127.0.0.1:<puerto>` o `localhost:<puerto>`: bloquea el DNS rebinding | `421` |
 | `Origin`, si viene, debe ser el propio servidor: otro sitio no puede escribir | `403` |
 | Las peticiones con cuerpo deben ser `application/json`: bloquea formularios y peticiones «simples» entre sitios | `415` |
+| El cuerpo no puede superar 5 MiB (un `values.yml` con cientos de variables y decenas de worktrees ocupa unos cientos de KB); se comprueba antes de leerlo y antes del token | `413` |
 
 Además, el servidor nunca responde a las peticiones previas CORS, de modo que ningún otro sitio puede enviarle una escritura JSON. Si abres la dirección sin token, o con el token de otra ejecución, ves un `401`: vuelve a abrir la que imprimió `envs edit --ui`.
 
