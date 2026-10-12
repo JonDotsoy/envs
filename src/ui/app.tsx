@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { dict } from "../history";
 import { HistoryPanel, type HistoryState } from "./history-panel";
 import { Logo } from "./logo";
 
@@ -26,7 +27,7 @@ type ActionResult = SaveResult & { action: "save" | "restore" };
 type VarRow = { key: string; def: string; byWorktree: Record<string, string> };
 const toVarRows = (profile: Profile): VarRow[] => {
   const rows = new Map<string, VarRow>();
-  const row = (key: string) => rows.get(key) ?? rows.set(key, { key, def: "", byWorktree: {} }).get(key)!;
+  const row = (key: string) => rows.get(key) ?? rows.set(key, { key, def: "", byWorktree: dict() }).get(key)!;
   for (const [key, value] of Object.entries(profile.defaults)) row(key).def = String(value);
   for (const [key, byWorktree] of Object.entries(profile.envs)) {
     for (const [wt, value] of Object.entries(byWorktree)) row(key).byWorktree[wt] = String(value);
@@ -34,13 +35,14 @@ const toVarRows = (profile: Profile): VarRow[] => {
   return [...rows.values()];
 };
 const fromVarRows = (rows: VarRow[]): Profile => {
-  const profile: Profile = { defaults: {}, envs: {} };
+  // Maps without a prototype: a variable called `__proto__` or `constructor` is just a name.
+  const profile: Profile = { defaults: dict(), envs: dict() };
   for (const { key: raw, def, byWorktree } of rows) {
     const key = raw.trim();
     if (key === "") continue;
     if (def !== "") profile.defaults[key] = def;
     for (const [wt, value] of Object.entries(byWorktree)) {
-      if (value !== "") (profile.envs[key] ??= {})[wt] = value;
+      if (value !== "") (profile.envs[key] ??= dict())[wt] = value;
     }
   }
   return profile;

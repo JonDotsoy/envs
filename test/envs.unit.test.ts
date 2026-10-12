@@ -19,9 +19,12 @@ import {
   listWorktrees,
   loadUiHistory,
   loadUiState,
+  normalizeValues,
   parseDotenv,
+  resolveEntries,
   run,
   saveUiState,
+  stringifyValues,
   updateDotenv,
   type Context,
 } from "../src/envs";
@@ -1288,6 +1291,62 @@ describe("a damaged history", () => {
     // Without damage the field is absent.
     await Bun.write(historyPath(), [first, second].join("\n") + "\n");
     expect(await loadUiHistory(testContext(ws.main).ctx)).not.toHaveProperty("damaged");
+  });
+});
+
+describe("names that look like prototype members in values.yml and .env files", () => {
+  const clean = () => {
+    expect(Object.keys(Object.prototype)).toEqual([]);
+    expect(({} as any).polluted).toBeUndefined();
+  };
+
+  test("normalizeValues keeps them as names and never reaches Object.prototype", () => {
+    const raw = Bun.YAML.parse(
+      [
+        "uses:",
+        "  constructor: __proto__",
+        "profiles:",
+        "  __proto__:",
+        "    defaults:",
+        "      toString: a",
+        "    envs:",
+        "      __proto__:",
+        "        polluted: yes",
+        "      constructor:",
+        "        constructor: b",
+        "",
+      ].join("\n"),
+    ) as any;
+    const values = normalizeValues(raw);
+    clean();
+    expect(Object.getPrototypeOf(values.profiles)).toBeNull();
+    expect(Object.hasOwn(values.profiles, "__proto__")).toBe(true);
+    expect(values.profiles["__proto__"]!.defaults["toString"]).toBe("a");
+    expect(values.profiles["__proto__"]!.envs["constructor"]!["constructor"]).toBe("b");
+    expect(values.uses["constructor"]).toBe("__proto__");
+  });
+
+  test("stringifyValues and parsing it again keep them", () => {
+    const values = normalizeValues({ profiles: { dev: { defaults: { __proto__x: 1 } as any, envs: { constructor: { toString: "v" } } } } });
+    const text = stringifyValues(values);
+    const again = normalizeValues(Bun.YAML.parse(text) as any);
+    expect(again.profiles.dev!.envs["constructor"]!["toString"]).toBe("v");
+    clean();
+  });
+
+  test("parseDotenv keeps variables named like prototype members", () => {
+    const parsed = parseDotenv("constructor=1\ntoString=2\n__proto__=3\nA=4\n");
+    expect(Object.keys(parsed)).toEqual(["constructor", "toString", "__proto__", "A"]);
+    expect(parsed["__proto__"]).toBe("3");
+    expect(({} as any).A).toBeUndefined();
+    clean();
+  });
+
+  test("resolveEntries and push work for a worktree named constructor", () => {
+    const values = normalizeValues({ defaults: { D: "d" }, envs: { PORT: { constructor: "3009" } } });
+    expect({ ...resolveEntries(values, "constructor", "default") }).toEqual({ D: "d", PORT: "3009" });
+    // A worktree that has no entry of its own never inherits one from Object.prototype.
+    expect({ ...resolveEntries(values, "main", "default") }).toEqual({ D: "d" });
   });
 });
 

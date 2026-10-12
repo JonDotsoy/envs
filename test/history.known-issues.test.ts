@@ -15,7 +15,8 @@
  */
 import { afterEach, describe, expect, test } from "bun:test";
 import { $ } from "bun";
-import { appendFile, chmod, rm, stat } from "node:fs/promises";
+import { appendFile, chmod, mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import {
@@ -545,7 +546,7 @@ describe("security", () => {
 // ── E: prototype pollution, odd names, types ─────────────────────────────────────────────────
 
 describe("types, odd names and prototype pollution", () => {
-  bug("H24 PUT /api/values with envs.__proto__ pollutes Object.prototype", async () => {
+  test("H24 (fixed) PUT /api/values with envs.__proto__ no longer pollutes Object.prototype", async () => {
     const d = await demo();
     const body = JSON.parse(JSON.stringify(await snapshotOf(d)).replace('"envs":{', '"envs":{"__proto__":{"polluted":"yes"},'));
     expect(Object.hasOwn(body.profiles.default.envs, "__proto__")).toBe(true);
@@ -553,7 +554,7 @@ describe("types, odd names and prototype pollution", () => {
     expect(({} as any).polluted).toBeUndefined();
   }, T);
 
-  bug("H24b the pollution changes what push writes: Object.prototype.main leaks into the variables of main", async () => {
+  test("H24b (fixed) a __proto__ key cannot change what push writes", async () => {
     const d = await demo();
     const state = await snapshotOf(d);
     state.profiles.default!.defaults.ONLY_DEFAULT = "safe";
@@ -563,28 +564,39 @@ describe("types, odd names and prototype pollution", () => {
     expect(await d.dotenv(d.main)).not.toContain("ONLY_DEFAULT_ENV=pwned");
   }, T);
 
-  bug("H25 applying a history with the path envs.__proto__ pollutes Object.prototype (restore and the browser panel)", () => {
+  test("H25 (fixed) applying a history with the path envs.__proto__ does not pollute Object.prototype", () => {
     const state = { uses: {}, profiles: {} } as NormalizedValues;
     applyChanges(state, [{ path: ["profiles", "default", "envs", "__proto__", "x"], to: "1" }]);
     expect(({} as any).x).toBeUndefined();
   });
 
-  bug("H26 a values.yml with a __proto__ key pollutes Object.prototype in any command that reads it", () => {
+  test("H26 (fixed) a values.yml with a __proto__ key does not pollute Object.prototype", () => {
     const raw = Bun.YAML.parse("profiles:\n  default:\n    envs:\n      __proto__:\n        polluted: yes\n") as any;
     normalizeValues(raw);
     expect(({} as any).polluted).toBeUndefined();
   });
 
-  bug("H27 a branch named constructor, toString or __proto__ breaks pull and push", async () => {
+  // Fixed: maps keyed by names have no prototype, so odd branch, variable and profile names are just names.
+  test("H27 (fixed) a branch named constructor, toString or __proto__ no longer breaks pull and push", async () => {
     const d = await demo();
-    await $`git worktree add -q -b constructor ${join(d.ws.main, "..", "wt-constructor")}`.cwd(d.main).quiet();
-    await Bun.write(join(d.main, "..", "wt-constructor", ".env"), "PORT=3009\n");
-    expect((await d.cmd(["pull"])).code).toBe(0);
-    expect((await d.cmd(["push"])).code).toBe(0);
-    await rm(join(d.main, "..", "wt-constructor"), { recursive: true, force: true });
+    for (const name of ["constructor", "toString", "__proto__"]) {
+      const dir = await mkdtemp(join(tmpdir(), `envs-odd-${name.replace(/_/g, "")}-`));
+      await rm(dir, { recursive: true });
+      await $`git worktree add -q -b ${name} ${dir}`.cwd(d.main).quiet();
+      await Bun.write(join(dir, ".env"), "PORT=3009\n");
+      try {
+        expect((await d.cmd(["pull"])).code).toBe(0);
+        expect(Object.hasOwn((await snapshotOf(d)).uses, name)).toBe(true);
+        expect((await d.cmd(["push"])).code).toBe(0);
+        expect(await Bun.file(join(dir, ".env")).text()).toContain("PORT=3009");
+        expect(({} as any).PORT).toBeUndefined();
+      } finally {
+        await $`git worktree remove --force ${dir}`.cwd(d.main).quiet();
+      }
+    }
   }, T);
 
-  bug("H28 variables named constructor/toString/__proto__ in a .env are silently lost", async () => {
+  test("H28 (fixed) variables named constructor/toString/__proto__ in a .env are kept", async () => {
     const d = await demo();
     await appendFile(join(d.main, ".env"), "constructor=demo1\ntoString=demo2\n__proto__=demo3\n");
     expect(Object.keys(parseDotenv("__proto__=demo3\n"))).toContain("__proto__");

@@ -29,6 +29,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- Variables, profiles and worktrees named `__proto__`, `constructor`, `toString`… are now ordinary names: values, history and `.env` data are held in maps without a prototype and read by own key, so they no longer pollute `Object.prototype` (through `values.yml`, the web editor API or a history file), break `pull`/`push` (a branch called `constructor`) or get silently lost (a variable called `__proto__`).
 - The web editor server refuses request bodies over 5 MiB (`413`), so a single request can no longer dump hundreds of megabytes into `values.yml`, the history and the `.env` files.
 - The web editor server (`envs edit --ui`) now checks every request: a random per-run token (in the printed URL, traded for an `HttpOnly` `SameSite=Strict` cookie), the `Host` (no DNS rebinding), the `Origin` and `application/json` bodies. Any other program, or a web page, can no longer read the secrets or write through it.
 - A damaged `.envs/history.ndjson` no longer breaks commands: an incomplete last line (interrupted write) is ignored and dropped by the next point, an unreadable line in the middle is skipped with a warning, `envs restore` refuses with a clear message naming the lines, and the History panel flags them.

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  applyChanges,
+  cloneState,
   compareStates,
+  diffValues,
+  emptyState,
   findHistoryPoint,
   stateAfter,
   statesAfterEach,
@@ -121,3 +125,73 @@ describe("compareStates", () => {
     expect(diff).toEqual({ uses: [], profiles: [], count: 0, same: true });
   });
 });
+
+describe("names that look like prototype members", () => {
+  const ODD = ["__proto__", "constructor", "toString", "hasOwnProperty", "prototype"];
+  const clean = () => {
+    expect(Object.keys(Object.prototype)).toEqual([]);
+    expect(({} as any).polluted).toBeUndefined();
+    expect(({} as any).x).toBeUndefined();
+  };
+
+  test("applyChanges keeps them as plain names, on a plain or a prototype-less state, without touching Object.prototype", () => {
+    for (const state of [{ uses: {}, profiles: {} } as NormalizedValues, emptyState()]) {
+      const changes: HistoryPoint["changes"] = [];
+      for (const name of ODD) {
+        changes.push(
+          { path: ["uses", name], to: name },
+          { path: ["profiles", name, "defaults", name], to: "d" },
+          { path: ["profiles", "default", "envs", name, name], to: "v" },
+          { path: ["profiles", "default", "envs", name, "main"], to: "polluted" },
+        );
+      }
+      applyChanges(state, changes);
+      clean();
+      for (const name of ODD) {
+        expect(Object.hasOwn(state.uses, name)).toBe(true);
+        expect(Object.hasOwn(state.profiles, name)).toBe(true);
+        expect(Object.hasOwn(state.profiles[name]!.defaults, name)).toBe(true);
+        expect(Object.hasOwn(state.profiles.default!.envs, name)).toBe(true);
+        expect(Object.hasOwn(state.profiles.default!.envs[name]!, name)).toBe(true);
+      }
+      // Removing works the same way and drops the emptied variable.
+      applyChanges(state, ODD.flatMap((name) => [
+        { path: ["profiles", "default", "envs", name, name], from: "v" },
+        { path: ["profiles", "default", "envs", name, "main"], from: "polluted" },
+      ]));
+      expect(Object.keys(state.profiles.default?.envs ?? {})).toEqual([]);
+    }
+  });
+
+  test("diffValues, stateAfter, statesAfterEach and compareStates round-trip them", () => {
+    const first = point("aaaa00000001", [
+      { path: ["uses", "__proto__"], to: "constructor" },
+      { path: ["profiles", "constructor", "defaults", "toString"], to: "x" },
+      { path: ["profiles", "default", "envs", "__proto__", "constructor"], to: 1 },
+    ]);
+    const second = point("aaaa00000002", [{ path: ["profiles", "default", "envs", "__proto__", "constructor"], from: 1, to: 2 }]);
+    const states = statesAfterEach([first, second]);
+    const after = stateAfter([first, second], second);
+    expect(diffValues(states[0]!, states[1]!)).toEqual(second.changes);
+    expect(diffValues(emptyState(), after).length).toBe(3);
+    expect(Object.hasOwn(after.uses, "__proto__")).toBe(true);
+    const diff = compareStates(states[0]!, states[1]!);
+    expect(diff.count).toBe(1);
+    expect(diff.profiles[0]!.envs[0]).toMatchObject({ kind: "changed", key: "__proto__", worktree: "constructor" });
+    // Inherited members are never mistaken for entries.
+    expect(diffValues({ uses: {}, profiles: {} }, { uses: {}, profiles: {} })).toEqual([]);
+    expect(compareStates({ uses: {}, profiles: {} }, { uses: {}, profiles: {} }).same).toBe(true);
+    clean();
+  });
+
+  test("cloneState copies them without a prototype", () => {
+    const state = emptyState();
+    applyChanges(state, [{ path: ["profiles", "default", "envs", "__proto__", "constructor"], to: 1 }]);
+    const copy = cloneState(state);
+    expect(Object.getPrototypeOf(copy.profiles)).toBeNull();
+    expect(Object.getPrototypeOf(copy.profiles.default!.envs)).toBeNull();
+    expect(copy.profiles.default!.envs["__proto__"]!["constructor"]).toBe(1);
+    clean();
+  });
+});
+

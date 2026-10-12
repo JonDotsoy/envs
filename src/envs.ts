@@ -7,6 +7,9 @@ import { $ } from "bun";
 import { isSensitiveKey, rules, type LintContext } from "./lint-rules";
 import {
   DEFAULT_PROFILE,
+  cloneProfile,
+  cloneState,
+  dict,
   diffValues,
   findHistoryPoint,
   stateAfter,
@@ -108,20 +111,23 @@ const hasProfile = (values: NormalizedValues, name: string) =>
 
 /** Folds root-level `defaults`/`envs` into `profiles.default` (an explicit `profiles.default` wins). */
 export function normalizeValues(raw: Values): NormalizedValues {
-  const profiles: Record<string, ResolvedProfile> = {};
+  // Every map has no prototype: names come from files and requests (see `dict`).
+  const profiles = dict<ResolvedProfile>();
   // A hand-written profile can be null (`dev:`) or lack a section; it always ends up with both.
   const add = (name: string, profile?: Profile | null) => {
-    const target = (profiles[name] ??= { defaults: {}, envs: {} });
+    const target = (profiles[name] ??= { defaults: dict(), envs: dict() });
     Object.assign(target.defaults, profile?.defaults);
     for (const [key, byWorktree] of Object.entries(profile?.envs ?? {})) {
-      Object.assign((target.envs[key] ??= {}), byWorktree);
+      Object.assign((target.envs[key] ??= dict()), byWorktree);
     }
   };
   add(DEFAULT_PROFILE, { defaults: raw.defaults, envs: raw.envs });
   for (const [name, profile] of Object.entries(raw.profiles ?? {})) {
     add(name, profile);
   }
-  return { uses: { ...raw.uses }, profiles };
+  const uses = dict<string>();
+  for (const [worktree, profile] of Object.entries(raw.uses ?? {})) uses[worktree] = profile;
+  return { uses, profiles };
 }
 
 /**
@@ -133,7 +139,7 @@ export function materializeProfiles(values: NormalizedValues): string[] {
   const created: string[] = [];
   for (const name of Object.values(values.uses).map(String)) {
     if (hasProfile(values, name)) continue;
-    values.profiles[name] = structuredClone(values.profiles[DEFAULT_PROFILE]!);
+    values.profiles[name] = cloneProfile(values.profiles[DEFAULT_PROFILE]!);
     created.push(name);
   }
   return created;
@@ -213,7 +219,7 @@ export function resolveEntries(
   profile: string,
   includeProfileEnvs = true,
 ): Record<string, string> {
-  const entries: Record<string, string> = {};
+  const entries = dict<string>();
   for (const name of new Set([DEFAULT_PROFILE, profile])) {
     const layer = values.profiles[name]!;
     for (const [key, value] of Object.entries(layer.defaults)) {
@@ -221,7 +227,7 @@ export function resolveEntries(
     }
     if (name === profile && !includeProfileEnvs) continue;
     for (const [key, byWorktree] of Object.entries(layer.envs)) {
-      if (byWorktree && worktree in byWorktree) {
+      if (byWorktree && Object.hasOwn(byWorktree, worktree)) {
         entries[key] = String(byWorktree[worktree]);
       }
     }
@@ -306,7 +312,7 @@ export async function listWorktrees(cwd: string): Promise<Worktree[]> {
 
 /** Minimal .env parser: KEY=VALUE lines, `#` comments, optional quotes and `export`. */
 export function parseDotenv(text: string): Record<string, string> {
-  const result: Record<string, string> = {};
+  const result = dict<string>();
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line || line.startsWith("#")) continue;
@@ -541,7 +547,7 @@ export async function pull(ctx: Context): Promise<number> {
   const read = await readValues(ctx);
   if (!read) return 1;
   const values = normalizeValues(read.values);
-  const before = structuredClone(values);
+  const before = cloneState(values);
   const worktrees = await listWorktrees(ctx.cwd);
   // A profile named in `uses` that does not exist yet starts as a copy of `default`.
   materializeProfiles(values);
@@ -567,7 +573,7 @@ export async function pull(ctx: Context): Promise<number> {
       if (key in base && base[key] === String(parsedValue)) {
         if (envs[key]) delete envs[key]![name];
       } else {
-        (envs[key] ??= {})[name] = parsedValue;
+        (envs[key] ??= dict())[name] = parsedValue;
       }
     }
   }
@@ -611,7 +617,7 @@ export async function use(ctx: Context, profile?: string): Promise<number> {
     ctx.error("Run `envs use` inside a git worktree.");
     return 1;
   }
-  const before = structuredClone(values);
+  const before = cloneState(values);
   for (const { name } of worktrees) values.uses[name] ??= DEFAULT_PROFILE;
   values.uses[current.name] = profile;
   await Bun.write(read.path, stringifyValues(values));
