@@ -173,7 +173,9 @@ describe("names that look like prototype members", () => {
     const states = statesAfterEach([first, second]);
     const after = stateAfter([first, second], second);
     expect(diffValues(states[0]!, states[1]!)).toEqual(second.changes);
-    expect(diffValues(emptyState(), after).length).toBe(3);
+    // Three changes plus the creation of the `constructor` profile.
+    expect(diffValues(emptyState(), after)).toContainEqual({ path: ["profiles", "constructor"], to: true });
+    expect(diffValues(emptyState(), after).length).toBe(4);
     expect(Object.hasOwn(after.uses, "__proto__")).toBe(true);
     const diff = compareStates(states[0]!, states[1]!);
     expect(diff.count).toBe(1);
@@ -192,6 +194,42 @@ describe("names that look like prototype members", () => {
     expect(Object.getPrototypeOf(copy.profiles.default!.envs)).toBeNull();
     expect(copy.profiles.default!.envs["__proto__"]!["constructor"]).toBe(1);
     clean();
+  });
+});
+
+describe("profiles are part of the history even when empty", () => {
+  const profile = (defaults = {}) => ({ defaults, envs: {} });
+  const state = (profiles: Record<string, any>): NormalizedValues => ({ uses: {}, profiles: { default: profile(), ...profiles } });
+
+  test("diffValues records the creation and the removal of a profile, `default` aside", () => {
+    expect(diffValues(state({}), state({ qa: profile() }))).toEqual([{ path: ["profiles", "qa"], to: true }]);
+    expect(diffValues(state({ qa: profile() }), state({}))).toEqual([{ path: ["profiles", "qa"], from: true }]);
+    // A profile with values: creation first, then its values; on removal, its values first, then the profile.
+    expect(diffValues(state({}), state({ qa: profile({ A: 1 }) }))).toEqual([
+      { path: ["profiles", "qa"], to: true },
+      { path: ["profiles", "qa", "defaults", "A"], to: 1 },
+    ]);
+    expect(diffValues(state({ qa: profile({ A: 1 }) }), state({}))).toEqual([
+      { path: ["profiles", "qa", "defaults", "A"], from: 1 },
+      { path: ["profiles", "qa"], from: true },
+    ]);
+  });
+
+  test("replaying creation and removal gives back the same profiles", () => {
+    const states = [state({}), state({ qa: profile() }), state({ qa: profile({ A: 1 }), dev: profile() }), state({ dev: profile() })];
+    const replay = emptyState();
+    states.slice(1).forEach((next, i) => {
+      applyChanges(replay, diffValues(states[i]!, next));
+      expect(Object.keys(replay.profiles).filter((p) => p !== "default").sort()).toEqual(Object.keys(next.profiles).filter((p) => p !== "default").sort());
+    });
+    expect(Object.keys(replay.profiles)).not.toContain("qa");
+  });
+
+  test("histories written before this still replay (profiles appear through their values)", () => {
+    const old: HistoryPoint["changes"] = [{ path: ["profiles", "qa", "defaults", "A"], to: 1 }];
+    const replay = emptyState();
+    applyChanges(replay, old);
+    expect(Object.keys(replay.profiles)).toEqual(["qa"]);
   });
 });
 

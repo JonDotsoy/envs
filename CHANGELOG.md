@@ -29,6 +29,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- The history records the creation and the removal of a profile (`["profiles", name]`), so an empty profile is no longer lost and a deleted one no longer comes back, empty, on a replay or a `restore`.
+- `envs lint` also checks the history (`tracked-history`, `unignored-history`, and `open-permissions`, `executable-files` and `writable-files`) and reports values of worktrees git no longer lists (`unknown-worktree`).
+- `envs pull` says when a variable of the defaults is missing from a `.env` (`push` writes it back; remove it from the defaults to drop it everywhere).
 - `envs edit`: a cancelled or failed editor (non-zero exit) leaves `values.yml` as it was before, instead of keeping the half-made edit for the next `push`.
 - `envs restore` is refused with the history off, as the web editor already did, instead of rewriting `values.yml` without a point.
 - `envs pull`: deleting a variable from the `.env` of a worktree on a profile other than `default` now also drops its entry under `default`, so `push` does not write it back.

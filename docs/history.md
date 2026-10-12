@@ -35,6 +35,7 @@ Cada elemento tiene:
 
 - `path`: ubicación del valor dentro del snapshot. Puede ser:
   - `["uses", "<worktree>"]`: perfil del worktree.
+  - `["profiles", "<perfil>"]`: el perfil mismo. Su creación (`to: true`), aunque esté vacío, y su eliminación (`from: true`) son cambios propios; `default` siempre existe y no se registra. Los historiales anteriores a esto siguen funcionando: sus perfiles aparecen a través de sus valores.
   - `["profiles", "<perfil>", "defaults", "<VARIABLE>"]`: valor por defecto del perfil.
   - `["profiles", "<perfil>", "envs", "<VARIABLE>", "<worktree>"]`: valor de la variable en un worktree.
 - `from`: valor anterior. No aparece si la entrada se agregó.

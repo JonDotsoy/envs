@@ -57,7 +57,11 @@ export function cloneState(state: NormalizedValues): NormalizedValues {
   return copy;
 }
 
-/** One difference between two versions of values.yml; `from`/`to` are absent when the entry was added/removed. */
+/**
+ * One difference between two versions of values.yml; `from`/`to` are absent when the entry was added/removed.
+ * `path` is `["uses", worktree]`, `["profiles", name]` (the profile itself, with `true`),
+ * `["profiles", name, "defaults", variable]` or `["profiles", name, "envs", variable, worktree]`.
+ */
 export interface Change {
   path: string[];
   from?: Value;
@@ -86,6 +90,9 @@ export function diffValues(before: NormalizedValues, after: NormalizedValues): C
   for (const p of keys(before.profiles, after.profiles)) {
     const a = own(before.profiles, p);
     const b = own(after.profiles, p);
+    // A profile exists even when it has no values: its creation and removal are changes of their own
+    // (`default` always exists). Without them a deleted profile would come back, empty, on a replay.
+    if (p !== DEFAULT_PROFILE && !a && b) changes.push({ path: ["profiles", p], to: true });
     for (const k of keys(a?.defaults, b?.defaults)) {
       compare(["profiles", p, "defaults", k], own(a?.defaults, k), own(b?.defaults, k));
     }
@@ -94,6 +101,7 @@ export function diffValues(before: NormalizedValues, after: NormalizedValues): C
       const eb = own(b?.envs, k);
       for (const w of keys(ea, eb)) compare(["profiles", p, "envs", k, w], own(ea, w), own(eb, w));
     }
+    if (p !== DEFAULT_PROFILE && a && !b) changes.push({ path: ["profiles", p], from: true });
   }
   return changes;
 }
@@ -113,6 +121,12 @@ export function applyChanges(state: NormalizedValues, changes: Change[]): void {
       continue;
     }
     const [profileName, kind, variable, worktree] = rest as [string, string, string, string?];
+    if (kind === undefined) {
+      // `["profiles", name]`: the profile itself is created (even empty) or removed with everything in it.
+      if (to === undefined) delete state.profiles[profileName];
+      else if (!own(state.profiles, profileName)) put(state.profiles, profileName, emptyProfile());
+      continue;
+    }
     let profile = own(state.profiles, profileName);
     if (!profile) put(state.profiles, profileName, (profile = emptyProfile()));
     if (kind === "defaults") {

@@ -568,6 +568,7 @@ export async function pull(ctx: Context): Promise<number> {
   const worktrees = await listWorktrees(ctx.cwd);
   // A profile named in `uses` that does not exist yet starts as a copy of `default`.
   materializeProfiles(values);
+  const missingDefaults = new Map<string, string[]>();
   const pulledNames: string[] = [];
   const pulledKeys = new Set<string>();
   for (const { name, path } of worktrees) {
@@ -577,6 +578,13 @@ export async function pull(ctx: Context): Promise<number> {
     const parsed = parseDotenv(await dotenv.text());
     pulledNames.push(name);
     for (const key of Object.keys(parsed)) pulledKeys.add(key);
+    // Variables the profile's defaults give every worktree but this .env lacks: a default cannot be
+    // dropped for one worktree, so push would write them back. Say so instead of surprising later.
+    for (const layer of new Set([DEFAULT_PROFILE, profile])) {
+      for (const key of Object.keys(values.profiles[layer]!.defaults)) {
+        if (!(key in parsed)) missingDefaults.set(key, [...(missingDefaults.get(key) ?? []), name]);
+      }
+    }
     const { envs } = values.profiles[profile]!;
     // Drop keys that are no longer in this worktree's .env, from every layer it resolves: its profile
     // and, for a profile other than `default`, the entries it also has under `default`.
@@ -601,6 +609,13 @@ export async function pull(ctx: Context): Promise<number> {
   // What the pull changed (e.g. a manual edit of a .env) is recorded; with no history yet, the whole state.
   const root = await findRoot(ctx.cwd);
   await recordHistory(root, before, values, ctx.now, ctx.error);
+  for (const [key, names] of missingDefaults) {
+    ctx.log(
+      yellow(
+        `! ${key} is in the defaults but missing from the .env of ${names.join(", ")}: \`envs push\` writes it back. Remove it from the defaults to drop it from every worktree.`,
+      ),
+    );
+  }
   if (pulledNames.length > 0) {
     ctx.log(
       green(
@@ -817,10 +832,15 @@ export async function lint(ctx: Context): Promise<number> {
       dotenvs.push({ ...worktree, mode: await modeOf(path) });
     }
   }
+  const historyPath = join(root, ".envs/history.ndjson");
+  const hasHistory = await Bun.file(historyPath).exists();
   const lintContext: LintContext = {
     values: read.values,
     root,
     valuesMode: await modeOf(read.path),
+    hasHistory,
+    historyMode: hasHistory ? await modeOf(historyPath) : undefined,
+    worktrees: worktrees.map(({ name }) => name),
     dotenvs,
     isTracked,
     isIgnored,

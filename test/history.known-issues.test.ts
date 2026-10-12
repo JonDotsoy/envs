@@ -287,7 +287,7 @@ describe("data loss and orphan variables", () => {
     expect((await saveUiState(saveCtx(d), again as NormalizedValues, { base: v2 })).code).toBe(0);
   }, T);
 
-  bug("H08 entries of a deleted or renamed worktree stay orphan in values.yml forever, and lint does not warn", async () => {
+  test("H08 (fixed) entries of a deleted or renamed worktree are reported by lint", async () => {
     const d = await demo();
     await $`git worktree remove --force ${d.login}`.cwd(d.main).quiet();
     await d.cmd(["pull"]);
@@ -297,7 +297,7 @@ describe("data loss and orphan variables", () => {
     expect(!mentioned || lint.out.includes("fix-login")).toBe(true);
   }, T);
 
-  bug("H09 deleting a profile: the history replay keeps it (snapshot != replay)", async () => {
+  test("H09 (fixed) deleting a profile: the history replay drops it too", async () => {
     const d = await demo();
     await d.cmd(["edit"], {
       openEditor: async (path) => {
@@ -317,7 +317,7 @@ describe("data loss and orphan variables", () => {
     expect(Object.keys((await replayOf(d)).profiles)).not.toContain("qa");
   }, T);
 
-  bug("H10 creating an empty profile is not recorded in the history", async () => {
+  test("H10 (fixed) creating an empty profile is recorded in the history", async () => {
     const d = await demo();
     await d.cmd(["edit"], {
       openEditor: async (path) => {
@@ -329,7 +329,8 @@ describe("data loss and orphan variables", () => {
     expect(Object.keys((await replayOf(d)).profiles)).toContain("empty");
   }, T);
 
-  bug("H11 a variable in `defaults` removed from a .env: pull does not drop it and push writes it back", async () => {
+  // By design (a default applies to every worktree), now reported by pull instead of surprising later.
+  test("H11 (reported) a default removed from one .env: pull says push writes it back, and dropping it from the defaults removes it everywhere", async () => {
     const d = await demo();
     await d.cmd(["edit"], {
       openEditor: async (path) => {
@@ -339,9 +340,19 @@ describe("data loss and orphan variables", () => {
     });
     expect(await d.dotenv(d.login)).toContain("REGION=eu");
     await Bun.write(join(d.login, ".env"), (await d.dotenv(d.login)).replace("REGION=eu\n", ""));
-    await d.cmd(["pull"]);
+    const pulled = await d.cmd(["pull"]);
+    expect(pulled.out).toContain("REGION is in the defaults but missing from the .env of fix-login");
+    expect(pulled.out).toContain("writes it back");
     await d.cmd(["push"]);
-    expect(await d.dotenv(d.login)).not.toContain("REGION=eu");
+    expect(await d.dotenv(d.login)).toContain("REGION=eu");
+    // The way to drop it everywhere: remove it from the defaults; push then removes it from every .env.
+    await d.cmd(["edit"], {
+      openEditor: async (path) => {
+        await Bun.write(path, (await Bun.file(path).text()).replace("      REGION: eu\n", "      {}\n").replace("    defaults: \n      {}\n      {}\n", "    defaults: \n      {}\n"));
+        return 0;
+      },
+    });
+    for (const dir of [d.main, d.checkout, d.login]) expect(await d.dotenv(dir)).not.toContain("REGION");
   }, T);
 
   test("H33 (fixed) worktree on a profile other than default: deleting a variable from its .env is reflected and push does not bring it back", async () => {
@@ -515,7 +526,7 @@ describe("security", () => {
     expect((await stat(d.history)).mode & 0o777).toBe(0o600);
   }, T);
 
-  bug("H21 lint does not check history.ndjson: it can be versioned with the secrets in clear without a warning", async () => {
+  test("H21 (fixed) lint checks history.ndjson: tracked or not ignored it is reported", async () => {
     const d = await demo();
     await Bun.write(join(d.main, ".envs/.gitignore"), "values.yml\nconfig.yml\n");
     await $`git add -A && git commit -qm leak`.cwd(d.main).quiet();

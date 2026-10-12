@@ -61,11 +61,11 @@ Resumen de las funcionalidades de `@jondotsoy/envs`. Para el detalle de uso, con
 
 Revisa problemas de seguridad sin imprimir nunca los valores, termina con código 1 si hay alguno (útil en CI).
 
-- **Git:** `values.yml` o `.env` versionados o no ignorados.
-- **Permisos:** archivos legibles, ejecutables o escribibles por otros usuarios.
+- **Git:** `values.yml`, el historial (`history.ndjson`) o `.env` versionados o no ignorados.
+- **Permisos:** archivos (incluido el historial) legibles, ejecutables o escribibles por otros usuarios.
 - **Secretos:** variables sensibles vacías o con valores típicos (`changeme`, `admin`…), secretos compartidos en `defaults` y valores con formato de secreto conocido (AWS, GitHub, Slack, `sk-…`, claves privadas).
 - **URLs:** credenciales embebidas o protocolos inseguros (`http://`, `ws://`, `ftp://`).
-- **Configuración:** perfiles desconocidos en `uses`.
+- **Configuración:** perfiles desconocidos en `uses`, y valores de worktrees que git ya no lista (`unknown-worktree`).
 
 ## Salida de la consola
 

@@ -92,13 +92,15 @@ It never prints values, only the variable and its location (`envs.DB_PASSWORD.ma
 | Rule | Detects |
 | --- | --- |
 | `tracked-values`, `unignored-values` | `values.yml` is tracked by git or is not ignored. |
+| `tracked-history`, `unignored-history` | `.envs/history.ndjson` (which holds every previous and new value, secrets included) is tracked by git or is not ignored. |
 | `tracked-dotenv`, `unignored-dotenv` | A worktree's `.env` is tracked or is not ignored. |
-| `open-permissions` | `values.yml` is readable by other users (use `chmod 600`). |
-| `executable-files` | `values.yml` or a `.env` has the execute permission (use `chmod -x`). |
-| `writable-files` | `values.yml` or a `.env` is writable by the group or other users (use `chmod go-w`). |
+| `open-permissions` | `values.yml` or the history is readable by other users (use `chmod 600`). |
+| `executable-files` | `values.yml`, the history or a `.env` has the execute permission (use `chmod -x`). |
+| `writable-files` | `values.yml`, the history or a `.env` is writable by the group or other users (use `chmod go-w`). |
 | `weak-secret` | Sensitive variable (`PASSWORD`, `TOKEN`, `SECRET`, `API_KEY`…) that is empty or has a typical value (`changeme`, `admin`…). |
 | `shared-secret` | Sensitive variable in `defaults`, which is written to all worktrees using that profile. |
 | `unsafe-dotenv-value` | A variable name that is not valid, or a value with a line break: `push` would refuse it (it would start another line in the `.env`). |
+| `unknown-worktree` | `values.yml` has values for a worktree that git does not list (deleted, or its branch renamed): they stay forever unless you remove them. `pull` does not delete them, because a worktree can be missing only for a moment. |
 | `unknown-profile` | `uses` names a profile that is not in `profiles`. |
 | `secret-pattern` | Value with a known secret format (AWS, GitHub, Slack, `sk-…`, private key). |
 | `url-credentials`, `insecure-url` | Remote URL with an embedded password, or using `http://`, `ws://` or `ftp://`. |
