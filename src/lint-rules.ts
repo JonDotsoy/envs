@@ -83,10 +83,18 @@ export function dotenvProblem(key: string, text: string): string | undefined {
   if (!/^[\w.-]+$/.test(key)) {
     return "the name is not a valid variable name (only letters, digits, `_`, `.` and `-`)";
   }
+  if (text.includes("'") && text.includes('"') && text.includes("`")) {
+    return "the value has single, double and backtick quotes at once, so no .env quoting can hold it as is";
+  }
   if (/[\r\n]/.test(text)) {
     return "the value has a line break, which a .env file cannot hold safely (write it on one line, with `\\n` escapes if the application expects them)";
   }
   return undefined;
+}
+
+/** Whether text contains a well-known secret format (AWS key, GitHub token, ...), whatever the variable is called. */
+export function hasSecretPattern(text: string): boolean {
+  return SECRET_PATTERNS.some(([pattern]) => pattern.test(text));
 }
 
 export function isSensitiveKey(key: string): boolean {
@@ -190,16 +198,13 @@ export const rules: Rule[] = [
   },
   {
     id: "open-permissions",
-    description: "values.yml or the history is readable by other users.",
+    description: "values.yml, the history or a worktree's .env is readable by other users.",
     check: (ctx) =>
-      [
-        { file: valuesFile, mode: ctx.valuesMode },
-        ...(ctx.hasHistory ? [{ file: historyFile, mode: ctx.historyMode }] : []),
-      ]
+      envFiles(ctx)
         .filter(({ mode }) => mode !== undefined && (mode & 0o077) !== 0)
-        .map(({ file, mode }) => ({
-          location: file,
-          message: `${file.slice(".envs/".length)} is readable by other users (mode ${(mode! & 0o777).toString(8)}). Run \`chmod 600 ${file}\`.`,
+        .map(({ location, mode }) => ({
+          location,
+          message: `${location.replace(/^\.envs\//, "")} is readable by other users (mode ${(mode! & 0o777).toString(8)}). Run \`chmod 600 ${location}\`.`,
         })),
   },
   {

@@ -5,7 +5,7 @@ import { stat } from "node:fs/promises";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { appendFile, truncate } from "node:fs/promises";
 import { $ } from "bun";
-import { dotenvProblem, isSensitiveKey, rules, type LintContext } from "./lint-rules";
+import { dotenvProblem, hasSecretPattern, isSensitiveKey, rules, type LintContext } from "./lint-rules";
 import {
   DEFAULT_PROFILE,
   cloneProfile,
@@ -75,10 +75,10 @@ const maskUrlSecrets = (value: string) =>
     isMaskedKey(name.toUpperCase().replace(/[^A-Z0-9]+/g, "_")) ? `${sep}${name}=${MASK}` : all,
   );
 /** Whether a variable is a secret: by its name (as the console does) or because its value is a URL with a password. */
-const isSecretEntry = (name: string, value: string) => isMaskedKey(name) || hasUrlSecret(value);
+const isSecretEntry = (name: string, value: string) => isMaskedKey(name) || hasUrlSecret(value) || hasSecretPattern(value);
 /** What the console shows for a variable: the value, or `********` for a secret; a URL keeps its host and hides only its secrets. */
 const displayValue = (name: string, value: string) =>
-  isMaskedKey(name) ? MASK : formatDotenvValue(maskUrlSecrets(value));
+  isMaskedKey(name) || hasSecretPattern(value) ? MASK : formatDotenvValue(maskUrlSecrets(value));
 const paint = (code: number, text: string) =>
   colorsDisabled() ? text : `\x1b[${code}m${text}\x1b[0m`;
 const green = (text: string) => paint(32, text);
@@ -537,9 +537,16 @@ export function parseValue(value: string): Value {
   return value;
 }
 
+/**
+ * Quotes a value so a dotenv parser reads back exactly the same text. Double quotes expand `\n`, so they
+ * are used only when the value has no `"` and no literal `\n`/`\r`; otherwise single quotes, then backticks.
+ * `dotenvProblem` rejects the values none of them can hold.
+ */
 export function formatDotenvValue(value: string): string {
-  if (value !== "" && !/[\s#"'\\$]/.test(value)) return value;
-  return value.includes('"') ? `'${value}'` : `"${value}"`;
+  if (value !== "" && !/[\s#"'`\\$]/.test(value)) return value;
+  if (!value.includes('"') && !/\\[nr]/.test(value)) return `"${value}"`;
+  if (!value.includes("'")) return `'${value}'`;
+  return `\`${value}\``;
 }
 
 /**
@@ -833,8 +840,11 @@ async function pushLocked(ctx: Context, only?: string): Promise<number> {
       changes.set(line, [...(changes.get(line) ?? []), label]);
     }
     for (const key of orphans) removals.set(key, [...(removals.get(key) ?? []), label]);
-    // A .env that did not exist is created readable only by its owner; an existing one keeps its mode.
-    await writeFile(join(path, ".env"), updateDotenv(current, entries, orphans), { mode: 0o600 });
+    // The .env holds secrets: it is always left readable only by its owner.
+    const dotenvPath = join(path, ".env");
+    await writeFile(dotenvPath, updateDotenv(current, entries, orphans), { mode: 0o600 });
+    // `mode` applies only on creation, so tighten a .env that already existed.
+    await chmod(dotenvPath, 0o600).catch(() => {});
   }
   for (const [line, names] of changes) {
     ctx.log(yellow(`↻ ${line} → ${names.join(", ")}`));
