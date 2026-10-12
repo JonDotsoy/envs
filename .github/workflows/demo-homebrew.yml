@@ -4,6 +4,10 @@ name: Demo Homebrew formula
 # It does NOT publish to npm: it points the formula at a version that is already on npm.
 
 on:
+  # Runs on the pull request that touches this workflow, with the defaults below.
+  pull_request:
+    paths:
+      - .github/workflows/demo-homebrew.yml
   workflow_dispatch:
     inputs:
       version:
@@ -33,8 +37,8 @@ jobs:
 
       - name: Update Homebrew formula
         env:
-          VERSION: ${{ inputs.version }}
-          PUSH: ${{ inputs.push }}
+          VERSION: ${{ inputs.version || '0.1.9-alpha.3' }}
+          PUSH: ${{ inputs.push || 'true' }}
         run: |
           name=$(node -p "require('./package.json').name")
           url="https://registry.npmjs.org/$name/-/${name##*/}-$VERSION.tgz"
