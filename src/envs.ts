@@ -51,7 +51,7 @@ export interface Context {
   error(message: string): void;
   /** Opens a file in the editor and resolves with its exit code once closed. */
   openEditor(path: string): Promise<number>;
-  /** Opens a URL in the default browser (best effort). */
+  /** Opens a URL in the default browser; rejects when it cannot (the caller then shows the URL). */
   openUrl?(url: string): Promise<void>;
   /** Resolves when the `--ui` server should stop (Ctrl+C by default). */
   waitForExit?(): Promise<void>;
@@ -110,10 +110,11 @@ export const defaultContext = (): Context => ({
       writeFileSync(page, `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${url}"><script>location.replace(${JSON.stringify(url)})</script>`, { mode: 0o600 });
       process.once("exit", cleanup);
       setTimeout(cleanup, 60_000).unref();
-      await Bun.spawn([opener, page], { stdio: ["ignore", "ignore", "ignore"] }).exited;
-    } catch {
+      const code = await Bun.spawn([opener, page], { stdio: ["ignore", "ignore", "ignore"] }).exited;
+      if (code !== 0) throw new Error(`${opener} exited with code ${code}`);
+    } catch (error) {
       cleanup();
-      // No opener available: the URL is already printed.
+      throw error;
     }
   },
   waitForExit: () =>

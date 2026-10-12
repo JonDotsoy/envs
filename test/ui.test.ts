@@ -315,6 +315,27 @@ describe("web editor access control", () => {
     };
   }
 
+  test("when the browser cannot be opened the URL is printed to open by hand", async () => {
+    const logs: string[] = [];
+    let stop!: () => void;
+    const exit = new Promise<void>((resolve) => (stop = resolve));
+    const done = run(["edit", "--ui"], {
+      cwd: aws.main,
+      log: (m) => logs.push(m),
+      error: () => {},
+      openEditor: async () => 0,
+      openUrl: async () => {
+        throw new Error("xdg-open: not found");
+      },
+      waitForExit: () => exit,
+    });
+    while (!logs.some((l) => l.includes("Could not open"))) await Bun.sleep(20);
+    stop();
+    await done;
+    const line = logs.find((l) => l.includes("Could not open"))!;
+    expect(line).toMatch(/^Could not open the browser\. Open this address manually: http:\/\/127\.0\.0\.1:\d+\/\?token=[A-Za-z0-9_-]{32}$/);
+  });
+
   test("the opened URL carries a random token, different on every run", async () => {
     const a = await open();
     await a.stop();

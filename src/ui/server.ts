@@ -191,7 +191,12 @@ export async function serveUi(ctx: Context): Promise<number> {
   const urlWith = (t: string) => `http://127.0.0.1:${server.port}/?token=${t}`;
   const url = urlWith(token);
   ctx.log(`Web editor running at ${url} (Ctrl+C to stop)`);
-  await ctx.openUrl?.(url);
+  try {
+    await ctx.openUrl?.(url);
+  } catch {
+    // The opener is missing or failed: the user opens the address by hand.
+    ctx.log(`Could not open the browser. Open this address manually: ${url}`);
+  }
   await (ctx.waitForExit ?? (() => new Promise<void>(() => {})))();
   await server.stop(true);
   return 0;
