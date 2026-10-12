@@ -142,13 +142,20 @@ jobs:
           gh release create "v$VERSION" --verify-tag --title "v$VERSION" \
             --notes "Published to npm: $url" "${args[@]}"
 
-      - name: Update Homebrew formula
+      - name: Checkout Homebrew tap
         # Only stable releases are distributed through Homebrew.
+        if: ${{ inputs.tag == 'latest' }}
+        uses: actions/checkout@v4
+        with:
+          repository: jondotsoy/homebrew-core
+          path: homebrew-core
+          # Deploy key with write access to jondotsoy/homebrew-core.
+          ssh-key: ${{ secrets.HOMEBREW_CORE_DEPLOY_KEY }}
+
+      - name: Update Homebrew formula
         if: ${{ inputs.tag == 'latest' }}
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          # Personal access token with write access to jondotsoy/homebrew-core.
-          HOMEBREW_CORE_TOKEN: ${{ secrets.HOMEBREW_CORE_TOKEN }}
         run: |
           name=$(node -p "require('./package.json').name")
           url="https://registry.npmjs.org/$name/-/${name##*/}-$VERSION.tgz"
@@ -161,7 +168,6 @@ jobs:
           done
           sha256=$(sha256sum package.tgz | cut -d' ' -f1)
 
-          git clone "https://x-access-token:${HOMEBREW_CORE_TOKEN}@github.com/jondotsoy/homebrew-core.git" homebrew-core
           cd homebrew-core
           sed -i -E \
             -e "s|^( *url \").*(\")\$|\1$url\2|" \
