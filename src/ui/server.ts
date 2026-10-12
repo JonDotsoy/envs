@@ -110,8 +110,8 @@ function presentedToken(req: Request): string | undefined {
  */
 export async function serveUi(ctx: Context): Promise<number> {
   const assets = await loadAssets();
-  // The token in the URL, valid for one visit; `session` is what that visit trades it for.
-  let token: string | undefined = randomBytes(24).toString("base64url");
+  // The token in the URL, valid for one visit and then replaced by a new one; `session` is what that visit trades it for.
+  let token = randomBytes(24).toString("base64url");
   const session = randomBytes(24).toString("base64url");
   const guard = (handler: (req: Request) => Response | Promise<Response>) => async (req: Request) => {
     const port = server.port;
@@ -125,8 +125,10 @@ export async function serveUi(ctx: Context): Promise<number> {
     }
     const url = new URL(req.url);
     // First visit: trade the token in the URL (once) for the cookie and drop it from the address bar.
-    if (url.pathname === "/" && token !== undefined && sameToken(url.searchParams.get("token"), token)) {
-      token = undefined;
+    if (url.pathname === "/" && sameToken(url.searchParams.get("token"), token)) {
+      // The token is spent: print a fresh single-use URL right away (for another browser or after closing this one).
+      token = randomBytes(24).toString("base64url");
+      ctx.log(`New single-use URL: ${urlWith(token)}`);
       return new Response(null, {
         status: 302,
         headers: {
@@ -186,7 +188,8 @@ export async function serveUi(ctx: Context): Promise<number> {
     }),
   });
   // The token travels only in this URL (printed and opened), never stored or logged elsewhere.
-  const url = `http://127.0.0.1:${server.port}/?token=${token}`;
+  const urlWith = (t: string) => `http://127.0.0.1:${server.port}/?token=${t}`;
+  const url = urlWith(token);
   ctx.log(`Web editor running at ${url} (Ctrl+C to stop)`);
   await ctx.openUrl?.(url);
   await (ctx.waitForExit ?? (() => new Promise<void>(() => {})))();

@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
-- The token in the URL that `envs edit --ui` opens is now single-use: the first visit trades it for a session cookie with a different random value, and the URL stops working (`401`), so it is useless if read later from the browser history or the terminal.
+- The token in the URL that `envs edit --ui` opens is now single-use: the first visit trades it for a session cookie with a different random value, and the URL stops working (`401`), so it is useless if read later from the browser history or the terminal. Using it prints a fresh single-use URL to stdout right away (`New single-use URL: ...`).
 
 ### Added
 
