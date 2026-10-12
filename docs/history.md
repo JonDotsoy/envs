@@ -27,6 +27,7 @@ Cada línea de `.envs/history.ndjson` es un objeto JSON:
 | `prev` | `hash` del punto anterior; `null` en el primero. |
 | `timestamp` | Momento del punto, en ISO 8601 (UTC). |
 | `changes` | Lista de diferencias respecto al estado anterior. |
+| `resync` | Solo aparece (con valor `true`) en los puntos de resincronización; ver más abajo. |
 
 ### Cambios (`changes`)
 
@@ -77,11 +78,20 @@ Un punto se escribe solo si `values.yml` cambió realmente.
 | `envs restore <hash>` | La diferencia entre el estado actual y el restablecido (ver más abajo). |
 | `envs push`, `envs lint`, `envs use` sin argumentos | Ninguno. |
 
-Editar `values.yml` a mano fuera de estos comandos no genera un punto: forma parte del snapshot, pero no queda en los cambios.
+### Puntos de resincronización
+
+Aplicar todos los puntos debe dar siempre `values.yml`. Si algo cambió `values.yml` **fuera del historial**, el siguiente comando que registra un punto lo detecta (compara `values.yml` con el estado reconstruido) y agrega primero un **punto de resincronización**, con `"resync": true`, que contiene esa diferencia. Después viene el punto propio del comando, encadenado al de resincronización.
+
+Esto ocurre en dos casos:
+
+- Editaste `values.yml` a mano, fuera de `envs edit`.
+- Hubo cambios mientras el historial estaba desactivado (`history: false`).
+
+Un punto de resincronización es un punto normal: se puede ver en el panel y es un destino válido de `envs restore`. Solo aparece si hay diferencia, y el momento que registra es el del comando que lo detectó, no el de la edición manual, que no se puede conocer.
 
 ## Reconstruir el estado
 
-Aplicando los puntos en orden, desde el primero, se obtiene el snapshot tal como quedó después de cada uno. Como el primer punto contiene todo el estado inicial, el resultado tras el último punto coincide con `values.yml` (salvo las ediciones manuales mencionadas arriba).
+Aplicando los puntos en orden, desde el primero, se obtiene el snapshot tal como quedó después de cada uno. Como el primer punto contiene todo el estado inicial, el resultado tras el último punto coincide con `values.yml` (los cambios hechos fuera del historial quedan registrados por el siguiente punto de resincronización).
 
 Para recuperar un valor anterior, busca en `changes` el `path` y toma su `from`:
 
@@ -130,7 +140,7 @@ envs config set history false   # dejar de registrar
 envs config set history true    # registrar de nuevo (o `envs config delete history`)
 ```
 
-Los cambios hechos mientras está desactivado no tienen punto: al reactivarlo, el siguiente punto parte del `values.yml` de ese momento.
+Los cambios hechos mientras está desactivado no tienen punto en ese momento, pero no se pierden: al reactivarlo, el siguiente comando que registra un punto agrega primero un [punto de resincronización](#puntos-de-resincronización) con lo que cambió.
 
 ## Seguridad
 

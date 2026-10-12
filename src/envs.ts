@@ -10,6 +10,7 @@ import {
   diffValues,
   findHistoryPoint,
   stateAfter,
+  type Change,
   type HistoryPoint,
   type NormalizedValues,
   type ResolvedProfile,
@@ -139,13 +140,19 @@ export function materializeProfiles(values: NormalizedValues): string[] {
 }
 
 /**
- * Appends one point to `.envs/history.ndjson`: `{prev, timestamp, changes, hash}` on one line.
+ * Appends points to `.envs/history.ndjson`: `{prev, timestamp, changes, hash}` on one line each.
  * `prev` is the hash of the previous point (null for the first) and `hash` covers the rest of the
  * line, so the file is a hash chain. Nothing is written when nothing changed.
  *
  * The first point of a history always describes the whole state (it is the difference from
  * nothing), whatever command writes it: the points are replayed from an empty state, so a first
  * point holding only one change would make `restore` lose everything else.
+ *
+ * Replaying the points must always give back values.yml. When `before` (the values.yml this
+ * operation started from) differs from the replayed history, something changed it outside the
+ * history: a manual edit, or a period with `history` off. A *resync* point (`resync: true`) records
+ * that difference first, so the chain stays faithful and `restore` does not undo it by accident.
+ * Returns the hash of the point that records `before` → `after`.
  */
 export async function recordHistory(
   root: string,
@@ -155,18 +162,24 @@ export async function recordHistory(
 ): Promise<string | undefined> {
   if (!(await historyEnabled(root))) return undefined;
   const historyPath = join(root, ".envs/history.ndjson");
-  const last = (await Bun.file(historyPath).exists() ? await Bun.file(historyPath).text() : "")
-    .trimEnd()
-    .split("\n")
-    .at(-1);
-  const changes = diffValues(last ? before : { uses: {}, profiles: {} }, after);
-  if (changes.length === 0) return undefined;
-  const prev: string | null = last ? JSON.parse(last).hash : null;
-  const point = { prev, timestamp: now().toISOString(), changes };
-  const hash = createHash("sha256").update(JSON.stringify(point)).digest("hex").slice(0, 12);
-  // The history holds variable values, so it is created readable only by the owner.
-  await appendFile(historyPath, JSON.stringify({ hash, ...point }) + "\n", { mode: 0o600 });
-  return hash;
+  const points = await readHistoryPoints(root);
+  let prev: string | null = points.at(-1)?.hash ?? null;
+  const append = async (changes: Change[], extra: { resync?: true } = {}) => {
+    const point = { prev, timestamp: now().toISOString(), changes, ...extra };
+    const hash = createHash("sha256").update(JSON.stringify(point)).digest("hex").slice(0, 12);
+    // The history holds variable values, so it is created readable only by the owner.
+    await appendFile(historyPath, JSON.stringify({ hash, ...point }) + "\n", { mode: 0o600 });
+    prev = hash;
+    return hash;
+  };
+  if (points.length === 0) {
+    const changes = diffValues({ uses: {}, profiles: {} }, after);
+    return changes.length === 0 ? undefined : await append(changes);
+  }
+  const drift = diffValues(stateAfter(points, points.at(-1)!), before);
+  if (drift.length > 0) await append(drift, { resync: true });
+  const changes = diffValues(before, after);
+  return changes.length === 0 ? undefined : await append(changes);
 }
 
 /** `envs config set history false` turns the history off; it is on unless set to false. */

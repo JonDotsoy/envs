@@ -864,9 +864,16 @@ describe("history on the first edit of a project", () => {
     await Bun.write(join(ws.worktrees["feature-x"]!, ".env"), "LOG=info\nPORT=3005\n");
     expect(await run(["pull"], testContext(ws.main, { now }).ctx)).toBe(0);
     const entries = await readHistory();
-    expect(entries).toHaveLength(before + 1);
-    // The change made while it was off has no point; the new one goes from what values.yml had.
-    expect(entries.at(-1).changes).toEqual([
+    // What happened while it was off is recorded by a resync point, then the new change follows.
+    expect(entries).toHaveLength(before + 2);
+    const [resync, point] = entries.slice(-2);
+    expect(resync.resync).toBe(true);
+    expect(resync.changes).toEqual([
+      { path: ["profiles", "default", "envs", "PORT", "feature-x"], from: 3003, to: 3004 },
+    ]);
+    expect(point.resync).toBeUndefined();
+    expect(point.prev).toBe(resync.hash);
+    expect(point.changes).toEqual([
       { path: ["profiles", "default", "envs", "PORT", "feature-x"], from: 3004, to: 3005 },
     ]);
     expect(await history().exists()).toBe(true);
@@ -1112,6 +1119,81 @@ describe("the first history point holds the whole state", () => {
     expect(all).toHaveLength(2);
     expect(all[1].changes).toEqual([{ path: ["uses", "feature-x"], from: "staging", to: "default" }]);
     expect(all[1].prev).toBe(all[0].hash);
+  });
+});
+
+describe("resync points", () => {
+  let ws: Workspace;
+  beforeAll(async () => {
+    ws = await createWorkspace({ worktrees: ["feature-x"] });
+  });
+  afterAll(() => ws.cleanup());
+
+  const valuesPath = () => join(ws.main, ".envs/values.yml");
+  const points = async () =>
+    (await Bun.file(join(ws.main, ".envs/history.ndjson")).text()).trim().split("\n").map((l) => JSON.parse(l));
+  const edited = async (change: (values: any) => void) => {
+    const values = Bun.YAML.parse(await Bun.file(valuesPath()).text()) as any;
+    change(values);
+    await Bun.write(valuesPath(), Bun.YAML.stringify(values));
+  };
+
+  test("a manual edit of values.yml gets a resync point before the next operation's own point", async () => {
+    await rm(join(ws.main, ".envs"), { recursive: true, force: true });
+    await run(["init"], testContext(ws.main).ctx);
+    await Bun.write(join(ws.main, ".env"), "A=1\n");
+    await rm(join(ws.worktrees["feature-x"]!, ".env"), { force: true });
+    expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
+    const [initial] = await points();
+
+    await edited((v) => {
+      v.profiles.default.defaults.MANUAL = "by-hand";
+    });
+    await Bun.write(join(ws.main, ".env"), "A=2\n");
+    expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
+
+    const [, resync, own, ...rest] = await points();
+    expect(rest).toHaveLength(0);
+    expect(resync.resync).toBe(true);
+    expect(resync.prev).toBe(initial.hash);
+    expect(resync.changes).toEqual([{ path: ["profiles", "default", "defaults", "MANUAL"], to: "by-hand" }]);
+    expect(own.resync).toBeUndefined();
+    expect(own.prev).toBe(resync.hash);
+    expect(own.changes).toEqual([{ path: ["profiles", "default", "envs", "A", "main"], from: 1, to: 2 }]);
+  });
+
+  test("restore to the latest point keeps a manual edit, and resync points are valid restore targets", async () => {
+    const all = await points();
+    const latest = all.at(-1);
+    const resync = all.find((p) => p.resync)!;
+    expect(await run(["restore", latest.hash], testContext(ws.main).ctx)).toBe(0);
+    expect(Bun.YAML.parse(await Bun.file(valuesPath()).text())).toMatchObject({
+      profiles: { default: { defaults: { MANUAL: "by-hand" }, envs: { A: { main: 2 } } } },
+    });
+    // Restoring the resync point itself brings A back to what it was then (1) and keeps MANUAL.
+    expect(await run(["restore", resync.hash], testContext(ws.main).ctx)).toBe(0);
+    expect(Bun.YAML.parse(await Bun.file(valuesPath()).text())).toMatchObject({
+      profiles: { default: { defaults: { MANUAL: "by-hand" }, envs: { A: { main: 1 } } } },
+    });
+  });
+
+  test("no drift, no resync: a normal operation adds a single point", async () => {
+    const before = (await points()).length;
+    await Bun.write(join(ws.main, ".env"), "A=3\n");
+    expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
+    const after = await points();
+    expect(after).toHaveLength(before + 1);
+    expect(after.at(-1).resync).toBeUndefined();
+  });
+
+  test("the chain with resync points still verifies: each hash covers the whole line", async () => {
+    let prev: string | null = null;
+    for (const line of await points()) {
+      const { hash, ...point } = line;
+      expect(point.prev).toBe(prev);
+      expect(hash).toBe(new Bun.CryptoHasher("sha256").update(JSON.stringify(point)).digest("hex").slice(0, 12));
+      prev = hash;
+    }
   });
 });
 

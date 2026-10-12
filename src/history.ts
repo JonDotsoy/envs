@@ -32,6 +32,8 @@ export interface HistoryPoint {
   prev: string | null;
   timestamp: string;
   changes: Change[];
+  /** A point that records changes made outside the history (a manual edit, or a period with the history off). */
+  resync?: boolean;
 }
 
 const keys = (a?: object, b?: object) => [...new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])];

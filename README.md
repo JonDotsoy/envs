@@ -137,7 +137,7 @@ A point is written only when `values.yml` actually changed.
 
 ### Reading it
 
-Applying the points in order, from the first one, rebuilds the snapshot as it was after each of them. Because the first point contains the whole initial state, the result after the last point equals `values.yml`. The exception is a manual edit of `values.yml` made outside these commands: it is part of the snapshot but has no point.
+Applying the points in order, from the first one, rebuilds the snapshot as it was after each of them. Because the first point contains the whole initial state, the result after the last point equals `values.yml`. A change made outside the history (a manual edit of `values.yml`, or a period with the history off) is recorded by the next command that writes a point, which first adds a *resync point* (`"resync": true`) holding the difference.
 
 ### Turning it off
 
@@ -148,7 +148,7 @@ envs config set history false   # stop recording
 envs config set history true    # record again (or `envs config delete history`)
 ```
 
-Changes made while it is off get no point: when you turn it on again, the next point starts from the `values.yml` of that moment.
+Changes made while it is off get no point at that moment, but they are not lost: when you turn it on again, the next recorded point is preceded by a resync point with what changed meanwhile.
 
 ### In the web editor
 

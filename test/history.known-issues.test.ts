@@ -219,7 +219,8 @@ describe("data loss and orphan variables", () => {
     expect(await d.text()).toContain("DATABASE_URL");
   }, T);
 
-  bug("H03 (high) with history=false the history gets a gap and restoring the last point reverts what was done while it was off", async () => {
+  // Fixed: a resync point records what changed outside the history.
+  test("H03 (fixed) with history=false the gap is recorded by a resync point, so restoring the last point keeps it", async () => {
     const d = await demo();
     await d.cmd(["config", "set", "history", "false"]);
     await appendFile(join(d.checkout, ".env"), "STRIPE_SECRET=demo-stripe\n");
@@ -233,7 +234,7 @@ describe("data loss and orphan variables", () => {
     expect(await d.text()).toContain("STRIPE_SECRET");
   }, T);
 
-  bug("H04 a manual edit of values.yml (outside envs edit) is never recorded in the history", async () => {
+  test("H04 (fixed) a manual edit of values.yml (outside envs edit) is recorded by a resync point", async () => {
     const d = await demo();
     const text = await d.text();
     await Bun.write(d.values, text.replace("    defaults: \n      {}\n", "    defaults: \n      SENTRY_DSN: https://demo@sentry.invalid/1\n"));
