@@ -29,6 +29,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- `envs edit`: a cancelled or failed editor (non-zero exit) leaves `values.yml` as it was before, instead of keeping the half-made edit for the next `push`.
+- `envs restore` is refused with the history off, as the web editor already did, instead of rewriting `values.yml` without a point.
+- `envs pull`: deleting a variable from the `.env` of a worktree on a profile other than `default` now also drops its entry under `default`, so `push` does not write it back.
+- Web editor: Save no longer turns unchanged quoted strings (`"3000"`, `"true"`) into numbers or booleans, and a variable set to the empty string (`FOO=`) is no longer dropped: it is shown as `""` (an empty cell still means "not set").
+- Web editor: Save is refused (409) when `values.yml` changed after the editor was loaded, instead of overwriting what another command saved meanwhile.
 - `envs push` refuses, writing nothing, a variable name that is not valid or a value with a line break (it would inject another variable into the `.env`); Save in the web editor refuses it before saving, and `envs lint` reports it as `unsafe-dotenv-value`.
 - The hash chain of the history is verified: `envs restore` refuses (unless `--force`) when a point was edited, removed or reordered, other commands warn, and the History panel flags it.
 - Variables, profiles and worktrees named `__proto__`, `constructor`, `toString`… are now ordinary names: values, history and `.env` data are held in maps without a prototype and read by own key, so they no longer pollute `Object.prototype` (through `values.yml`, the web editor API or a history file), break `pull`/`push` (a branch called `constructor`) or get silently lost (a variable called `__proto__`).

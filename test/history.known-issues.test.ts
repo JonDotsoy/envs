@@ -23,6 +23,7 @@ import {
   applyChanges,
   compareStates,
   loadUiHistory,
+  loadUiState,
   normalizeValues,
   parseDotenv,
   readHistoryPoints,
@@ -32,6 +33,7 @@ import {
   type Context,
   type NormalizedValues,
 } from "../src/envs";
+import { fromVarRows, toVarRows } from "../src/ui/rows";
 import { serveUi } from "../src/ui/server";
 import { createWorkspace, type Workspace } from "./fixtures/workspace";
 
@@ -121,23 +123,11 @@ const canon = (v: NormalizedValues) => {
   return JSON.stringify(sort({ uses: v.uses, profiles }));
 };
 
-/** What the web editor sends on Save: every value as text, empty cells dropped (see fromVarRows in src/ui/app.tsx). */
+/** What the web editor sends on Save: the real table functions of the page, every value as text. */
 const uiPayload = (state: NormalizedValues): NormalizedValues => {
-  const out = structuredClone(state) as any;
-  for (const profile of Object.values<any>(out.profiles)) {
-    for (const [k, v] of Object.entries<any>(profile.defaults)) {
-      if (String(v) === "") delete profile.defaults[k];
-      else profile.defaults[k] = String(v);
-    }
-    for (const [k, by] of Object.entries<any>(profile.envs)) {
-      for (const [w, v] of Object.entries<any>(by)) {
-        if (String(v) === "") delete by[w];
-        else by[w] = String(v);
-      }
-      if (Object.keys(by).length === 0) delete profile.envs[k];
-    }
-  }
-  return out;
+  const profiles: any = {};
+  for (const [name, profile] of Object.entries(state.profiles)) profiles[name] = fromVarRows(toVarRows(profile));
+  return { uses: { ...state.uses }, profiles };
 };
 
 const saveCtx = (d: Demo): Context => ({
@@ -250,7 +240,7 @@ describe("data loss and orphan variables", () => {
     expect(canon(await replayOf(d))).toBe(canon(await snapshotOf(d)));
   }, T);
 
-  bug("H05 a cancelled envs edit (editor exits non-zero) leaves its changes in values.yml, without a point or a push", async () => {
+  test("H05 (fixed) a cancelled envs edit (editor exits non-zero) leaves values.yml as it was", async () => {
     const d = await demo();
     const { code } = await d.cmd(["edit"], {
       openEditor: async (path) => {
@@ -266,7 +256,8 @@ describe("data loss and orphan variables", () => {
     expect(await d.dotenv(d.main)).not.toContain("PORT=9999");
   }, T);
 
-  bug("H06 Save in the web editor removes variables whose value is empty (FOO=)", async () => {
+  // Fixed: an empty string is shown as `""` in the table, so it is not confused with an empty (unset) cell.
+  test("H06 (fixed) Save in the web editor keeps variables whose value is empty (FOO=)", async () => {
     const d = await demo();
     await appendFile(join(d.main, ".env"), "OPTIONAL_FLAG=\n");
     await d.cmd(["pull"]);
@@ -275,16 +266,25 @@ describe("data loss and orphan variables", () => {
     expect(await d.text()).toContain("OPTIONAL_FLAG");
   }, T);
 
-  bug("H07 Save in the web editor overwrites what the CLI changed after the editor was loaded (lost update)", async () => {
+  // Fixed: the editor sends the version of values.yml it loaded; a stale save is refused (409).
+  test("H07 (fixed) Save in the web editor refuses to overwrite what the CLI changed after the editor was loaded", async () => {
     const d = await demo();
-    const loaded = await snapshotOf(d);
+    const loaded = await loadUiState(saveCtx(d)); // what GET /api/values handed to the editor
     await appendFile(join(d.login, ".env"), "NEW_FROM_TERMINAL=1\n");
     await d.cmd(["pull"]);
     expect(await d.text()).toContain("NEW_FROM_TERMINAL");
-    (loaded.profiles.default!.envs.LOG_LEVEL as any).main = "warn";
-    // Either the save is refused (conflict) or the newer variable survives.
-    await saveUiState(saveCtx(d), loaded).catch(() => {});
+    const { worktrees: _, version, ...edited } = loaded;
+    (edited.profiles.default!.envs.LOG_LEVEL as any).main = "warn";
+    const result = await saveUiState(saveCtx(d), edited as NormalizedValues, { base: version });
+    expect(result.conflict).toBe(true);
+    expect(result.code).toBe(1);
     expect(await d.text()).toContain("NEW_FROM_TERMINAL");
+    expect(await d.text()).not.toContain("main: warn");
+    // After reloading, the same change saves fine.
+    const fresh = await loadUiState(saveCtx(d));
+    const { worktrees: __, version: v2, ...again } = fresh;
+    (again.profiles.default!.envs.LOG_LEVEL as any).main = "warn";
+    expect((await saveUiState(saveCtx(d), again as NormalizedValues, { base: v2 })).code).toBe(0);
   }, T);
 
   bug("H08 entries of a deleted or renamed worktree stay orphan in values.yml forever, and lint does not warn", async () => {
@@ -344,7 +344,7 @@ describe("data loss and orphan variables", () => {
     expect(await d.dotenv(d.login)).not.toContain("REGION=eu");
   }, T);
 
-  bug("H33 worktree on a profile other than default: deleting a variable from its .env is not reflected and push brings it back", async () => {
+  test("H33 (fixed) worktree on a profile other than default: deleting a variable from its .env is reflected and push does not bring it back", async () => {
     const d = await demo();
     const y = Bun.YAML.parse(await d.text()) as any;
     y.profiles.staging = { defaults: { LOG_LEVEL: "warn" }, envs: {} };
@@ -423,7 +423,7 @@ describe("history integrity", () => {
     expect((await d.cmd(["restore", x!])).code).toBe(0);
   }, T);
 
-  bug("H34 envs restore on the CLI with history=false rewrites values.yml without a point and says \"Already at\"", async () => {
+  test("H34 (fixed) envs restore on the CLI with history=false is refused, like the web editor does", async () => {
     const d = await demo();
     await Bun.write(join(d.main, ".env"), (await d.dotenv(d.main)).replace("PORT=3000", "PORT=4000"));
     await d.cmd(["pull"]);
@@ -626,22 +626,25 @@ describe("types, odd names and prototype pollution", () => {
     expect(Object.keys((await snapshotOf(d)).profiles.default!.envs)).not.toContain("INJECTED");
   }, T);
 
-  bug("H31 Save in the web editor changes the type of quoted numeric/boolean strings (\"3000\", \"true\") and records a change nobody made", async () => {
+  test("H31 (fixed) Save in the web editor keeps the type of quoted numeric/boolean strings (\"3000\", \"true\") and records no change", async () => {
     const d = await demo();
     const y = Bun.YAML.parse(await d.text()) as any;
     y.profiles.default.defaults.ZIP = "3000";
     y.profiles.default.defaults.FLAG = "true";
     await Bun.write(d.values, Bun.YAML.stringify(y, null, 2));
+    await d.cmd(["pull"]); // records the manual edit above (a resync point) before measuring
     const before = (await readHistoryPoints(d.main)).length;
     // The editor sends everything as text, with no user change.
     await saveUiState(saveCtx(d), uiPayload(await snapshotOf(d)));
     expect((await readHistoryPoints(d.main)).length).toBe(before);
   }, T);
 
-  bug("H32 history panel: with an empty variable the latest point shows differences instead of \"in editor\" and offers Restore", () => {
+  // Fixed: the editor holds an empty value as `""`, so it matches the history (see src/ui/rows.ts).
+  test("H32 (fixed) history panel: with an empty variable the latest point is \"in editor\", not a difference", () => {
     const target: NormalizedValues = { uses: { main: "default" }, profiles: { default: { defaults: {}, envs: { OPT: { main: "" } } } } };
-    // What the editor holds (fromVarRows drops empty cells).
-    const current: NormalizedValues = { uses: { main: "default" }, profiles: { default: { defaults: {}, envs: {} } } };
+    // What the editor holds: the table's cells, parsed back the way Save sends them.
+    const current: NormalizedValues = { uses: { main: "default" }, profiles: { default: fromVarRows(toVarRows(target.profiles.default!)) } };
+    expect(current.profiles.default!.envs.OPT).toEqual({ main: "" });
     expect(compareStates(current, target).same).toBe(true);
   });
 });

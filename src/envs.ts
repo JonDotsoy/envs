@@ -578,9 +578,12 @@ export async function pull(ctx: Context): Promise<number> {
     pulledNames.push(name);
     for (const key of Object.keys(parsed)) pulledKeys.add(key);
     const { envs } = values.profiles[profile]!;
-    // Drop keys that are no longer in this worktree's .env.
-    for (const [key, byWorktree] of Object.entries(envs)) {
-      if (!(key in parsed)) delete byWorktree[name];
+    // Drop keys that are no longer in this worktree's .env, from every layer it resolves: its profile
+    // and, for a profile other than `default`, the entries it also has under `default`.
+    for (const layer of new Set([DEFAULT_PROFILE, profile])) {
+      for (const [key, byWorktree] of Object.entries(values.profiles[layer]!.envs)) {
+        if (!(key in parsed)) delete byWorktree[name];
+      }
     }
     // What the worktree would get without its own entries in this profile.
     const base = resolveEntries(values, name, profile, false);
@@ -737,6 +740,11 @@ export async function restore(ctx: Context, hash?: string, options: { force?: bo
   const read = await readValues(ctx);
   if (!read) return 1;
   const root = await findRoot(ctx.cwd);
+  if (!(await historyEnabled(root))) {
+    // The web editor refuses too: a restore with the history off would not be recorded.
+    ctx.error("The history is off, so a restore would not be recorded. Run `envs config set history true` first.");
+    return 1;
+  }
   const scan = await scanHistory(root);
   if (scan.damaged.length > 0) {
     // An exact state cannot be rebuilt around a missing point, so nothing is changed.
@@ -848,10 +856,14 @@ export async function edit(ctx: Context, options: { ui?: boolean } = {}): Promis
   const code = await ctx.openEditor(valuesPath);
   // Drop the notice so it never lingers in the file (or reaches `push`).
   const edited = await Bun.file(valuesPath).text();
+  if (code !== 0) {
+    // A cancelled or failed edit changes nothing: values.yml goes back to what it was before.
+    await Bun.write(valuesPath, original);
+    return code;
+  }
   if (edited.startsWith(EDIT_NOTICE)) {
     await Bun.write(valuesPath, edited.slice(EDIT_NOTICE.length));
   }
-  if (code !== 0) return code;
   // A profile newly named in `uses` starts as a copy of `default`.
   const raw = (Bun.YAML.parse(await Bun.file(valuesPath).text()) ?? {}) as Values;
   const values = normalizeValues(raw);
@@ -875,7 +887,7 @@ export async function loadUiState(ctx: Context) {
   const [main, ...others] = (await listWorktrees(ctx.cwd)).map(({ name }) => name);
   others.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const worktrees = main === undefined ? [] : [main, ...others];
-  return { ...normalizeValues(read.values), worktrees };
+  return { ...normalizeValues(read.values), worktrees, version: valuesVersion(await Bun.file(read.path).text()) };
 }
 
 /** History the web editor shows: whether it is on and its points, oldest first (none while it is off). */
@@ -899,17 +911,32 @@ export async function loadUiHistory(
 export async function saveUiState(
   ctx: Context,
   input: NormalizedValues,
-): Promise<{ created: string[]; code: number }> {
+  options: { base?: string } = {},
+): Promise<{ created: string[]; code: number; conflict?: boolean }> {
+  const root = await findRoot(ctx.cwd);
+  const path = join(root, ".envs/values.yml");
+  const currentText = (await Bun.file(path).exists()) ? await Bun.file(path).text() : "";
+  // The editor was loaded from an older values.yml: saving would silently overwrite what changed since.
+  if (options.base !== undefined && options.base !== valuesVersion(currentText)) {
+    ctx.error("values.yml changed after the editor was loaded (another command or editor saved it). Reload the editor and apply your changes again; nothing was saved.");
+    return { created: [], code: 1, conflict: true };
+  }
+  const before = normalizeValues((Bun.YAML.parse(currentText) ?? {}) as Values);
   const values = normalizeValues({ uses: input.uses, profiles: input.profiles });
-  // The editor sends every value as text: give `3000`/`true` their type back (as `pull` does),
-  // so an untouched number is not saved, or recorded in the history, as a change to a string.
-  for (const profile of Object.values(values.profiles)) {
+  // The editor sends every value as text. An unchanged value keeps the exact value (and type) it had;
+  // anything else gets its type back as `pull` does (`3000` → number, `true` → boolean), so an untouched
+  // value is never saved, or recorded in the history, as a change.
+  const typed = (value: Value, previous: Value | undefined): Value =>
+    typeof value !== "string" ? value : previous !== undefined && String(previous) === value ? previous : parseValue(value);
+  for (const [name, profile] of Object.entries(values.profiles)) {
+    const old = Object.hasOwn(before.profiles, name) ? before.profiles[name] : undefined;
     for (const [key, value] of Object.entries(profile.defaults)) {
-      if (typeof value === "string") profile.defaults[key] = parseValue(value);
+      profile.defaults[key] = typed(value, old && Object.hasOwn(old.defaults, key) ? old.defaults[key] : undefined);
     }
-    for (const byWorktree of Object.values(profile.envs)) {
+    for (const [key, byWorktree] of Object.entries(profile.envs)) {
+      const oldByWorktree = old && Object.hasOwn(old.envs, key) ? old.envs[key] : undefined;
       for (const [worktree, value] of Object.entries(byWorktree)) {
-        if (typeof value === "string") byWorktree[worktree] = parseValue(value);
+        byWorktree[worktree] = typed(value, oldByWorktree && Object.hasOwn(oldByWorktree, worktree) ? oldByWorktree[worktree] : undefined);
       }
     }
   }
@@ -929,14 +956,14 @@ export async function saveUiState(
   }
   if (!safe) return { created: [], code: 1 };
   const created = materializeProfiles(values);
-  const root = await findRoot(ctx.cwd);
-  const path = join(root, ".envs/values.yml");
-  const before = normalizeValues(
-    ((await Bun.file(path).exists() ? Bun.YAML.parse(await Bun.file(path).text()) : undefined) ?? {}) as Values,
-  );
   await Bun.write(path, stringifyValues(values));
   await recordHistory(root, before, values, ctx.now, ctx.error);
   return { created, code: await push(ctx) };
+}
+
+/** A short fingerprint of values.yml: the web editor sends back the one it loaded, to detect a stale save. */
+export function valuesVersion(text: string): string {
+  return createHash("sha256").update(text).digest("hex").slice(0, 12);
 }
 
 /** Instructions placed at the top of values.yml while `envs edit` waits for the editor. */

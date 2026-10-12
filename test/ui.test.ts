@@ -466,5 +466,38 @@ describe("web editor access control", () => {
       await ui.stop();
     }
   });
+
+  test("PUT with a stale `version` is refused with 409 and writes nothing; the current version saves", async () => {
+    const ui = await open();
+    try {
+      const state: any = await (await realFetch(ui.origin + "/api/values", { headers: { "x-envs-token": ui.token } })).json();
+      expect(state.version).toMatch(/^[0-9a-f]{12}$/);
+      const { worktrees: _, ...body } = state;
+      const put = (version: string) =>
+        realFetch(ui.origin + "/api/values", {
+          method: "PUT",
+          headers: { "x-envs-token": ui.token, "content-type": "application/json" },
+          body: JSON.stringify({ ...body, version }),
+        });
+      const before = await Bun.file(join(aws.main, ".envs/values.yml")).text();
+      const stale = await put("000000000000");
+      expect(stale.status).toBe(409);
+      expect(((await stale.json()) as any).errors[0]).toContain("changed after the editor was loaded");
+      expect(await Bun.file(join(aws.main, ".envs/values.yml")).text()).toBe(before);
+      body.profiles.default.defaults.CHANGED = String(Date.now());
+      expect((await put(state.version)).status).toBe(200);
+      // The save changed values.yml, so the same version is stale now.
+      expect((await put(state.version)).status).toBe(409);
+      // A version of the wrong type is a bad request.
+      const bad = await realFetch(ui.origin + "/api/values", {
+        method: "PUT",
+        headers: { "x-envs-token": ui.token, "content-type": "application/json" },
+        body: JSON.stringify({ ...body, version: 5 }),
+      });
+      expect(bad.status).toBe(400);
+    } finally {
+      await ui.stop();
+    }
+  });
 });
 

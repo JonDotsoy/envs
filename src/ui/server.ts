@@ -20,7 +20,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 const isScalar = (v: unknown) => ["string", "number", "boolean"].includes(typeof v);
 
 /** Validates the JSON body of a save request. */
-function parseBody(body: unknown): NormalizedValues | undefined {
+function parseBody(body: unknown): { values: NormalizedValues; base?: string } | undefined {
   if (!isRecord(body) || !isRecord(body.uses) || !isRecord(body.profiles)) return;
   if (!Object.values(body.uses).every((v) => typeof v === "string")) return;
   for (const profile of Object.values(body.profiles)) {
@@ -30,7 +30,8 @@ function parseBody(body: unknown): NormalizedValues | undefined {
       if (!isRecord(byWorktree) || !Object.values(byWorktree).every(isScalar)) return;
     }
   }
-  return body as unknown as NormalizedValues;
+  if (body.version !== undefined && typeof body.version !== "string") return;
+  return { values: body as unknown as NormalizedValues, ...(body.version !== undefined && { base: body.version }) };
 }
 
 /** Validates the JSON body of a restore request: `{hash}` with a whole point hash (12 hex characters). */
@@ -146,11 +147,12 @@ export async function serveUi(ctx: Context): Promise<number> {
       "/api/values": {
         GET: guard(async () => Response.json(await loadUiState(ctx))),
         PUT: guard(async (req) => {
-          const values = parseBody(await req.json().catch(() => undefined));
-          if (!values) return Response.json({ error: "Invalid values" }, { status: 400 });
+          const parsed = parseBody(await req.json().catch(() => undefined));
+          if (!parsed) return Response.json({ error: "Invalid values" }, { status: 400 });
           const { ctx: captured, logs, errors } = capture(ctx);
-          const { created, code } = await saveUiState(captured, values);
-          return Response.json({ ok: code === 0, created, logs, errors }, { status: code === 0 ? 200 : 500 });
+          const { created, code, conflict } = await saveUiState(captured, parsed.values, { base: parsed.base });
+          // 409: values.yml changed after this editor loaded it; nothing was saved.
+          return Response.json({ ok: code === 0, created, logs, errors }, { status: code === 0 ? 200 : conflict ? 409 : 500 });
         }),
       },
       "/api/history": {

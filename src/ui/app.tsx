@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { dict } from "../history";
+import { EMPTY_VALUE, fromVarRows, toVarRows, type Profile, type VarRow } from "./rows";
 import { HistoryPanel, type HistoryState } from "./history-panel";
 import { Logo } from "./logo";
 
-type Value = string | number | boolean;
-interface Profile {
-  defaults: Record<string, Value>;
-  envs: Record<string, Record<string, Value>>;
-}
 interface State {
   uses: Record<string, string>;
   profiles: Record<string, Profile>;
   worktrees: string[];
+  /** Fingerprint of the values.yml this state was read from; sent back on Save to detect a stale editor. */
+  version: string;
 }
 interface SaveResult {
   ok: boolean;
@@ -22,31 +19,6 @@ interface SaveResult {
 }
 /** The outcome of the last Save or Restore, shown in the status badge and the log. */
 type ActionResult = SaveResult & { action: "save" | "restore" };
-
-/** One variable of a profile: its default and its override per worktree (missing/empty = not set). */
-type VarRow = { key: string; def: string; byWorktree: Record<string, string> };
-const toVarRows = (profile: Profile): VarRow[] => {
-  const rows = new Map<string, VarRow>();
-  const row = (key: string) => rows.get(key) ?? rows.set(key, { key, def: "", byWorktree: dict() }).get(key)!;
-  for (const [key, value] of Object.entries(profile.defaults)) row(key).def = String(value);
-  for (const [key, byWorktree] of Object.entries(profile.envs)) {
-    for (const [wt, value] of Object.entries(byWorktree)) row(key).byWorktree[wt] = String(value);
-  }
-  return [...rows.values()];
-};
-const fromVarRows = (rows: VarRow[]): Profile => {
-  // Maps without a prototype: a variable called `__proto__` or `constructor` is just a name.
-  const profile: Profile = { defaults: dict(), envs: dict() };
-  for (const { key: raw, def, byWorktree } of rows) {
-    const key = raw.trim();
-    if (key === "") continue;
-    if (def !== "") profile.defaults[key] = def;
-    for (const [wt, value] of Object.entries(byWorktree)) {
-      if (value !== "") (profile.envs[key] ??= dict())[wt] = value;
-    }
-  }
-  return profile;
-};
 
 /** JSON with sorted keys, so two states compare equal regardless of key order. */
 const stable = (v: unknown): string =>
@@ -216,7 +188,7 @@ function App() {
       const res = await fetch("/api/values", {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ uses, profiles }),
+        body: JSON.stringify({ uses, profiles, version: loaded?.version }),
       });
       const body = (await res.json()) as SaveResult & { error?: string };
       setResult(res.ok ? { ...body, action: "save" } : { action: "save", ok: false, created: [], logs: body.logs ?? [], errors: body.errors ?? [body.error ?? "Save failed"] });
@@ -331,7 +303,7 @@ function App() {
         <section className="card">
           <p className="eyebrow">Variables</p>
           <h2>{profile}{worktree && ` · ${worktree}`}</h2>
-          <p className="lede">The default applies to every worktree unless the worktree sets its own value. Empty cells inherit the default.</p>
+          <p className="lede">The default applies to every worktree unless the worktree sets its own value. Empty cells inherit the default; type <code>{EMPTY_VALUE}</code> to set an empty value.</p>
           <VarsEditor
             rows={vars[profile] ?? []}
             onChange={(rows) => setVars({ ...vars, [profile]: rows })}
