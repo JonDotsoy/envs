@@ -172,7 +172,8 @@ jobs:
           sed -i -E \
             -e "s|^( *url \").*(\")\$|\1$url\2|" \
             -e "s|^( *sha256 \").*(\")\$|\1$sha256\2|" \
-            Formula/envs.rb
+            -e "s|^( *version \").*(\")\$|\1$VERSION\2|" \
+            envs.rb
           if git diff --quiet; then
             echo "Formula already up to date"
             exit 0
