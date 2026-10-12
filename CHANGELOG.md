@@ -29,6 +29,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- `envs pull` reads backtick-quoted values, so a value with single and double quotes (`p'a"ss`) written by `push` is no longer stored with the backticks; a value that would need backticks but has one is rejected by `dotenvProblem` (and `lint`).
+- The `sk-`, `AKIA`, `gh*_` and `xox*-` secret patterns no longer match inside a longer word (`task-management-service-prod` is not a secret).
+- Docs: `push` sets `.env` files to mode `600` (SECURITY.md) and well-known secret formats are masked whatever the variable name.
 - The history never holds a secret: sensitive variable names and URLs with a password are stored as keyed fingerprints (`envs:redacted:…`, key in `.envs/history.key`), so a rotated secret is not kept. `envs restore` keeps the current value of a secret and says so; `envs history redact` cleans an existing history and `history.secrets true` opts out. The console masks the password and the sensitive query parameters of a URL.
 - Writing commands take `.envs/lock`: concurrent `envs` processes no longer fork the history chain, repeat a hash or lose a `use`.
 - `.envs/` is created `700` and its files `600` (existing projects are tightened by the next writing command); a `.env` created by `push` is `600`.

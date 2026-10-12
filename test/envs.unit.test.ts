@@ -28,6 +28,7 @@ import {
   updateDotenv,
   type Context,
 } from "../src/envs";
+import { dotenvProblem } from "../src/lint-rules";
 import { createWorkspace, type Workspace } from "./fixtures/workspace";
 
 // Keep color assertions independent of the developer's shell.
@@ -76,6 +77,10 @@ describe("parseDotenv", () => {
     });
   });
 
+  test("reads backtick-quoted values", () => {
+    expect(parseDotenv("A=`p'a\"ss`\nB=`x # y`")).toEqual({ A: `p'a"ss`, B: "x # y" });
+  });
+
   test("supports CRLF line endings", () => {
     expect(parseDotenv("A=1\r\nB=2\r\n")).toEqual({ A: "1", B: "2" });
   });
@@ -93,11 +98,26 @@ describe("formatDotenvValue", () => {
     expect(formatDotenvValue('say "hi"')).toBe(`'say "hi"'`);
   });
 
+  test("values survive envs' own pull (parseDotenv)", () => {
+    for (const value of [`p'a"ss`, "a\\nb'c", "two words", `it's`, "a`b", "x#y", ""]) {
+      expect(parseDotenv(`X=${formatDotenvValue(value)}`).X).toBe(value);
+    }
+  });
+
   test("values survive a dotenv parser", () => {
     const { parseEnv } = require("node:util");
     for (const value of [`p'a"ss`, "a\\nb", "two words", `it's`, "$HOME", "a`b", "x#y"]) {
       expect(parseEnv(`X=${formatDotenvValue(value)}`).X).toBe(value);
     }
+  });
+});
+
+describe("dotenvProblem", () => {
+  test("rejects values no quoting can hold", () => {
+    expect(dotenvProblem("X", "a'b\\nc`d")).toBeString();
+    expect(dotenvProblem("X", `a'b"c\`d`)).toBeString();
+    expect(dotenvProblem("X", "a`b")).toBeUndefined();
+    expect(dotenvProblem("X", `p'a"ss`)).toBeUndefined();
   });
 });
 

@@ -27,7 +27,7 @@ I will reply as soon as possible and we will coordinate the fix and the disclosu
 | --- | --- | --- |
 | `envs init` | — | Creates `<root>/.envs/`, `<root>/.envs/.gitignore` and `<root>/.envs/values.yml`, only if they do not exist. Never overwrites. |
 | `envs pull` | `<worktree>/.env` of each worktree | Rewrites `<root>/.envs/values.yml`. The file is serialized again, so YAML comments are lost. |
-| `envs push` | `<root>/.envs/values.yml` | Creates or updates `<worktree>/.env` of each worktree that has values. Updates existing variables in place, appends new ones at the end and keeps the rest of the file, except the orphan variables: those `envs` manages (they are or were in `values.yml` or its history) that the worktree no longer resolves are removed. If there are `defaults`, this includes all worktrees. |
+| `envs push` | `<root>/.envs/values.yml` | Creates or updates `<worktree>/.env` of each worktree that has values. Updates existing variables in place, appends new ones at the end and keeps the rest of the file (it sets the mode of every `.env` it writes to `600`, so another user, such as a container mounting it, can no longer read it), except the orphan variables: those `envs` manages (they are or were in `values.yml` or its history) that the worktree no longer resolves are removed. If there are `defaults`, this includes all worktrees. |
 | `envs edit` | Same as `pull` and `push` | Same as `pull` and `push`. It also runs `code -w <root>/.envs/values.yml`. With `--ui` it serves the web editor instead (see below). |
 | `envs use`, `envs restore` | `<root>/.envs/values.yml`, `<root>/.envs/history.ndjson` | Rewrite `values.yml` and then act as `push`. |
 | `envs config` | `<root>/.envs/config.yml` | Creates or updates `<root>/.envs/config.yml` (mode `600`). |
@@ -62,7 +62,7 @@ The server listens on `127.0.0.1` only and exposes the values of every `.env`, s
 `envs push` prints one line for each variable whose value changes, in the form `↻ NAME=VALUE → branch, ...`, and `envs pull` prints `↓ pulling branch, ... - N variables`. To keep secrets out of the terminal and CI logs:
 
 - The value is replaced by `********` when the variable name contains a sensitive word: `SECRET`, `PASSWORD`, `PASSWD`, `PWD`, `TOKEN`, `KEY` (including `API_KEY` and `PRIVATE_KEY`), `CREDENTIAL`, `AUTH`, `SALT` or `SIGNING`. The match is case-insensitive and applies to whole `_`-separated words, so `KEY_FOO` and `AWS_BUCKET_SECRET` are masked but `MONKEY` is not.
-- A URL keeps its host and loses its secrets: `postgres://user:********@host/db?token=********` (the password and the values of sensitive query parameters are masked). A secret stored in a variable with an innocuous name and no URL form is still printed as is.
+- A URL keeps its host and loses its secrets: `postgres://user:********@host/db?token=********` (the password and the values of sensitive query parameters are masked). A value in a well-known secret format (AWS key, GitHub or Slack token, `sk-…` key, private key) is masked whatever the variable is called; any other secret stored in a variable with an innocuous name and no URL form is still printed as is.
 - `envs pull` never prints values, only branch names and the number of variables.
 - `envs lint` messages never include the matched value.
 - Set `NO_COLOR` to a non-empty value to print the output without colors.
