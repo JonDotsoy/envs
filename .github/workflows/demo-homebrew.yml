@@ -1,0 +1,62 @@
+name: Demo Homebrew formula
+
+# Dry-run of the "Update Homebrew formula" step of publish.yml.
+# It does NOT publish to npm: it points the formula at a version that is already on npm.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version already published on npm
+        type: string
+        default: 0.1.9-alpha.3
+        required: true
+      push:
+        description: Push the formula change to jondotsoy/homebrew-core (off = only show the diff)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  homebrew:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: jondotsoy/homebrew-core
+          path: homebrew-core
+          # Deploy key with write access to jondotsoy/homebrew-core.
+          ssh-key: ${{ secrets.HOMEBREW_CORE_DEPLOY_KEY }}
+
+      - name: Update Homebrew formula
+        env:
+          VERSION: ${{ inputs.version }}
+          PUSH: ${{ inputs.push }}
+        run: |
+          name=$(node -p "require('./package.json').name")
+          url="https://registry.npmjs.org/$name/-/${name##*/}-$VERSION.tgz"
+
+          curl -fsSL "$url" -o package.tgz
+          sha256=$(sha256sum package.tgz | cut -d' ' -f1)
+
+          cd homebrew-core
+          sed -i -E \
+            -e "s|^( *url \").*(\")\$|\1$url\2|" \
+            -e "s|^( *sha256 \").*(\")\$|\1$sha256\2|" \
+            Formula/envs.rb
+          git --no-pager diff
+          if git diff --quiet; then
+            echo "Formula already up to date"
+            exit 0
+          fi
+          if [ "$PUSH" != "true" ]; then
+            echo "push=false: not pushing"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "envs $VERSION"
+          git push origin HEAD
