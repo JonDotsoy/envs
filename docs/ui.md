@@ -10,7 +10,7 @@ Las capturas usan un proyecto de ejemplo con tres worktrees (`main`, `feature-ch
 envs edit --ui
 ```
 
-Ejecuta `init` (si hace falta) y `pull`, y levanta un servidor en `127.0.0.1` con un puerto aleatorio. Abre la dirección que se imprime (se intenta abrir el navegador por ti). Tiene la forma `http://127.0.0.1:<puerto>/?token=<token>`: el token es aleatorio, distinto en cada ejecución, y el navegador lo cambia en la primera visita por una cookie (`HttpOnly`, `SameSite=Strict`) y lo quita de la barra de direcciones. Detén el servidor con Ctrl+C.
+Ejecuta `init` (si hace falta) y `pull`, y levanta un servidor en `127.0.0.1` con un puerto aleatorio. Abre la dirección que se imprime (se intenta abrir el navegador por ti). Tiene la forma `http://127.0.0.1:<puerto>/?token=<token>`: el token es aleatorio, distinto en cada ejecución y **de un solo uso**: el navegador lo cambia en la primera visita por una cookie de sesión (`HttpOnly`, `SameSite=Strict`) con otro valor, lo quita de la barra de direcciones, y a partir de ahí la dirección deja de funcionar. Detén el servidor con Ctrl+C.
 
 ### Acceso al servidor
 
@@ -24,7 +24,7 @@ El servidor expone los valores de tus `.env` (secretos incluidos), así que cada
 | Las peticiones con cuerpo deben ser `application/json`: bloquea formularios y peticiones «simples» entre sitios | `415` |
 | El cuerpo no puede superar 5 MiB (un `values.yml` con cientos de variables y decenas de worktrees ocupa unos cientos de KB); se comprueba antes de leerlo y antes del token | `413` |
 
-Además, el servidor nunca responde a las peticiones previas CORS, de modo que ningún otro sitio puede enviarle una escritura JSON. Si abres la dirección sin token, o con el token de otra ejecución, ves un `401`: vuelve a abrir la que imprimió `envs edit --ui`.
+Además, el servidor nunca responde a las peticiones previas CORS, de modo que ningún otro sitio puede enviarle una escritura JSON. Si abres la dirección sin token, con el token de otra ejecución o con uno ya usado (por ejemplo desde el historial del navegador), ves un `401`: vuelve a abrir la que imprimió `envs edit --ui`.
 
 ## 1. Vista general
 
