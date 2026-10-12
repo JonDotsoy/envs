@@ -398,7 +398,24 @@ describe("web editor access control", () => {
     }
   });
 
-  test("the URL's token is traded for an HttpOnly SameSite=Strict cookie, and the cookie alone gives access", async () => {
+  test("a HEAD does not spend the token, unsupported methods get 405, and responses carry CSP and nosniff", async () => {
+    const ui = await open({ redeemed: false });
+    try {
+      expect((await realFetch(ui.opened, { method: "HEAD", redirect: "manual" })).status).toBe(401);
+      const first = await realFetch(ui.opened, { redirect: "manual" });
+      expect(first.status).toBe(302);
+      const pair = first.headers.get("set-cookie")!.split(";")[0]!;
+      const del = await realFetch(ui.origin + "/api/values", { method: "DELETE", headers: { cookie: pair } });
+      expect(del.status).toBe(405);
+      const page = await realFetch(ui.origin + "/", { headers: { cookie: pair } });
+      expect(page.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(page.headers.get("content-security-policy")).toContain("default-src 'self'");
+    } finally {
+      await ui.stop();
+    }
+  });
+
+  test("the URL's token is traded for an HttpOnly SameSite=Lax cookie, and the cookie alone gives access", async () => {
     const ui = await open({ redeemed: false });
     try {
       const first = await realFetch(ui.opened, { redirect: "manual" });
@@ -406,7 +423,7 @@ describe("web editor access control", () => {
       expect(first.headers.get("location")).toBe("/");
       const cookie = first.headers.get("set-cookie")!;
       expect(cookie).toContain("HttpOnly");
-      expect(cookie).toContain("SameSite=Strict");
+      expect(cookie).toContain("SameSite=Lax");
       const pair = cookie.split(";")[0]!;
       const page = await realFetch(ui.origin + "/", { headers: { cookie: pair } });
       expect(page.status).toBe(200);

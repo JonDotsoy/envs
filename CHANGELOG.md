@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- `envs edit --ui`: the automatically opened browser ended in `401` because the session cookie was `SameSite=Strict` and the navigation starts from a `file://` page; it is now `SameSite=Lax`.
+- A `HEAD` request no longer spends the single-use token; unsupported methods answer `405` instead of `415`.
+- The web editor sends `Content-Security-Policy`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
+
 ### Changed
 
 - The token in the URL that `envs edit --ui` opens is now single-use: the first visit trades it for a session cookie with a different random value, and the URL stops working (`401`), so it is useless if read later from the browser history or the terminal. The browser is opened on a private temporary page (mode `600`, removed as soon as the token is used) that redirects to the URL, so the token never appears in the arguments of the opener process (`ps`). If the browser cannot be opened, the URL is printed with a message to open it manually. Using it prints a fresh single-use URL to stdout right away (`New single-use URL: ...`).

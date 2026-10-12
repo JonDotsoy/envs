@@ -71,6 +71,14 @@ async function loadAssets(): Promise<Map<string, Blob>> {
 
 const TOKEN_COOKIE = "envs_token";
 
+/** Sent on every response: no content sniffing, and the page may load only its own scripts and styles. */
+const HARDENING_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "content-security-policy":
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  "referrer-policy": "no-referrer",
+};
+
 /**
  * Largest request body the server reads (Bun answers 413 beyond it). A values.yml with hundreds of
  * variables for dozens of worktrees is a few hundred KB; the default limit of 128 MB would let one
@@ -103,7 +111,7 @@ function presentedToken(req: Request): string | undefined {
  * - `Origin`, when present, must be this server too (403): another site cannot write to it.
  * - A random token, unique to each run and printed only in the URL that is opened, is required
  *   (401). It is single-use: the first visit trades it for a session secret, set as an HttpOnly,
- *   SameSite=Strict cookie, and the token in the URL stops working. So a program that merely finds
+ *   SameSite=Lax cookie (Lax, not Strict: the browser is opened from a file:// page, and a Strict cookie is not sent after a navigation started by another site), and the token in the URL stops working. So a program that merely finds
  *   the port, or reads the URL later from the browser history or the terminal, gets nothing.
  * - Requests with a body must be `application/json` (415), which a cross-site form or a
  *   "simple" fetch cannot send without a preflight this server never allows.
@@ -115,6 +123,11 @@ export async function serveUi(ctx: Context): Promise<number> {
   let token = randomBytes(24).toString("base64url");
   const session = randomBytes(24).toString("base64url");
   const guard = (handler: (req: Request) => Response | Promise<Response>) => async (req: Request) => {
+    const res = await check(req, handler);
+    for (const [name, value] of Object.entries(HARDENING_HEADERS)) res.headers.set(name, value);
+    return res;
+  };
+  const check = async (req: Request, handler: (req: Request) => Response | Promise<Response>): Promise<Response> => {
     const port = server.port;
     const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
     if (!hosts.includes(req.headers.get("host") ?? "")) {
@@ -126,7 +139,8 @@ export async function serveUi(ctx: Context): Promise<number> {
     }
     const url = new URL(req.url);
     // First visit: trade the token in the URL (once) for the cookie and drop it from the address bar.
-    if (url.pathname === "/" && sameToken(url.searchParams.get("token"), token)) {
+    // Only a GET spends it: a HEAD or a browser prefetch must not.
+    if (req.method === "GET" && url.pathname === "/" && sameToken(url.searchParams.get("token"), token)) {
       // The token is spent: print a fresh single-use URL right away (for another browser or after closing this one).
       token = randomBytes(24).toString("base64url");
       ctx.log(`New single-use URL: ${urlWith(token)}`);
@@ -136,12 +150,15 @@ export async function serveUi(ctx: Context): Promise<number> {
         status: 302,
         headers: {
           location: "/",
-          "set-cookie": `${TOKEN_COOKIE}=${session}; HttpOnly; SameSite=Strict; Path=/`,
+          "set-cookie": `${TOKEN_COOKIE}=${session}; HttpOnly; SameSite=Lax; Path=/`,
         },
       });
     }
     if (!sameToken(presentedToken(req), session)) {
       return new Response("Unauthorized: open the address printed by `envs edit --ui`.", { status: 401 });
+    }
+    if (!["GET", "HEAD", "PUT", "POST"].includes(req.method)) {
+      return new Response("Method not allowed", { status: 405, headers: { allow: "GET, HEAD, PUT, POST" } });
     }
     if (req.method !== "GET" && req.method !== "HEAD" && !req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
       return new Response("Unsupported media type", { status: 415 });
