@@ -69,7 +69,7 @@ Un punto se escribe solo si `values.yml` cambió realmente.
 
 | Acción | Punto |
 | --- | --- |
-| Primer `envs pull` (también el que ejecuta `envs edit`) | Inicializa el historial. Sus `changes` describen todo el snapshot inicial, como si se hubiera construido desde cero. |
+| El primer punto de un historial (lo escriba el comando que lo escriba: `pull`, `edit`, Save de la interfaz web o `use`) | Inicializa el historial. Sus `changes` describen todo el snapshot, como si se hubiera construido desde cero. Así un proyecto anterior a la feature, o uno al que se le borró `history.ndjson`, queda con una base completa. |
 | `envs pull` posterior | Lo que cambió, por ejemplo tras editar a mano el `.env` de un worktree. |
 | `envs edit` | Lo que cambiaste en el editor. |
 | **Save** en `envs edit --ui` | Lo que cambiaste en la interfaz web. |

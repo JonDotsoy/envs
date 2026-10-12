@@ -1052,3 +1052,66 @@ describe("push removes orphan variables", () => {
     expect(await Bun.file(main()).text()).toBe("KEEP=1\nSTALE=1\n");
   });
 });
+
+describe("the first history point holds the whole state", () => {
+  let ws: Workspace;
+  beforeAll(async () => {
+    ws = await createWorkspace({ worktrees: ["feature-x"] });
+  });
+  afterAll(() => ws.cleanup());
+
+  const valuesPath = () => join(ws.main, ".envs/values.yml");
+  const historyPath = () => join(ws.main, ".envs/history.ndjson");
+  const points = async () =>
+    (await Bun.file(historyPath()).text()).trim().split("\n").map((l) => JSON.parse(l));
+  /** A project that had a values.yml before the history existed: data, but no history.ndjson. */
+  const legacyProject = async () => {
+    await rm(join(ws.main, ".envs"), { recursive: true, force: true });
+    await run(["init"], testContext(ws.main).ctx);
+    await Bun.write(
+      valuesPath(),
+      "uses:\n  main: default\n  feature-x: default\nprofiles:\n  default:\n    defaults:\n      LOG: info\n    envs:\n      PORT:\n        main: 3000\n  staging:\n    defaults:\n      LOG: warn\n    envs: {}\n",
+    );
+  };
+
+  test("use as the first command records the full state, and restore to it loses nothing", async () => {
+    await legacyProject();
+    expect(await run(["use", "staging"], testContext(ws.worktrees["feature-x"]!).ctx)).toBe(0);
+    const [first, ...rest] = await points();
+    expect(rest).toHaveLength(0);
+    expect(first.prev).toBeNull();
+    expect(first.changes).toContainEqual({ path: ["profiles", "default", "envs", "PORT", "main"], to: 3000 });
+    expect(first.changes).toContainEqual({ path: ["profiles", "staging", "defaults", "LOG"], to: "warn" });
+    expect(first.changes).toContainEqual({ path: ["uses", "feature-x"], to: "staging" });
+
+    expect(await run(["restore", first.hash], testContext(ws.main).ctx)).toBe(0);
+    const values = Bun.YAML.parse(await Bun.file(valuesPath()).text()) as any;
+    expect(values.profiles.default.defaults).toEqual({ LOG: "info" });
+    expect(values.profiles.default.envs.PORT).toEqual({ main: 3000 });
+    expect(values.profiles.staging.defaults).toEqual({ LOG: "warn" });
+    expect(values.uses["feature-x"]).toBe("staging");
+  });
+
+  test("Save in the web editor as the first action records the full state", async () => {
+    await legacyProject();
+    const state = await loadUiState(testContext(ws.main).ctx);
+    const { worktrees: _, ...values } = state;
+    (values.profiles.default!.envs.PORT as any).main = "4000";
+    await saveUiState(testContext(ws.main).ctx, values as any);
+    const [first, ...rest] = await points();
+    expect(rest).toHaveLength(0);
+    expect(first.changes).toContainEqual({ path: ["profiles", "staging", "defaults", "LOG"], to: "warn" });
+    expect(first.changes).toContainEqual({ path: ["profiles", "default", "envs", "PORT", "main"], to: 4000 });
+  });
+
+  test("later points stay small: only the first one is the whole state", async () => {
+    await legacyProject();
+    await run(["use", "staging"], testContext(ws.worktrees["feature-x"]!).ctx);
+    await run(["use", "default"], testContext(ws.worktrees["feature-x"]!).ctx);
+    const all = await points();
+    expect(all).toHaveLength(2);
+    expect(all[1].changes).toEqual([{ path: ["uses", "feature-x"], from: "staging", to: "default" }]);
+    expect(all[1].prev).toBe(all[0].hash);
+  });
+});
+

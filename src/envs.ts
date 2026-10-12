@@ -142,6 +142,10 @@ export function materializeProfiles(values: NormalizedValues): string[] {
  * Appends one point to `.envs/history.ndjson`: `{prev, timestamp, changes, hash}` on one line.
  * `prev` is the hash of the previous point (null for the first) and `hash` covers the rest of the
  * line, so the file is a hash chain. Nothing is written when nothing changed.
+ *
+ * The first point of a history always describes the whole state (it is the difference from
+ * nothing), whatever command writes it: the points are replayed from an empty state, so a first
+ * point holding only one change would make `restore` lose everything else.
  */
 export async function recordHistory(
   root: string,
@@ -150,13 +154,13 @@ export async function recordHistory(
   now: () => Date = () => new Date(),
 ): Promise<string | undefined> {
   if (!(await historyEnabled(root))) return undefined;
-  const changes = diffValues(before, after);
-  if (changes.length === 0) return undefined;
   const historyPath = join(root, ".envs/history.ndjson");
   const last = (await Bun.file(historyPath).exists() ? await Bun.file(historyPath).text() : "")
     .trimEnd()
     .split("\n")
     .at(-1);
+  const changes = diffValues(last ? before : { uses: {}, profiles: {} }, after);
+  if (changes.length === 0) return undefined;
   const prev: string | null = last ? JSON.parse(last).hash : null;
   const point = { prev, timestamp: now().toISOString(), changes };
   const hash = createHash("sha256").update(JSON.stringify(point)).digest("hex").slice(0, 12);
@@ -540,11 +544,9 @@ export async function pull(ctx: Context): Promise<number> {
     }
   }
   await Bun.write(read.path, stringifyValues(values));
-  // What the pull changed (e.g. a manual edit of a .env) is recorded. The first pull initializes
-  // the history, so it records the whole state instead of only what it changed.
+  // What the pull changed (e.g. a manual edit of a .env) is recorded; with no history yet, the whole state.
   const root = await findRoot(ctx.cwd);
-  const initial = !(await Bun.file(join(root, ".envs/history.ndjson")).exists());
-  await recordHistory(root, initial ? { uses: {}, profiles: {} } : before, values, ctx.now);
+  await recordHistory(root, before, values, ctx.now);
   if (pulledNames.length > 0) {
     ctx.log(
       green(

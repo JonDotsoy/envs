@@ -190,7 +190,8 @@ describe("data loss and orphan variables", () => {
     expect(await d.text()).not.toContain("NEW_SECRET_KEY");
   }, T);
 
-  bug("H02 (critical) a first point not written by pull has no base state and restore wipes values.yml", async () => {
+  // Fixed: the first point of a history always describes the whole state, whichever command writes it.
+  test("H02 (fixed) a first point not written by pull still holds the base state, so restore keeps values.yml", async () => {
     // A project from before the history existed: values.yml with data, no history.ndjson.
     const d = await demo();
     const y = Bun.YAML.parse(await d.text()) as any;
@@ -206,7 +207,7 @@ describe("data loss and orphan variables", () => {
     expect(after).toContain("LOG_LEVEL: warn");
   }, T);
 
-  bug("H02b same through Save in the web editor after deleting history.ndjson", async () => {
+  test("H02b (fixed) same through Save in the web editor after deleting history.ndjson", async () => {
     const d = await demo();
     await rm(d.history);
     const state = await snapshotOf(d);

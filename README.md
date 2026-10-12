@@ -130,7 +130,7 @@ One JSON object per line:
 
 A point is written only when `values.yml` actually changed.
 
-- The **first** `envs pull` (also run by `envs edit`) creates the first point. Its `changes` describe the whole initial snapshot, as if it had been built from nothing.
+- The **first** point of a history (whichever command writes it: `pull`, `edit`, Save in the web editor or `use`) describes the whole snapshot, as if it had been built from nothing. So a project that predates the history, or whose `history.ndjson` was deleted, still gets a complete base.
 - Any later `envs pull` adds a point with what it changed, for example after you edited a worktree's `.env` by hand.
 - `envs edit` adds a point with what you changed in the editor, and so does Save in `envs edit --ui`.
 - `envs use <profile>` adds a point with the profile change.
