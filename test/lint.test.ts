@@ -24,6 +24,17 @@ test("rules have unique ids and descriptions", () => {
 });
 
 describe("value rules", () => {
+  test("unsafe-dotenv-value flags line breaks and invalid names without echoing the value", async () => {
+    expect(await run("unsafe-dotenv-value", { defaults: { PEM: "a\nb" }, envs: { OK: { main: "x" }, TWO: { one: "a\r\nb" } } })).toEqual([
+      "defaults.PEM",
+      "envs.TWO.one",
+    ]);
+    expect(await run("unsafe-dotenv-value", { defaults: { "A B": "x", "A\nB": "y", GOOD_1: "z" } })).toEqual(["defaults.A B", "defaults.A\nB"]);
+    const violations = await rules.find((r) => r.id === "unsafe-dotenv-value")!.check(context({ defaults: { SECRET_PEM: "topsecret\nrest" } }));
+    expect(JSON.stringify(violations)).not.toContain("topsecret");
+    expect(await run("unsafe-dotenv-value", { profiles: { dev: { defaults: { X: "a\nb" } } } })).toEqual(["profiles.dev.defaults.X"]);
+  });
+
   test("weak-secret flags weak values only for sensitive keys", async () => {
     expect(await run("weak-secret", { envs: { DB_PASSWORD: { main: "changeme" } } })).toEqual(["envs.DB_PASSWORD.main"]);
     expect(await run("weak-secret", { defaults: { API_TOKEN: "" } })).toEqual(["defaults.API_TOKEN"]);
@@ -220,3 +231,46 @@ describe("envs lint", () => {
     await $`git rm -q --cached .env .envs/values.yml`.cwd(ws.main).quiet();
   });
 });
+
+describe("history and worktree rules", () => {
+  const withHistory = (over: Partial<LintContext> = {}): LintContext => ({ ...context({}), hasHistory: true, historyMode: 0o600, ...over });
+  const check = async (id: string, ctx: LintContext) => (await rules.find((r) => r.id === id)!.check(ctx)).map((v) => v.location);
+
+  test("tracked-history and unignored-history only apply when the history exists", async () => {
+    expect(await check("tracked-history", context({}))).toEqual([]);
+    expect(await check("unignored-history", { ...context({}), isIgnored: async () => false })).toEqual([]);
+    expect(await check("tracked-history", withHistory({ isTracked: async () => true }))).toEqual([".envs/history.ndjson"]);
+    expect(await check("tracked-history", withHistory())).toEqual([]);
+    // Neither tracked nor ignored -> unignored; tracked is reported by its own rule only.
+    expect(await check("unignored-history", withHistory({ isIgnored: async () => false }))).toEqual([".envs/history.ndjson"]);
+    expect(await check("unignored-history", withHistory({ isIgnored: async () => false, isTracked: async () => true }))).toEqual([]);
+    expect(await check("unignored-history", withHistory())).toEqual([]);
+  });
+
+  test("open, executable and writable permissions also cover the history", async () => {
+    expect(await check("open-permissions", withHistory({ historyMode: 0o644 }))).toEqual([".envs/history.ndjson"]);
+    expect(await check("open-permissions", withHistory({ valuesMode: 0o644, historyMode: 0o644 }))).toEqual([".envs/values.yml", ".envs/history.ndjson"]);
+    expect(await check("open-permissions", withHistory())).toEqual([]);
+    expect(await check("executable-files", withHistory({ historyMode: 0o700 }))).toEqual([".envs/history.ndjson"]);
+    expect(await check("writable-files", withHistory({ historyMode: 0o620 }))).toEqual([".envs/history.ndjson"]);
+    // Where modes do not apply (Windows) nothing is reported.
+    expect(await check("open-permissions", withHistory({ historyMode: undefined }))).toEqual([]);
+  });
+
+  test("unknown-worktree reports values of worktrees git does not list, in uses and in every profile", async () => {
+    const values = {
+      uses: { main: "default", gone: "dev" },
+      envs: { LEGACY: { main: "1", old: "2" } },
+      profiles: { dev: { envs: { PORT: { main: "1", gone: "2" } }, defaults: { A: "1" } }, qa: null },
+    };
+    expect(await check("unknown-worktree", { ...context(values), worktrees: ["main"] })).toEqual([
+      "uses.gone",
+      "envs.LEGACY.old",
+      "profiles.dev.envs.PORT.gone",
+    ]);
+    expect(await check("unknown-worktree", { ...context(values), worktrees: ["main", "gone", "old"] })).toEqual([]);
+    // Without the list of worktrees the rule cannot tell, so it stays silent.
+    expect(await check("unknown-worktree", context(values))).toEqual([]);
+  });
+});
+

@@ -24,6 +24,11 @@ export interface LintContext {
   root: string;
   /** File mode of values.yml (`stat().mode`); undefined where modes do not apply. */
   valuesMode?: number;
+  /** Whether .envs/history.ndjson exists, and its file mode (undefined where modes do not apply). */
+  hasHistory?: boolean;
+  historyMode?: number;
+  /** Names of every worktree git lists; when given, values for any other worktree are reported. */
+  worktrees?: string[];
   /** Worktrees that have a `.env` file, with its file mode (undefined where modes do not apply). */
   dotenvs: { name: string; path: string; mode?: number }[];
   isTracked(dir: string, file: string): Promise<boolean>;
@@ -68,6 +73,21 @@ const SECRET_PATTERNS: [RegExp, string][] = [
   [/xox[abprs]-[A-Za-z0-9-]{10,}/, "a Slack token"],
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, "a private key"],
 ];
+
+/**
+ * Why a variable cannot be written to a `.env` file safely (never echoing the value), or undefined.
+ * A line break in a name or a value would end the line and start another one: the rest of the text
+ * would become a different variable.
+ */
+export function dotenvProblem(key: string, text: string): string | undefined {
+  if (!/^[\w.-]+$/.test(key)) {
+    return "the name is not a valid variable name (only letters, digits, `_`, `.` and `-`)";
+  }
+  if (/[\r\n]/.test(text)) {
+    return "the value has a line break, which a .env file cannot hold safely (write it on one line, with `\\n` escapes if the application expects them)";
+  }
+  return undefined;
+}
 
 export function isSensitiveKey(key: string): boolean {
   return SENSITIVE_KEY.test(key);
@@ -126,11 +146,13 @@ function parseUrl(text: string) {
 }
 
 const valuesFile = ".envs/values.yml";
+const historyFile = ".envs/history.ndjson";
 
-/** values.yml and every worktree's .env with their file modes. */
+/** values.yml, the history and every worktree's .env with their file modes. */
 function envFiles(ctx: LintContext) {
   return [
     { location: valuesFile, mode: ctx.valuesMode },
+    ...(ctx.hasHistory ? [{ location: historyFile, mode: ctx.historyMode }] : []),
     ...ctx.dotenvs.map((d) => ({ location: `${d.name}/.env`, mode: d.mode })),
   ];
 }
@@ -168,16 +190,17 @@ export const rules: Rule[] = [
   },
   {
     id: "open-permissions",
-    description: "values.yml is readable by other users.",
-    check({ valuesMode }) {
-      if (valuesMode === undefined || (valuesMode & 0o077) === 0) return [];
-      return [
-        {
-          location: valuesFile,
-          message: `values.yml is readable by other users (mode ${(valuesMode & 0o777).toString(8)}). Run \`chmod 600 .envs/values.yml\`.`,
-        },
-      ];
-    },
+    description: "values.yml or the history is readable by other users.",
+    check: (ctx) =>
+      [
+        { file: valuesFile, mode: ctx.valuesMode },
+        ...(ctx.hasHistory ? [{ file: historyFile, mode: ctx.historyMode }] : []),
+      ]
+        .filter(({ mode }) => mode !== undefined && (mode & 0o077) !== 0)
+        .map(({ file, mode }) => ({
+          location: file,
+          message: `${file.slice(".envs/".length)} is readable by other users (mode ${(mode! & 0o777).toString(8)}). Run \`chmod 600 ${file}\`.`,
+        })),
   },
   {
     id: "executable-files",
@@ -200,6 +223,36 @@ export const rules: Rule[] = [
           location: f.location,
           message: `The file is writable by group or other users (mode ${(f.mode! & 0o777).toString(8)}), who could change your environment. Run \`chmod go-w\` on it.`,
         })),
+  },
+  {
+    id: "tracked-history",
+    description: "The history (.envs/history.ndjson) is tracked by git.",
+    async check(ctx) {
+      if (!ctx.hasHistory || !(await ctx.isTracked(ctx.root, historyFile))) return [];
+      return [
+        {
+          location: historyFile,
+          message:
+            "The history is tracked by git, and it holds the previous and the new value of every variable, secrets included. Run `git rm --cached .envs/history.ndjson`.",
+        },
+      ];
+    },
+  },
+  {
+    id: "unignored-history",
+    description: "The history (.envs/history.ndjson) is neither tracked nor ignored by git.",
+    async check(ctx) {
+      if (!ctx.hasHistory) return [];
+      if (await ctx.isTracked(ctx.root, historyFile)) return [];
+      if (await ctx.isIgnored(ctx.root, historyFile)) return [];
+      return [
+        {
+          location: historyFile,
+          message:
+            "The history is not ignored by git and could be committed by accident, with its secrets. Add `*` to .envs/.gitignore.",
+        },
+      ];
+    },
   },
   {
     id: "tracked-dotenv",
@@ -308,4 +361,37 @@ export const rules: Rule[] = [
           message: `Profile "${profile}" is not defined under profiles; \`envs edit\` creates it from default.`,
         })),
   },
+  {
+    id: "unsafe-dotenv-value",
+    description: "A variable name or value cannot be written to a .env file safely (line break, invalid name).",
+    check: (ctx) =>
+      entries(ctx).flatMap((e) => {
+        const problem = dotenvProblem(e.key, e.text);
+        return problem ? [{ location: e.location, message: `${JSON.stringify(e.key)}: ${problem}.` }] : [];
+      }),
+  },
+  {
+    id: "unknown-worktree",
+    description: "values.yml has values for a worktree that git does not list (deleted, or its branch was renamed).",
+    check({ values, worktrees }) {
+      if (!worktrees) return [];
+      const known = new Set(worktrees);
+      const found: Violation[] = [];
+      const note = (location: string, name: string) =>
+        found.push({
+          location,
+          message: `"${name}" is not a git worktree anymore (it was deleted, or its branch renamed). Its values stay in values.yml but nothing uses them: remove them with \`envs edit\`.`,
+        });
+      for (const name of Object.keys(values.uses ?? {})) if (!known.has(name)) note(`uses.${name}`, name);
+      const scan = (prefix: string, envs?: Record<string, Record<string, unknown>>) => {
+        for (const [variable, byWorktree] of Object.entries(envs ?? {})) {
+          for (const name of Object.keys(byWorktree ?? {})) if (!known.has(name)) note(`${prefix}envs.${variable}.${name}`, name);
+        }
+      };
+      scan("", values.envs);
+      for (const [profile, section] of Object.entries(values.profiles ?? {})) scan(`profiles.${profile}.`, section?.envs);
+      return found;
+    },
+  },
 ];
+

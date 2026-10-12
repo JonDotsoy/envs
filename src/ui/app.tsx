@@ -1,16 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { EMPTY_VALUE, fromVarRows, toVarRows, type Profile, type VarRow } from "./rows";
+import { HistoryPanel, type HistoryState } from "./history-panel";
 import { Logo } from "./logo";
 
-type Value = string | number | boolean;
-interface Profile {
-  defaults: Record<string, Value>;
-  envs: Record<string, Record<string, Value>>;
-}
 interface State {
   uses: Record<string, string>;
   profiles: Record<string, Profile>;
   worktrees: string[];
+  /** Fingerprint of the values.yml this state was read from; sent back on Save to detect a stale editor. */
+  version: string;
 }
 interface SaveResult {
   ok: boolean;
@@ -18,30 +17,8 @@ interface SaveResult {
   logs: string[];
   errors: string[];
 }
-
-/** One variable of a profile: its default and its override per worktree (missing/empty = not set). */
-type VarRow = { key: string; def: string; byWorktree: Record<string, string> };
-const toVarRows = (profile: Profile): VarRow[] => {
-  const rows = new Map<string, VarRow>();
-  const row = (key: string) => rows.get(key) ?? rows.set(key, { key, def: "", byWorktree: {} }).get(key)!;
-  for (const [key, value] of Object.entries(profile.defaults)) row(key).def = String(value);
-  for (const [key, byWorktree] of Object.entries(profile.envs)) {
-    for (const [wt, value] of Object.entries(byWorktree)) row(key).byWorktree[wt] = String(value);
-  }
-  return [...rows.values()];
-};
-const fromVarRows = (rows: VarRow[]): Profile => {
-  const profile: Profile = { defaults: {}, envs: {} };
-  for (const { key: raw, def, byWorktree } of rows) {
-    const key = raw.trim();
-    if (key === "") continue;
-    if (def !== "") profile.defaults[key] = def;
-    for (const [wt, value] of Object.entries(byWorktree)) {
-      if (value !== "") (profile.envs[key] ??= {})[wt] = value;
-    }
-  }
-  return profile;
-};
+/** The outcome of the last Save or Restore, shown in the status badge and the log. */
+type ActionResult = SaveResult & { action: "save" | "restore" };
 
 /** JSON with sorted keys, so two states compare equal regardless of key order. */
 const stable = (v: unknown): string =>
@@ -133,7 +110,9 @@ function App() {
   const [profile, setProfile] = useState("default");
   const [worktree, setWorktree] = useState("");
   const [saving, setSaving] = useState(false);
-  const [result, setResult] = useState<SaveResult | { ok: false; errors: string[]; logs: string[]; created: string[] }>();
+  const [restoring, setRestoring] = useState(false);
+  const [result, setResult] = useState<ActionResult>();
+  const [history, setHistory] = useState<HistoryState>();
   const [baseline, setBaseline] = useState("");
   const [compactChoice, setCompactChoice] = useState<boolean>();
 
@@ -144,9 +123,20 @@ function App() {
     setVars(rows);
     setBaseline(snapshot(state.uses, rows, state.worktrees));
   };
+  const loadHistory = () =>
+    fetch("/api/history")
+      .then((r) => r.json() as Promise<HistoryState>)
+      .then(setHistory)
+      .catch(() => setHistory({ enabled: true, points: [] }));
   useEffect(() => {
     fetch("/api/values").then((r) => r.json() as Promise<State>).then(load);
+    loadHistory();
   }, []);
+  /** The editor's values as Save would send them: what the history panel compares each point with. */
+  const current = useMemo(
+    () => ({ uses, profiles: Object.fromEntries(Object.entries(vars).map(([n, rows]) => [n, fromVarRows(rows)])) }),
+    [uses, vars],
+  );
 
   const dirty = loaded !== undefined && snapshot(uses, vars, loaded.worktrees) !== baseline;
   // Warn before closing the tab with unsaved changes; Ctrl/Cmd+S saves.
@@ -178,8 +168,18 @@ function App() {
     setProfile(name);
   };
 
+  /** Scrolls to the history card (below the variables) and moves focus there for keyboard and screen reader users. */
+  const goToHistory = () => {
+    const card = document.getElementById("history");
+    if (!card) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    card.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    document.getElementById("history-title")?.focus({ preventScroll: true });
+  };
+
+  const busy = saving || restoring;
   const save = async () => {
-    if (saving) return;
+    if (busy) return;
     setSaving(true);
     try {
       const profiles = Object.fromEntries(
@@ -188,15 +188,38 @@ function App() {
       const res = await fetch("/api/values", {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ uses, profiles }),
+        body: JSON.stringify({ uses, profiles, version: loaded?.version }),
       });
       const body = (await res.json()) as SaveResult & { error?: string };
-      setResult(res.ok ? body : { ok: false, created: [], logs: [], errors: body.errors ?? [body.error ?? "Save failed"] });
+      setResult(res.ok ? { ...body, action: "save" } : { action: "save", ok: false, created: [], logs: body.logs ?? [], errors: body.errors ?? [body.error ?? "Save failed"] });
       if (res.ok) load((await (await fetch("/api/values")).json()) as State);
     } catch (error) {
-      setResult({ ok: false, created: [], logs: [], errors: [String(error)] });
+      setResult({ action: "save", ok: false, created: [], logs: [], errors: [String(error)] });
     } finally {
       setSaving(false);
+      loadHistory();
+    }
+  };
+
+  /** Restores a history point on the server (a new point is added), then reloads the editor and the history. */
+  const restorePoint = async (hash: string) => {
+    if (busy) return;
+    setRestoring(true);
+    try {
+      const res = await fetch("/api/restore", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ hash }),
+      });
+      const body = (await res.json()) as SaveResult & { error?: string };
+      setResult(res.ok ? { ...body, action: "restore" } : { action: "restore", ok: false, created: [], logs: body.logs ?? [], errors: body.errors ?? [body.error ?? "Restore failed"] });
+      // Even a failed push may have written values.yml, so the editor always reloads.
+      load((await (await fetch("/api/values")).json()) as State);
+    } catch (error) {
+      setResult({ action: "restore", ok: false, created: [], logs: [], errors: [String(error)] });
+    } finally {
+      setRestoring(false);
+      loadHistory();
     }
   };
 
@@ -204,24 +227,30 @@ function App() {
 
   const columns = worktree ? [worktree] : loaded.worktrees;
   const compact = compactChoice ?? columns.length > 6;
-  const status = saving
+  const status = busy
     ? undefined
     : result && !result.ok
-      ? { kind: "err", text: "Save failed" }
+      ? { kind: "err", text: result.action === "restore" ? "Restore failed" : "Save failed" }
       : dirty
         ? { kind: "dirty", text: "Unsaved changes" }
         : result?.ok
-          ? { kind: "ok", text: "Saved and pushed" }
+          ? { kind: "ok", text: result.action === "restore" ? "Restored and pushed" : "Saved and pushed" }
           : undefined;
 
   return (
     <>
       <header>
-        <span className="brand"><Logo state={saving ? "saving" : result ? (result.ok ? "saved" : "error") : "idle"} />envs<span className="dim"> / values.yml</span></span>
+        <span className="brand"><Logo state={busy ? "saving" : result ? (result.ok ? "saved" : "error") : "idle"} />envs<span className="dim"> / values.yml</span></span>
         <span role="status" className={`status ${status?.kind ?? ""}`}>
           {status?.text}
         </span>
-        <button className="primary" onClick={save} disabled={saving} aria-keyshortcuts="Control+S Meta+S" title="Save and push (Ctrl+S)">
+        <button className="header-link" onClick={goToHistory} title={history?.enabled === false ? "The history is off" : "Go to the history panel"}>
+          History
+          {history?.enabled !== false && history && history.points.length > 0 && (
+            <span className="count" aria-label={`${history.points.length} points`}>{history.points.length}</span>
+          )}
+        </button>
+        <button className="primary" onClick={save} disabled={busy} aria-keyshortcuts="Control+S Meta+S" title="Save and push (Ctrl+S)">
           {saving ? "Saving…" : "Save"}
         </button>
       </header>
@@ -274,7 +303,7 @@ function App() {
         <section className="card">
           <p className="eyebrow">Variables</p>
           <h2>{profile}{worktree && ` · ${worktree}`}</h2>
-          <p className="lede">The default applies to every worktree unless the worktree sets its own value. Empty cells inherit the default.</p>
+          <p className="lede">The default applies to every worktree unless the worktree sets its own value. Empty cells inherit the default; type <code>{EMPTY_VALUE}</code> to set an empty value.</p>
           <VarsEditor
             rows={vars[profile] ?? []}
             onChange={(rows) => setVars({ ...vars, [profile]: rows })}
@@ -284,8 +313,18 @@ function App() {
           />
         </section>
 
+        <section className="card" id="history" aria-labelledby="history-title">
+          <p className="eyebrow">History</p>
+          <h2 id="history-title" tabIndex={-1}>Points of <code>.envs/history.ndjson</code></h2>
+          <p className="lede">
+            Hover or click a point to see what restoring it would change: <span className="key-removed">red</span> is removed,{" "}
+            <span className="key-changed">green</span> is changed or added. Restoring adds a new point; none is ever deleted.
+          </p>
+          <HistoryPanel history={history} current={current} dirty={dirty} busy={busy} onRestore={restorePoint} />
+        </section>
+
         {result && (result.logs.length > 0 || result.errors.length > 0 || result.created.length > 0) && (
-          <pre aria-label="Save log">
+          <pre aria-label={result.action === "restore" ? "Restore log" : "Save log"}>
             {[
               ...result.created.map((c) => `+ created ${c} from default`),
               ...result.logs,

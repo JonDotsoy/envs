@@ -1,0 +1,128 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`history panel endpoints GET /api/history lists the points of the history file, oldest first 1`] = `
+[
+  {
+    "changes": [
+      {
+        "path": [
+          "uses",
+          "main",
+        ],
+        "to": "default",
+      },
+      {
+        "path": [
+          "uses",
+          "one",
+        ],
+        "to": "default",
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "A",
+          "main",
+        ],
+        "to": 1,
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "LOG",
+          "main",
+        ],
+        "to": "info",
+      },
+    ],
+    "hash": "2b29fd781997",
+    "prev": null,
+    "timestamp": "2026-01-01T00:00:00.000Z",
+  },
+  {
+    "changes": [
+      {
+        "from": 1,
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "A",
+          "main",
+        ],
+        "to": 2,
+      },
+    ],
+    "hash": "851650071318",
+    "prev": "2b29fd781997",
+    "timestamp": "2026-01-01T00:01:00.000Z",
+  },
+  {
+    "changes": [
+      {
+        "from": "info",
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "LOG",
+          "main",
+        ],
+      },
+      {
+        "path": [
+          "profiles",
+          "default",
+          "envs",
+          "B",
+          "main",
+        ],
+        "to": "x",
+      },
+    ],
+    "hash": "f307e73bbe18",
+    "prev": "851650071318",
+    "timestamp": "2026-01-01T00:02:00.000Z",
+  },
+]
+`;
+
+exports[`history panel endpoints POST /api/restore restores a point and appends exactly one point 1`] = `
+[
+  {
+    "from": 2,
+    "path": [
+      "profiles",
+      "default",
+      "envs",
+      "A",
+      "main",
+    ],
+    "to": 1,
+  },
+  {
+    "from": "x",
+    "path": [
+      "profiles",
+      "default",
+      "envs",
+      "B",
+      "main",
+    ],
+  },
+  {
+    "path": [
+      "profiles",
+      "default",
+      "envs",
+      "LOG",
+      "main",
+    ],
+    "to": "info",
+  },
+]
+`;

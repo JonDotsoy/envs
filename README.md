@@ -38,14 +38,18 @@ Run the commands inside the repo or any of its worktrees. Inside a worktree, `.e
 
 ![Web editor started with envs edit --ui](docs/assets/images/edit-ui.png)
 
+A walkthrough with a screenshot of each action is in [docs/ui.md](docs/ui.md) (in Spanish).
+
 | Command | What it does |
 | --- | --- |
 | `envs edit` | Runs `init` if `.envs/values.yml` does not exist yet, then runs `pull`, opens `values.yml` with `code -w` and, when the editor closes, runs `push`. If the editor fails, it does not `push`. |
-| `envs edit --ui` | Same `init` and `pull`, but instead of VS Code it starts a local server (`127.0.0.1`, random port) and opens a React web editor with the values of `values.yml` (worktree profiles, defaults and per-worktree values). The **Save** button in the top right corner writes `values.yml` and runs `push`. Stop the server with Ctrl+C. |
+| `envs edit --ui` | Same `init` and `pull`, but instead of VS Code it starts a local server (`127.0.0.1`, random port) and opens a React web editor with the values of `values.yml` (worktree profiles, defaults and per-worktree values). The **Save** button in the top right corner writes `values.yml` and runs `push`. Its **History** panel lists the history points (newest first); hovering or clicking a point shows what restoring it would change in the editor (red: removed, green: changed or added), and its **Restore** button, after a confirmation, runs `envs restore` for that point. Open the address it prints (it carries a one-time access token); requests without the token, from another host name or from another site are refused (see [docs/ui.md](docs/ui.md)). Stop the server with Ctrl+C. |
 | `envs init` | Creates `.envs/`, `.envs/.gitignore` (containing `*`) and an empty `.envs/values.yml`. Does not overwrite existing files. |
 | `envs pull` | Reads the `.env` of the main repo and of each worktree and writes it to `values.yml`. Variables that are no longer in a `.env` are removed from `values.yml` for that worktree. |
-| `envs push` | Writes `values.yml` to the `.env` of each worktree. Updates existing variables in place, appends new ones at the end, and keeps comments and variables that are not in `values.yml`. |
+| `envs push` | Writes `values.yml` to the `.env` of each worktree. Updates existing variables in place, appends new ones at the end, keeps comments, refuses (writing nothing) a variable name that is not valid or a value with a line break, and removes the orphan variables: those `envs` manages (they are, or were, in `values.yml` or its history) but that the worktree no longer resolves, for example after `envs restore`. Variables that `envs` never saw are left alone. |
 | `envs use [profile]` | Sets the profile of the current worktree (`uses.<worktree>`) and pushes that worktree. Without arguments it lists the profile of each worktree. The profile must already exist in `values.yml`. |
+| `envs restore <hash> [--force]` | Restores `values.yml` to the state it had after the history point `<hash>` (a unique prefix is enough), adds a new point with the difference and runs `push`. Existing points are never removed. The history keeps secrets only as fingerprints, so a restored secret keeps the value it has now (and `restore` says so). It refuses, changing nothing, if the hash chain of the history is broken (an altered, removed or reordered point) unless you pass `--force`. See [docs/history.md](docs/history.md). |
+| `envs history redact` | Rewrites an existing history so it no longer holds any secret in clear (points written before secrets were redacted) and relinks its hash chain. See [docs/history.md](docs/history.md). |
 | `envs config set <key> <value>` | Saves a setting in `.envs/config.yml` (created on demand with mode `600`, along with `.envs/.gitignore` if missing). `true`, `false` and numbers are stored as such; the rest as strings. |
 | `envs config get [key]` | Prints the value of a setting, or every `key=value` when no key is given. Exits with code 1 if the key does not exist. |
 | `envs config delete <key>` | Removes a setting. Exits with code 1 if the key does not exist. |
@@ -89,15 +93,89 @@ It never prints values, only the variable and its location (`envs.DB_PASSWORD.ma
 | Rule | Detects |
 | --- | --- |
 | `tracked-values`, `unignored-values` | `values.yml` is tracked by git or is not ignored. |
+| `tracked-history`, `unignored-history` | `.envs/history.ndjson` (which holds every previous and new value, secrets included) is tracked by git or is not ignored. |
 | `tracked-dotenv`, `unignored-dotenv` | A worktree's `.env` is tracked or is not ignored. |
-| `open-permissions` | `values.yml` is readable by other users (use `chmod 600`). |
-| `executable-files` | `values.yml` or a `.env` has the execute permission (use `chmod -x`). |
-| `writable-files` | `values.yml` or a `.env` is writable by the group or other users (use `chmod go-w`). |
+| `open-permissions` | `values.yml` or the history is readable by other users (use `chmod 600`). |
+| `executable-files` | `values.yml`, the history or a `.env` has the execute permission (use `chmod -x`). |
+| `writable-files` | `values.yml`, the history or a `.env` is writable by the group or other users (use `chmod go-w`). |
 | `weak-secret` | Sensitive variable (`PASSWORD`, `TOKEN`, `SECRET`, `API_KEY`…) that is empty or has a typical value (`changeme`, `admin`…). |
 | `shared-secret` | Sensitive variable in `defaults`, which is written to all worktrees using that profile. |
+| `unsafe-dotenv-value` | A variable name that is not valid, or a value with a line break: `push` would refuse it (it would start another line in the `.env`). |
+| `unknown-worktree` | `values.yml` has values for a worktree that git does not list (deleted, or its branch renamed): they stay forever unless you remove them. `pull` does not delete them, because a worktree can be missing only for a moment. |
 | `unknown-profile` | `uses` names a profile that is not in `profiles`. |
 | `secret-pattern` | Value with a known secret format (AWS, GitHub, Slack, `sk-…`, private key). |
 | `url-credentials`, `insecure-url` | Remote URL with an embedded password, or using `http://`, `ws://` or `ftp://`. |
+
+## History
+
+See [docs/history.md](docs/history.md) for the full documentation (in Spanish).
+
+`envs` keeps a record of how `values.yml` evolved. It works with two separate concepts:
+
+| Concept | Where | What it is |
+| --- | --- | --- |
+| **Snapshot** | `.envs/values.yml` | The complete current state: every profile, default and per-worktree value. It is the file you edit, and it is the only thing `push` reads. |
+| **Changes** | `.envs/history.ndjson` | An append-only log. Each line is a *point* holding only what changed between two states, never a full copy of the file. |
+
+The snapshot answers "what are the values now?"; the changes answer "what changed, when, and from what?". The history never replaces `values.yml`: if you delete `history.ndjson`, `envs` keeps working and the next `pull` starts a new history.
+
+### A point
+
+One JSON object per line:
+
+```json
+{"hash":"3f9a1c0b7d2e","prev":"e7c8ebe462f1","timestamp":"2026-01-01T00:02:00.000Z","changes":[{"path":["profiles","default","envs","PORT","feature-x"],"from":3001,"to":3002}]}
+```
+
+- `changes` lists the differences. `path` locates the value inside the snapshot (`uses.<worktree>`, `profiles.<profile>.defaults.<VAR>` or `profiles.<profile>.envs.<VAR>.<worktree>`). `from` is absent when the entry was added and `to` is absent when it was removed.
+- `prev` is the hash of the previous point (`null` for the first one) and `hash` is the first 12 hex characters of the sha256 of `prev`, `timestamp` and `changes`. The file is a hash chain: altering or removing a point breaks every later one.
+
+### When a point is added
+
+A point is written only when `values.yml` actually changed.
+
+- The **first** point of a history (whichever command writes it: `pull`, `edit`, Save in the web editor or `use`) describes the whole snapshot, as if it had been built from nothing. So a project that predates the history, or whose `history.ndjson` was deleted, still gets a complete base.
+- Any later `envs pull` adds a point with what it changed, for example after you edited a worktree's `.env` by hand.
+- `envs edit` adds a point with what you changed in the editor, and so does Save in `envs edit --ui`.
+- `envs use <profile>` adds a point with the profile change.
+
+### Reading it
+
+Applying the points in order, from the first one, rebuilds the snapshot as it was after each of them. Because the first point contains the whole initial state, the result after the last point equals `values.yml`. A change made outside the history (a manual edit of `values.yml`, or a period with the history off) is recorded by the next command that writes a point, which first adds a *resync point* (`"resync": true`) holding the difference.
+
+### Secrets
+
+The history never holds a secret. A variable whose name looks sensitive (`PASSWORD`, `TOKEN`, `SECRET`, `API_KEY`…) or whose value is a URL with a password (or a sensitive query parameter) is stored as `envs:redacted:<fingerprint>`: the fingerprint is keyed with `.envs/history.key`, changes when the secret changes (so the history still shows *that* it was rotated) and cannot be reversed. Consequently, `envs restore` cannot bring back an old secret: it keeps the current one (and says so). Set `envs config set history.secrets true` to keep secrets in clear in the history instead. On an existing history, run `envs history redact` once. The same masking applies to the console: `push` and `restore` show `postgres://user:********@host/db`.
+
+### Concurrency and permissions
+
+Commands that write take `.envs/lock`, so two `envs` processes (or the web editor and a terminal) never interleave: the history stays one linear chain. A lock left by a process that died is taken over. `.envs/` is created `700` and its files (`values.yml`, the history, its key and the config) `600`, and any command that writes tightens a project created with looser modes; a `.env` that `push` creates is `600` too.
+
+### Damaged history
+
+A damaged `history.ndjson` never stops a command. An incomplete last line (an interrupted write) is ignored and dropped by the next point; an unreadable line in the middle is skipped with a warning naming its line number. `envs restore` refuses, changing nothing, until those lines are repaired or removed, and the web editor flags them. See [docs/history.md](docs/history.md).
+
+### Turning it off
+
+The history is active by default. It reads the `history` setting of `.envs/config.yml`: only an explicit `false` turns it off, and `values.yml` keeps being updated as usual.
+
+```sh
+envs config set history false   # stop recording
+envs config set history true    # record again (or `envs config delete history`)
+```
+
+Changes made while it is off get no point at that moment, but they are not lost: when you turn it on again, the next recorded point is preceded by a resync point with what changed meanwhile.
+
+### In the web editor
+
+The **History** panel of `envs edit --ui` lists the points, newest first, with their short hash, time and number of changes. Hovering a point, or clicking it to keep it selected (a click never restores), compares the state after that point with the values in the editor, grouped by worktree profiles and by profile (`defaults`, `envs`):
+
+- **red**: the entry exists now and would be removed;
+- **green**: the entry would change (current value → value at that point) or would be added.
+
+When they are equal it says "No differences". **Restore** asks for confirmation (and warns that unsaved editor changes will be lost), then restores the point like `envs restore`: a new point is appended, none is removed, and the editor and the panel reload. With the history off the panel shows an empty state and offers no restore.
+
+The file is created with mode `600` because it holds variable values. Like the rest of `.envs/`, it is ignored by git.
 
 ## `values.yml` format
 
