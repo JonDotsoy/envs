@@ -353,7 +353,8 @@ describe("data loss and orphan variables", () => {
 // ── C: history integrity ─────────────────────────────────────────────────────────────────────
 
 describe("history integrity", () => {
-  bug("H12 (high) a truncated last line makes pull write values.yml and then fail; every recording command fails", async () => {
+  // Fixed: a damaged history never stops a command; an incomplete last line is ignored and dropped on the next append.
+  test("H12 (fixed) a truncated last line does not make pull fail or leave a change without a point", async () => {
     const d = await demo();
     await appendFile(d.history, '{"hash":"abc","prev":"x","timesta');
     await Bun.write(join(d.main, ".env"), (await d.dotenv(d.main)).replace("PORT=3000", "PORT=4000"));
@@ -363,7 +364,8 @@ describe("history integrity", () => {
     expect(canon(await replayOf(d).catch(() => ({ uses: {}, profiles: {} })))).toBe(canon(await snapshotOf(d)));
   }, T);
 
-  bug("H13 a corrupt line in the middle breaks restore and the history panel with a raw JSON error", async () => {
+  // Fixed: restore refuses with a clear message and the panel loads, flagging the damaged lines.
+  test("H13 (fixed) a corrupt line in the middle is reported clearly by restore and does not break the history panel", async () => {
     const d = await demo();
     const first = (await readHistoryPoints(d.main))[0]!.hash;
     const lines = (await Bun.file(d.history).text()).trimEnd().split("\n");

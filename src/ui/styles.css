@@ -455,3 +455,4 @@ h2 code { font: inherit; }
   .d-values { grid-column: 2 / -1; grid-row: 2; }
   .d-tag { grid-column: 3; grid-row: 1; }
 }
+.history .damaged { grid-column: 1 / -1; margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); border-left: 3px solid var(--color-removed); border-radius: var(--radius-buttons); background: var(--color-removed-bg, var(--color-frost)); color: var(--color-graphite); font-size: 14px; }

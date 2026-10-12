@@ -29,6 +29,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- A damaged `.envs/history.ndjson` no longer breaks commands: an incomplete last line (interrupted write) is ignored and dropped by the next point, an unreadable line in the middle is skipped with a warning, `envs restore` refuses with a clear message naming the lines, and the History panel flags them.
 - Resync points: when `values.yml` differs from the replayed history (a manual edit, or changes made with `history` off), the next recorded point is preceded by a point with `"resync": true` holding the difference, so `restore` no longer reverts those changes.
 - The first history point always holds the whole state, whichever command writes it (`use` and Save in the web editor included), so `restore` to it no longer wipes `values.yml` in a project that predates the history or whose `history.ndjson` was deleted.
 - `envs push` removes orphan variables from the `.env` files: the ones `envs` manages (in `values.yml` or its history) that the worktree no longer resolves, e.g. after `envs restore`, so the next `pull` does not bring them back. Variables that `envs` never saw are kept.

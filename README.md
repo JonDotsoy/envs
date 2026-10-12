@@ -139,6 +139,10 @@ A point is written only when `values.yml` actually changed.
 
 Applying the points in order, from the first one, rebuilds the snapshot as it was after each of them. Because the first point contains the whole initial state, the result after the last point equals `values.yml`. A change made outside the history (a manual edit of `values.yml`, or a period with the history off) is recorded by the next command that writes a point, which first adds a *resync point* (`"resync": true`) holding the difference.
 
+### Damaged history
+
+A damaged `history.ndjson` never stops a command. An incomplete last line (an interrupted write) is ignored and dropped by the next point; an unreadable line in the middle is skipped with a warning naming its line number. `envs restore` refuses, changing nothing, until those lines are repaired or removed, and the web editor flags them. See [docs/history.md](docs/history.md).
+
 ### Turning it off
 
 The history is active by default. It reads the `history` setting of `.envs/config.yml`: only an explicit `false` turns it off, and `values.yml` keeps being updated as usual.

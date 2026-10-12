@@ -13,6 +13,8 @@ import {
 export interface HistoryState {
   enabled: boolean;
   points: HistoryPoint[];
+  /** Numbers of the lines of history.ndjson that could not be read (absent when there are none). */
+  damaged?: number[];
 }
 
 const short = (hash: string) => hash.slice(0, 7);
@@ -144,6 +146,12 @@ export function HistoryPanel(props: {
 
   return (
     <div className="history">
+      {history.damaged && history.damaged.length > 0 && (
+        <p className="damaged" role="alert">
+          {plural(history.damaged.length, "line")} of <code>.envs/history.ndjson</code> could not be read (line {history.damaged.join(", ")}).
+          The points shown may be incomplete, and Restore is refused until the file is repaired.
+        </p>
+      )}
       <ol className="points" aria-label="History points, newest first" onMouseLeave={() => setHovered(undefined)}>
         {order.map((i) => {
           const point = points[i]!;

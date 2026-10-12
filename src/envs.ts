@@ -2,7 +2,7 @@ import { chmod, mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { appendFile } from "node:fs/promises";
+import { appendFile, truncate } from "node:fs/promises";
 import { $ } from "bun";
 import { isSensitiveKey, rules, type LintContext } from "./lint-rules";
 import {
@@ -159,12 +159,27 @@ export async function recordHistory(
   before: NormalizedValues,
   after: NormalizedValues,
   now: () => Date = () => new Date(),
+  warn: (message: string) => void = () => {},
 ): Promise<string | undefined> {
   if (!(await historyEnabled(root))) return undefined;
   const historyPath = join(root, ".envs/history.ndjson");
-  const points = await readHistoryPoints(root);
+  // A damaged history never stops a command: unreadable lines are skipped, and the resync point
+  // below records whatever the skipped points held, since values.yml is the truth.
+  const scan = await scanHistory(root);
+  if (scan.torn) warn(".envs/history.ndjson ended with an incomplete line (an interrupted write): it is ignored.");
+  if (scan.damaged.length > 0) {
+    warn(`.envs/history.ndjson has damaged lines (${scan.damaged.join(", ")}): they are ignored, so the history may be incomplete.`);
+  }
+  const points = scan.points;
   let prev: string | null = points.at(-1)?.hash ?? null;
+  let repaired = false;
   const append = async (changes: Change[], extra: { resync?: true } = {}) => {
+    if (!repaired) {
+      repaired = true;
+      // Never glue a point onto a partial line: drop the incomplete tail, or end the last line.
+      if (scan.torn) await truncate(historyPath, Buffer.byteLength(scan.complete));
+      else if (!scan.endsWithNewline) await appendFile(historyPath, "\n");
+    }
     const point = { prev, timestamp: now().toISOString(), changes, ...extra };
     const hash = createHash("sha256").update(JSON.stringify(point)).digest("hex").slice(0, 12);
     // The history holds variable values, so it is created readable only by the owner.
@@ -365,8 +380,8 @@ async function managedVariables(root: string, values: NormalizedValues): Promise
     for (const key of Object.keys(profile.defaults)) names.add(key);
     for (const key of Object.keys(profile.envs)) names.add(key);
   }
-  // A damaged history must not stop a push: the names in values.yml still apply.
-  const points = await readHistoryPoints(root).catch(() => []);
+  // A damaged history must not stop a push: its unreadable lines are skipped.
+  const points = await readHistoryPoints(root);
   for (const { changes } of points) {
     for (const { path } of changes) {
       if (path[0] === "profiles" && (path[2] === "defaults" || path[2] === "envs") && path[3] !== undefined) {
@@ -559,7 +574,7 @@ export async function pull(ctx: Context): Promise<number> {
   await Bun.write(read.path, stringifyValues(values));
   // What the pull changed (e.g. a manual edit of a .env) is recorded; with no history yet, the whole state.
   const root = await findRoot(ctx.cwd);
-  await recordHistory(root, before, values, ctx.now);
+  await recordHistory(root, before, values, ctx.now, ctx.error);
   if (pulledNames.length > 0) {
     ctx.log(
       green(
@@ -600,18 +615,61 @@ export async function use(ctx: Context, profile?: string): Promise<number> {
   for (const { name } of worktrees) values.uses[name] ??= DEFAULT_PROFILE;
   values.uses[current.name] = profile;
   await Bun.write(read.path, stringifyValues(values));
-  await recordHistory(await findRoot(ctx.cwd), before, values, ctx.now);
+  await recordHistory(await findRoot(ctx.cwd), before, values, ctx.now, ctx.error);
   return await push(ctx, current.name);
 }
 
-/** The points of .envs/history.ndjson, oldest first (none when the file does not exist). */
-export async function readHistoryPoints(root: string): Promise<HistoryPoint[]> {
+/** What `.envs/history.ndjson` holds: its valid points and what could not be read. */
+interface HistoryScan {
+  points: HistoryPoint[];
+  /** 1-based numbers of the complete lines that are not a valid point. */
+  damaged: number[];
+  /** The last line is incomplete (no newline and not a valid point): a write was interrupted. */
+  torn: boolean;
+  /** The file text up to and including its last newline (what a torn tail is cut back to). */
+  complete: string;
+  endsWithNewline: boolean;
+}
+
+const isHistoryPoint = (value: unknown): value is HistoryPoint => {
+  const point = value as Partial<HistoryPoint> | null;
+  return (
+    typeof point === "object" &&
+    point !== null &&
+    typeof point.hash === "string" &&
+    (typeof point.prev === "string" || point.prev === null) &&
+    typeof point.timestamp === "string" &&
+    Array.isArray(point.changes)
+  );
+};
+
+async function scanHistory(root: string): Promise<HistoryScan> {
   const file = Bun.file(join(root, ".envs/history.ndjson"));
-  if (!(await file.exists())) return [];
-  return (await file.text())
-    .split("\n")
-    .filter((line) => line.trim() !== "")
-    .map((line) => JSON.parse(line));
+  const scan: HistoryScan = { points: [], damaged: [], torn: false, complete: "", endsWithNewline: true };
+  if (!(await file.exists())) return scan;
+  const text = await file.text();
+  scan.endsWithNewline = text === "" || text.endsWith("\n");
+  scan.complete = text.slice(0, text.lastIndexOf("\n") + 1);
+  const lines = text.split("\n");
+  lines.forEach((line, i) => {
+    if (line.trim() === "") return;
+    let value: unknown;
+    try {
+      value = JSON.parse(line);
+    } catch {
+      value = undefined;
+    }
+    if (isHistoryPoint(value)) scan.points.push(value);
+    // The last line without a newline is a write that never finished; any other bad line is damage.
+    else if (i === lines.length - 1 && !scan.endsWithNewline) scan.torn = true;
+    else scan.damaged.push(i + 1);
+  });
+  return scan;
+}
+
+/** The valid points of .envs/history.ndjson, oldest first (none when the file does not exist). */
+export async function readHistoryPoints(root: string): Promise<HistoryPoint[]> {
+  return (await scanHistory(root)).points;
 }
 
 /**
@@ -627,7 +685,15 @@ export async function restore(ctx: Context, hash?: string): Promise<number> {
   const read = await readValues(ctx);
   if (!read) return 1;
   const root = await findRoot(ctx.cwd);
-  const points = await readHistoryPoints(root);
+  const scan = await scanHistory(root);
+  if (scan.damaged.length > 0) {
+    // An exact state cannot be rebuilt around a missing point, so nothing is changed.
+    ctx.error(
+      `.envs/history.ndjson has damaged lines (${scan.damaged.join(", ")}), so the state of a point cannot be rebuilt exactly. Repair or remove those lines and try again.`,
+    );
+    return 1;
+  }
+  const points = scan.points;
   const found = findHistoryPoint(points, hash);
   if ("error" in found) {
     ctx.error(
@@ -641,7 +707,7 @@ export async function restore(ctx: Context, hash?: string): Promise<number> {
   const restored = stateAfter(points, target);
   const current = normalizeValues(read.values);
   await Bun.write(read.path, stringifyValues(restored));
-  const added = await recordHistory(root, current, restored, ctx.now);
+  const added = await recordHistory(root, current, restored, ctx.now, ctx.error);
   ctx.log(
     added
       ? green(`↺ restored ${target.hash} - new history point ${added}`)
@@ -737,7 +803,7 @@ export async function edit(ctx: Context, options: { ui?: boolean } = {}): Promis
   if (created.length > 0) {
     ctx.log(green(`+ created ${created.join(", ")} from ${DEFAULT_PROFILE}`));
   }
-  await recordHistory(await findRoot(ctx.cwd), before, values, ctx.now);
+  await recordHistory(await findRoot(ctx.cwd), before, values, ctx.now, ctx.error);
   return await push(ctx);
 }
 
@@ -753,10 +819,15 @@ export async function loadUiState(ctx: Context) {
 }
 
 /** History the web editor shows: whether it is on and its points, oldest first (none while it is off). */
-export async function loadUiHistory(ctx: Context): Promise<{ enabled: boolean; points: HistoryPoint[] }> {
+export async function loadUiHistory(
+  ctx: Context,
+): Promise<{ enabled: boolean; points: HistoryPoint[]; damaged?: number[] }> {
   const root = await findRoot(ctx.cwd);
   const enabled = await historyEnabled(root);
-  return { enabled, points: enabled ? await readHistoryPoints(root) : [] };
+  if (!enabled) return { enabled, points: [] };
+  const { points, damaged } = await scanHistory(root);
+  // `damaged` (the numbers of the lines that could not be read) is only present when there are any.
+  return damaged.length > 0 ? { enabled, points, damaged } : { enabled, points };
 }
 
 /** Writes values sent by the web editor to values.yml (creating profiles named in `uses`), then pushes. */
@@ -784,7 +855,7 @@ export async function saveUiState(
     ((await Bun.file(path).exists() ? Bun.YAML.parse(await Bun.file(path).text()) : undefined) ?? {}) as Values,
   );
   await Bun.write(path, stringifyValues(values));
-  await recordHistory(root, before, values, ctx.now);
+  await recordHistory(root, before, values, ctx.now, ctx.error);
   return { created, code: await push(ctx) };
 }
 

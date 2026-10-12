@@ -17,6 +17,7 @@ import {
   formatDotenvValue,
   HELP,
   listWorktrees,
+  loadUiHistory,
   loadUiState,
   parseDotenv,
   run,
@@ -1194,6 +1195,99 @@ describe("resync points", () => {
       expect(hash).toBe(new Bun.CryptoHasher("sha256").update(JSON.stringify(point)).digest("hex").slice(0, 12));
       prev = hash;
     }
+  });
+});
+
+describe("a damaged history", () => {
+  let ws: Workspace;
+  beforeAll(async () => {
+    ws = await createWorkspace({ worktrees: [] });
+  });
+  afterAll(() => ws.cleanup());
+
+  const valuesPath = () => join(ws.main, ".envs/values.yml");
+  const historyPath = () => join(ws.main, ".envs/history.ndjson");
+  const lines = async () => (await Bun.file(historyPath()).text()).split("\n");
+  /** A project with two recorded points (the initial state and A: 1 → 2). */
+  const project = async () => {
+    await rm(join(ws.main, ".envs"), { recursive: true, force: true });
+    await run(["init"], testContext(ws.main).ctx);
+    await Bun.write(join(ws.main, ".env"), "A=1\n");
+    await run(["pull"], testContext(ws.main).ctx);
+    await Bun.write(join(ws.main, ".env"), "A=2\n");
+    await run(["pull"], testContext(ws.main).ctx);
+  };
+  const valid = (text: string) => text.trim().split("\n").every((l) => { try { JSON.parse(l); return true; } catch { return false; } });
+
+  test("an incomplete last line is ignored, warned about and dropped by the next append", async () => {
+    await project();
+    const [first, second] = (await lines()).filter(Boolean);
+    await appendFile(historyPath(), '{"hash":"abc","prev":"x","timesta');
+    await Bun.write(join(ws.main, ".env"), "A=3\n");
+    const { ctx, errors } = testContext(ws.main);
+    expect(await run(["pull"], ctx)).toBe(0);
+    expect(errors[0]).toContain("incomplete line");
+    // The torn tail is gone and the new point chains to the last valid one.
+    const text = await Bun.file(historyPath()).text();
+    expect(valid(text)).toBe(true);
+    expect(text).not.toContain('"hash":"abc"');
+    const all = text.trim().split("\n").map((l) => JSON.parse(l));
+    expect(all).toHaveLength(3);
+    expect(all[2].prev).toBe(JSON.parse(second!).hash);
+    expect(JSON.parse(first!).prev).toBeNull();
+    expect(Bun.YAML.parse(await Bun.file(valuesPath()).text())).toMatchObject({
+      profiles: { default: { envs: { A: { main: 3 } } } },
+    });
+  });
+
+  test("a valid last line without a trailing newline gets one before the next point", async () => {
+    await project();
+    await Bun.write(historyPath(), (await Bun.file(historyPath()).text()).trimEnd());
+    await Bun.write(join(ws.main, ".env"), "A=3\n");
+    const { ctx, errors } = testContext(ws.main);
+    expect(await run(["pull"], ctx)).toBe(0);
+    expect(errors).toEqual([]);
+    const all = (await Bun.file(historyPath()).text()).trim().split("\n").map((l) => JSON.parse(l));
+    expect(all).toHaveLength(3);
+    expect(all[2].prev).toBe(all[1].hash);
+  });
+
+  test("a damaged line in the middle: recording commands warn and carry on, healing with a resync point", async () => {
+    await project();
+    const [first, second] = (await lines()).filter(Boolean);
+    await Bun.write(historyPath(), [first, "not json", second].join("\n") + "\n");
+    await Bun.write(join(ws.main, ".env"), "A=3\n");
+    const { ctx, errors } = testContext(ws.main);
+    expect(await run(["pull"], ctx)).toBe(0);
+    expect(errors[0]).toContain("damaged lines (2)");
+    const text = await Bun.file(historyPath()).text();
+    // The bad line is kept (nothing is rewritten), and the points after it still record the truth.
+    expect(text.split("\n")[1]).toBe("not json");
+    const points = text.trim().split("\n").filter((l) => l !== "not json").map((l) => JSON.parse(l));
+    expect(points.at(-1).changes).toEqual([{ path: ["profiles", "default", "envs", "A", "main"], from: 2, to: 3 }]);
+  });
+
+  test("restore refuses with a clear message, and changes nothing, while a line is damaged", async () => {
+    await project();
+    const [first, second] = (await lines()).filter(Boolean);
+    await Bun.write(historyPath(), [first, "not json", second].join("\n") + "\n");
+    const before = await Bun.file(valuesPath()).text();
+    const { ctx, errors } = testContext(ws.main);
+    expect(await run(["restore", JSON.parse(first!).hash], ctx)).toBe(1);
+    expect(errors[0]).toContain(".envs/history.ndjson has damaged lines (2)");
+    expect(await Bun.file(valuesPath()).text()).toBe(before);
+  });
+
+  test("the history panel data lists the readable points and flags the damaged lines", async () => {
+    await project();
+    const [first, second] = (await lines()).filter(Boolean);
+    await Bun.write(historyPath(), [first, "not json", second].join("\n") + "\n");
+    const loaded = await loadUiHistory(testContext(ws.main).ctx);
+    expect(loaded.points.map((p) => p.hash)).toEqual([JSON.parse(first!).hash, JSON.parse(second!).hash]);
+    expect(loaded.damaged).toEqual([2]);
+    // Without damage the field is absent.
+    await Bun.write(historyPath(), [first, second].join("\n") + "\n");
+    expect(await loadUiHistory(testContext(ws.main).ctx)).not.toHaveProperty("damaged");
   });
 });
 

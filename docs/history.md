@@ -131,6 +131,17 @@ Un perfil que no tiene valores en el estado restablecido queda vacío; no se cop
 
 El servidor (solo en `127.0.0.1`) expone `GET /api/history` (`{enabled, points}`, en orden del archivo) y `POST /api/restore` con `{"hash": "<12 caracteres>"}`.
 
+## Historial dañado
+
+Un historial dañado no detiene ningún comando.
+
+- **Última línea incompleta** (un proceso murió a mitad de una escritura): se ignora, se avisa, y el siguiente punto la descarta antes de agregarse, para no pegarse a media línea. Una última línea válida a la que solo le falta el salto de línea lo recibe.
+- **Una línea ilegible en medio:** `pull`, `edit`, `use` y Save la omiten y avisan con los números de línea (`damaged lines (3)`). No se reescribe nada. Lo que contenían los puntos omitidos queda cubierto por el siguiente [punto de resincronización](#puntos-de-resincronización), porque `values.yml` es la referencia.
+- **`envs restore`** se niega con código 1, indicando las líneas, y no cambia nada: sin todos los puntos no se puede reconstruir un estado exacto. Repara o elimina esas líneas y vuelve a intentarlo.
+- **Editor web:** el panel muestra los puntos legibles y un aviso con las líneas dañadas; Restore se rechaza hasta que el archivo se repare.
+
+Un punto se considera ilegible si no es JSON o si le faltan `hash`, `prev`, `timestamp` o `changes`.
+
 ## Activar o desactivar
 
 El historial está activo por defecto. Lee la clave `history` de `.envs/config.yml`; solo un `false` explícito lo desactiva y `values.yml` se sigue actualizando con normalidad.
