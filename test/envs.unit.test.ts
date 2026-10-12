@@ -92,6 +92,13 @@ describe("formatDotenvValue", () => {
     expect(formatDotenvValue("a#b")).toBe('"a#b"');
     expect(formatDotenvValue('say "hi"')).toBe(`'say "hi"'`);
   });
+
+  test("values survive a dotenv parser", () => {
+    const { parseEnv } = require("node:util");
+    for (const value of [`p'a"ss`, "a\\nb", "two words", `it's`, "$HOME", "a`b", "x#y"]) {
+      expect(parseEnv(`X=${formatDotenvValue(value)}`).X).toBe(value);
+    }
+  });
 });
 
 describe("updateDotenv", () => {
@@ -1545,14 +1552,14 @@ describe.skipIf(process.platform === "win32")("file permissions of .envs", () =>
     expect(await Bun.file(join(envs(), "lock")).exists()).toBe(false);
   });
 
-  test("push creates a missing .env 600 and leaves the mode of an existing one alone", async () => {
+  test("push creates a missing .env 600 and tightens an existing one to 600", async () => {
     await rm(join(ws.main, ".env"), { force: true });
     await Bun.write(join(ws.worktrees["feature-x"]!, ".env"), "B=1\n");
     await chmod(join(ws.worktrees["feature-x"]!, ".env"), 0o640);
     await Bun.write(join(envs(), "values.yml"), "defaults:\n  D: 1\n");
     expect(await run(["push"], testContext(ws.main).ctx)).toBe(0);
     expect(await mode(join(ws.main, ".env"))).toBe(0o600);
-    expect(await mode(join(ws.worktrees["feature-x"]!, ".env"))).toBe(0o640);
+    expect(await mode(join(ws.worktrees["feature-x"]!, ".env"))).toBe(0o600);
   });
 });
 

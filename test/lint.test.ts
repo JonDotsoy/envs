@@ -202,6 +202,9 @@ describe("envs lint", () => {
     await rm(join(ws.main, ".envs/values.yml"));
     await Bun.write(join(ws.main, ".envs/values.yml"), "");
     await chmod(join(ws.main, ".envs/values.yml"), 0o600);
+    const open = await lint();
+    expect(open.stderr.toString()).toContain("warning [open-permissions] main/.env");
+    await chmod(join(ws.main, ".env"), 0o600);
     expect((await lint()).exitCode).toBe(0);
   });
 
@@ -251,6 +254,7 @@ describe("history and worktree rules", () => {
     expect(await check("open-permissions", withHistory({ historyMode: 0o644 }))).toEqual([".envs/history.ndjson"]);
     expect(await check("open-permissions", withHistory({ valuesMode: 0o644, historyMode: 0o644 }))).toEqual([".envs/values.yml", ".envs/history.ndjson"]);
     expect(await check("open-permissions", withHistory())).toEqual([]);
+    expect(await check("open-permissions", withHistory({ dotenvs: [{ name: "main", path: "/x/.env", mode: 0o644 }] }))).toEqual(["main/.env"]);
     expect(await check("executable-files", withHistory({ historyMode: 0o700 }))).toEqual([".envs/history.ndjson"]);
     expect(await check("writable-files", withHistory({ historyMode: 0o620 }))).toEqual([".envs/history.ndjson"]);
     // Where modes do not apply (Windows) nothing is reported.
