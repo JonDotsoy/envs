@@ -24,6 +24,17 @@ test("rules have unique ids and descriptions", () => {
 });
 
 describe("value rules", () => {
+  test("unsafe-dotenv-value flags line breaks and invalid names without echoing the value", async () => {
+    expect(await run("unsafe-dotenv-value", { defaults: { PEM: "a\nb" }, envs: { OK: { main: "x" }, TWO: { one: "a\r\nb" } } })).toEqual([
+      "defaults.PEM",
+      "envs.TWO.one",
+    ]);
+    expect(await run("unsafe-dotenv-value", { defaults: { "A B": "x", "A\nB": "y", GOOD_1: "z" } })).toEqual(["defaults.A B", "defaults.A\nB"]);
+    const violations = await rules.find((r) => r.id === "unsafe-dotenv-value")!.check(context({ defaults: { SECRET_PEM: "topsecret\nrest" } }));
+    expect(JSON.stringify(violations)).not.toContain("topsecret");
+    expect(await run("unsafe-dotenv-value", { profiles: { dev: { defaults: { X: "a\nb" } } } })).toEqual(["profiles.dev.defaults.X"]);
+  });
+
   test("weak-secret flags weak values only for sensitive keys", async () => {
     expect(await run("weak-secret", { envs: { DB_PASSWORD: { main: "changeme" } } })).toEqual(["envs.DB_PASSWORD.main"]);
     expect(await run("weak-secret", { defaults: { API_TOKEN: "" } })).toEqual(["defaults.API_TOKEN"]);

@@ -383,7 +383,8 @@ describe("history integrity", () => {
     await expect(loadUiHistory(saveCtx(d))).resolves.toBeDefined();
   }, T);
 
-  bug("H14 the hash chain is never verified: a tampered point is applied by restore without a warning", async () => {
+  // Fixed: the chain is verified; restore refuses (unless --force) and recording commands warn.
+  test("H14 (fixed) a tampered point is detected: restore refuses and does not apply it", async () => {
     const d = await demo();
     const lines = (await Bun.file(d.history).text()).trimEnd().split("\n");
     lines[0] = lines[0]!.replace('"to":"postgres://localhost/shop"', '"to":"postgres://attacker.invalid/shop"');
@@ -608,15 +609,21 @@ describe("types, odd names and prototype pollution", () => {
     expect((Object as any).main).toBeUndefined();
   }, T);
 
-  bug("H29 a multiline value in values.yml makes push write a .env that injects another variable", async () => {
+  // Fixed: push refuses a value or a name with a line break, and writes nothing.
+  test("H29 (fixed) a multiline value in values.yml is refused by push instead of injecting another variable", async () => {
     const d = await demo();
     const y = Bun.YAML.parse(await d.text()) as any;
     y.profiles.default.defaults.GREETING = "hola\nINJECTED=1";
     await Bun.write(d.values, Bun.YAML.stringify(y, null, 2));
-    await d.cmd(["push"]);
+    const before = await d.dotenv(d.main);
+    const pushed = await d.cmd(["push"]);
+    expect(pushed.code).toBe(1);
+    expect(pushed.out).toContain("line break");
+    expect(pushed.out).not.toContain("hola");
+    expect(await d.dotenv(d.main)).toBe(before);
     expect(parseDotenv(await d.dotenv(d.main)).INJECTED).toBeUndefined();
     await d.cmd(["pull"]);
-    expect(await d.text()).not.toContain("INJECTED");
+    expect(Object.keys((await snapshotOf(d)).profiles.default!.envs)).not.toContain("INJECTED");
   }, T);
 
   bug("H31 Save in the web editor changes the type of quoted numeric/boolean strings (\"3000\", \"true\") and records a change nobody made", async () => {

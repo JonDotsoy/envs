@@ -15,6 +15,8 @@ export interface HistoryState {
   points: HistoryPoint[];
   /** Numbers of the lines of history.ndjson that could not be read (absent when there are none). */
   damaged?: number[];
+  /** Hashes of the points where the hash chain is broken (absent when it is intact). */
+  broken?: string[];
 }
 
 const short = (hash: string) => hash.slice(0, 7);
@@ -146,6 +148,12 @@ export function HistoryPanel(props: {
 
   return (
     <div className="history">
+      {history.broken && history.broken.length > 0 && (
+        <p className="damaged" role="alert">
+          The hash chain of <code>.envs/history.ndjson</code> is broken at {history.broken.map(short).join(", ")}: the file may have been
+          altered. Restore is refused until it is checked (<code>envs restore &lt;hash&gt; --force</code> overrides it from the terminal).
+        </p>
+      )}
       {history.damaged && history.damaged.length > 0 && (
         <p className="damaged" role="alert">
           {plural(history.damaged.length, "line")} of <code>.envs/history.ndjson</code> could not be read (line {history.damaged.join(", ")}).

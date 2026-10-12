@@ -69,6 +69,21 @@ const SECRET_PATTERNS: [RegExp, string][] = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, "a private key"],
 ];
 
+/**
+ * Why a variable cannot be written to a `.env` file safely (never echoing the value), or undefined.
+ * A line break in a name or a value would end the line and start another one: the rest of the text
+ * would become a different variable.
+ */
+export function dotenvProblem(key: string, text: string): string | undefined {
+  if (!/^[\w.-]+$/.test(key)) {
+    return "the name is not a valid variable name (only letters, digits, `_`, `.` and `-`)";
+  }
+  if (/[\r\n]/.test(text)) {
+    return "the value has a line break, which a .env file cannot hold safely (write it on one line, with `\\n` escapes if the application expects them)";
+  }
+  return undefined;
+}
+
 export function isSensitiveKey(key: string): boolean {
   return SENSITIVE_KEY.test(key);
 }
@@ -308,4 +323,14 @@ export const rules: Rule[] = [
           message: `Profile "${profile}" is not defined under profiles; \`envs edit\` creates it from default.`,
         })),
   },
+  {
+    id: "unsafe-dotenv-value",
+    description: "A variable name or value cannot be written to a .env file safely (line break, invalid name).",
+    check: (ctx) =>
+      entries(ctx).flatMap((e) => {
+        const problem = dotenvProblem(e.key, e.text);
+        return problem ? [{ location: e.location, message: `${JSON.stringify(e.key)}: ${problem}.` }] : [];
+      }),
+  },
 ];
+

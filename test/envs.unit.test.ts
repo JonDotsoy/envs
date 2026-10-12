@@ -1350,3 +1350,168 @@ describe("names that look like prototype members in values.yml and .env files", 
   });
 });
 
+describe("hash chain verification", () => {
+  let ws: Workspace;
+  beforeAll(async () => {
+    ws = await createWorkspace({ worktrees: [] });
+  });
+  afterAll(() => ws.cleanup());
+
+  const historyPath = () => join(ws.main, ".envs/history.ndjson");
+  const valuesPath = () => join(ws.main, ".envs/values.yml");
+  const lines = async () => (await Bun.file(historyPath()).text()).trimEnd().split("\n");
+  /** Three recorded points: the initial state and A: 1 → 2 → 3. */
+  const project = async () => {
+    await rm(join(ws.main, ".envs"), { recursive: true, force: true });
+    await run(["init"], testContext(ws.main).ctx);
+    for (const a of [1, 2, 3]) {
+      await Bun.write(join(ws.main, ".env"), `A=${a}\n`);
+      await run(["pull"], testContext(ws.main).ctx);
+    }
+    return (await lines()).map((l) => JSON.parse(l));
+  };
+  const restoreOf = (hash: string, ...extra: string[]) => {
+    const t = testContext(ws.main);
+    return run(["restore", hash, ...extra], t.ctx).then((code) => ({ code, errors: t.errors }));
+  };
+
+  test("an intact chain restores without any warning", async () => {
+    const [first] = await project();
+    const { code, errors } = await restoreOf(first.hash);
+    expect(code).toBe(0);
+    expect(errors).toEqual([]);
+    expect(await loadUiHistory(testContext(ws.main).ctx)).not.toHaveProperty("broken");
+  });
+
+  test("an edited point (its content no longer matches its hash) makes restore refuse and change nothing", async () => {
+    const [first, second] = await project();
+    const all = await lines();
+    all[1] = all[1]!.replace('"to":2', '"to":99');
+    await Bun.write(historyPath(), all.join("\n") + "\n");
+    const before = await Bun.file(valuesPath()).text();
+    const { code, errors } = await restoreOf(first.hash);
+    expect(code).toBe(1);
+    expect(errors[0]).toContain(`${second.hash} (its content does not match its hash)`);
+    expect(errors[0]).toContain("--force");
+    expect(await Bun.file(valuesPath()).text()).toBe(before);
+    expect((await loadUiHistory(testContext(ws.main).ctx)).broken).toEqual([second.hash]);
+  });
+
+  test("a removed point (the next one no longer follows) and reordered points are detected", async () => {
+    const [first, second, third] = await project();
+    await Bun.write(historyPath(), JSON.stringify(first) + "\n" + JSON.stringify(third) + "\n");
+    expect((await restoreOf(first.hash)).errors[0]).toContain(`${third.hash} (it does not follow the previous point)`);
+    await Bun.write(historyPath(), [first, third, second].map((p) => JSON.stringify(p)).join("\n") + "\n");
+    const { code, errors } = await restoreOf(first.hash);
+    expect(code).toBe(1);
+    expect(errors[0]).toContain("does not follow the previous point");
+  });
+
+  test("--force restores anyway, saying so, and the broken point is not applied silently", async () => {
+    const [first] = await project();
+    const all = await lines();
+    all[2] = all[2]!.replace('"to":3', '"to":77');
+    await Bun.write(historyPath(), all.join("\n") + "\n");
+    const { code, errors } = await restoreOf(first.hash, "--force");
+    expect(code).toBe(0);
+    expect(errors[0]).toContain("Restoring anyway (--force)");
+    // The flag may come before the hash too.
+    const again = testContext(ws.main);
+    expect(await run(["restore", "--force", first.hash], again.ctx)).toBe(0);
+  });
+
+  test("recording commands warn about a broken chain but carry on", async () => {
+    await project();
+    const all = await lines();
+    all[1] = all[1]!.replace('"to":2', '"to":99');
+    await Bun.write(historyPath(), all.join("\n") + "\n");
+    await Bun.write(join(ws.main, ".env"), "A=4\n");
+    const { ctx, errors } = testContext(ws.main);
+    expect(await run(["pull"], ctx)).toBe(0);
+    expect(errors[0]).toContain("the hash chain is broken at");
+    expect(Bun.YAML.parse(await Bun.file(valuesPath()).text())).toMatchObject({
+      profiles: { default: { envs: { A: { main: 4 } } } },
+    });
+  });
+});
+
+describe("values that cannot be written to a .env", () => {
+  let ws: Workspace;
+  beforeAll(async () => {
+    ws = await createWorkspace({ worktrees: ["feature-x"] });
+  });
+  afterAll(() => ws.cleanup());
+
+  const valuesPath = () => join(ws.main, ".envs/values.yml");
+  const dotenv = (dir: string) => Bun.file(join(dir, ".env")).text();
+  const project = async () => {
+    await rm(join(ws.main, ".envs"), { recursive: true, force: true });
+    await run(["init"], testContext(ws.main).ctx);
+    await Bun.write(join(ws.main, ".env"), "KEEP=1\n");
+    await Bun.write(join(ws.worktrees["feature-x"]!, ".env"), "KEEP=1\n");
+    await run(["pull"], testContext(ws.main).ctx);
+  };
+  const edit = async (change: (values: any) => void) => {
+    const values = Bun.YAML.parse(await Bun.file(valuesPath()).text()) as any;
+    change(values);
+    await Bun.write(valuesPath(), Bun.YAML.stringify(values, null, 2));
+  };
+
+  test("push refuses a value with a line break, names it without echoing it, and writes nothing", async () => {
+    await project();
+    await edit((v) => {
+      v.profiles.default.defaults.GOOD = "fine";
+      v.profiles.default.envs.PEM = { "feature-x": "-----BEGIN KEY-----\nsecretbody\n-----END KEY-----" };
+    });
+    const { ctx, errors } = testContext(ws.main);
+    expect(await run(["push"], ctx)).toBe(1);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('"PEM" (feature-x): the value has a line break');
+    expect(errors.join("")).not.toContain("secretbody");
+    // Nothing was written, not even the good value: the push is all or nothing.
+    expect(await dotenv(ws.main)).toBe("KEEP=1\n");
+    expect(await dotenv(ws.worktrees["feature-x"]!)).toBe("KEEP=1\n");
+  });
+
+  test("a carriage return or a line break in a variable name is refused too", async () => {
+    await project();
+    await edit((v) => {
+      v.profiles.default.defaults["A\nB"] = "x";
+      v.profiles.default.defaults["C D"] = "y";
+    });
+    const { ctx, errors } = testContext(ws.main);
+    expect(await run(["push"], ctx)).toBe(1);
+    expect(errors.some((e) => e.includes('"A\\nB"') && e.includes("not a valid variable name"))).toBe(true);
+    expect(errors.some((e) => e.includes('"C D"'))).toBe(true);
+    expect(await dotenv(ws.main)).toBe("KEEP=1\n");
+  });
+
+  test("values with escaped \\n (one line) and other special characters are still written", async () => {
+    await project();
+    await edit((v) => {
+      v.profiles.default.defaults.KEY = "line1\\nline2";
+      v.profiles.default.defaults.SPACES = "two words # not a comment";
+    });
+    expect(await run(["push"], testContext(ws.main).ctx)).toBe(0);
+    const parsed = parseDotenv(await dotenv(ws.main));
+    expect(parsed.KEY).toBe("line1\\nline2");
+    expect(parsed.SPACES).toBe("two words # not a comment");
+  });
+
+  test("Save in the web editor refuses them before writing values.yml or the history", async () => {
+    await project();
+    const history = join(ws.main, ".envs/history.ndjson");
+    const before = { values: await Bun.file(valuesPath()).text(), history: await Bun.file(history).text() };
+    const state = await loadUiState(testContext(ws.main).ctx);
+    const { worktrees: _, ...values } = state;
+    (values.profiles.default!.defaults as any).MULTI = "a\nINJECTED=1";
+    const { ctx, errors } = testContext(ws.main);
+    const result = await saveUiState(ctx, values as any);
+    expect(result.code).toBe(1);
+    expect(errors[0]).toContain('"MULTI" (default defaults): the value has a line break');
+    expect(await Bun.file(valuesPath()).text()).toBe(before.values);
+    expect(await Bun.file(history).text()).toBe(before.history);
+    expect(await dotenv(ws.main)).toBe("KEEP=1\n");
+  });
+});
+

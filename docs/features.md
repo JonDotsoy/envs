@@ -17,7 +17,7 @@ Resumen de las funcionalidades de `@jondotsoy/envs`. Para el detalle de uso, con
 | `envs push` | Distribuye `values.yml` a los `.env` de cada worktree. |
 | `envs edit` | Ejecuta `init` (si hace falta) y `pull`, abre el editor y al cerrarlo ejecuta `push`. |
 | `envs use [profile]` | Cambia el perfil del worktree actual y lo sincroniza; sin argumentos lista el perfil de cada worktree. |
-| `envs restore <hash>` | Restablece `values.yml` al estado de un punto del historial, agrega un punto nuevo y sincroniza. No borra puntos. |
+| `envs restore <hash> [--force]` | Restablece `values.yml` al estado de un punto del historial, agrega un punto nuevo y sincroniza. No borra puntos. Se niega si la cadena de hashes está rota, salvo con `--force`. |
 | `envs config set <clave> <valor>` / `get [clave]` / `delete <clave>` | Gestiona la configuración guardada en `.envs/config.yml`. |
 
 - `push` actualiza las variables existentes en su lugar, agrega las nuevas al final y conserva los comentarios.

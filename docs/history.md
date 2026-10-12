@@ -44,6 +44,12 @@ Los valores conservan su tipo (`3001` es un número, `"info"` una cadena, `true`
 
 ## Cadena de hashes
 
+`envs` verifica la cadena cada vez que lee el historial. Un punto está roto si su contenido ya no coincide con su `hash` (alguien lo editó) o si su `prev` no es el hash del punto anterior (se eliminó, insertó o reordenó otro).
+
+- **`envs restore`** se niega, con código 1 y sin cambiar nada, indicando los puntos rotos. `envs restore <hash> --force` lo restablece de todos modos, avisando de ello, para cuando ya revisaste el archivo.
+- **`pull`, `edit`, `use` y Save** avisan (`the hash chain is broken at …`) y siguen funcionando.
+- **El editor web** muestra un aviso con los puntos rotos y rechaza restablecer.
+
 Cada punto guarda el hash del anterior y su propio `hash` cubre `prev`, `timestamp` y `changes`. Por eso el archivo es una cadena: alterar, reordenar o eliminar un punto cambia el hash de todos los siguientes y deja de coincidir con sus `prev`.
 
 Verificación con Bun:
@@ -62,7 +68,7 @@ for (const line of lines) {
 console.log(`${lines.length} puntos válidos`);
 ```
 
-Esto detecta modificaciones accidentales o parciales. No impide que alguien con acceso de escritura regenere toda la cadena.
+Este script hace a mano lo que `envs` ya hace. Detecta modificaciones accidentales o parciales; no impide que alguien con acceso de escritura regenere toda la cadena (los hashes no están firmados).
 
 ## Cuándo se agrega un punto
 

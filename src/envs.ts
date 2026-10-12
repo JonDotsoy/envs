@@ -4,7 +4,7 @@ import { stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { appendFile, truncate } from "node:fs/promises";
 import { $ } from "bun";
-import { isSensitiveKey, rules, type LintContext } from "./lint-rules";
+import { dotenvProblem, isSensitiveKey, rules, type LintContext } from "./lint-rules";
 import {
   DEFAULT_PROFILE,
   cloneProfile,
@@ -33,7 +33,7 @@ Commands:
   edit    Pull, open .envs/values.yml in VS Code (code -w), then push
           With --ui, serve a web editor instead; its Save button pushes
   use     Select the profile of the current worktree (envs use <profile>), or list them
-  restore Restore values.yml to the state after a history point (envs restore <hash>), adding a new point
+  restore Restore values.yml to the state after a history point (envs restore <hash> [--force]), adding a new point
   config  Read or change .envs/config.yml (config set <key> <value>, config get [key], config delete <key>)
   help    Show this help message
 `;
@@ -175,6 +175,9 @@ export async function recordHistory(
   if (scan.torn) warn(".envs/history.ndjson ended with an incomplete line (an interrupted write): it is ignored.");
   if (scan.damaged.length > 0) {
     warn(`.envs/history.ndjson has damaged lines (${scan.damaged.join(", ")}): they are ignored, so the history may be incomplete.`);
+  }
+  if (scan.broken.length > 0) {
+    warn(`.envs/history.ndjson: the hash chain is broken at ${describeBroken(scan.broken)}. The history may have been altered; \`envs restore\` refuses until it is checked.`);
   }
   const points = scan.points;
   let prev: string | null = points.at(-1)?.hash ?? null;
@@ -507,6 +510,20 @@ export async function push(ctx: Context, only?: string): Promise<number> {
     ({ name }) => only === undefined || name === only,
   );
   if (!checkProfiles(ctx, values, worktrees)) return 1;
+  // Nothing is written unless every value can be: a name or value with a line break would start
+  // another line in the .env, i.e. inject a different variable.
+  let safe = true;
+  for (const { name } of worktrees) {
+    const profile = values.uses[name] ?? DEFAULT_PROFILE;
+    for (const [key, value] of Object.entries(resolveEntries(values, name, profile))) {
+      const problem = dotenvProblem(key, value);
+      if (problem) {
+        safe = false;
+        ctx.error(`${JSON.stringify(key)} (${name}): ${problem}. Nothing was written.`);
+      }
+    }
+  }
+  if (!safe) return 1;
   const managed = await managedVariables(await findRoot(ctx.cwd), values);
   // Changed variables, grouped by `KEY=VALUE` so each log line lists every branch it changed in.
   const changes = new Map<string, string[]>();
@@ -635,6 +652,8 @@ interface HistoryScan {
   /** The file text up to and including its last newline (what a torn tail is cut back to). */
   complete: string;
   endsWithNewline: boolean;
+  /** Points whose hash does not match their content, or whose `prev` is not the previous point: the chain is broken there. */
+  broken: { hash: string; reason: "content" | "prev" }[];
 }
 
 const isHistoryPoint = (value: unknown): value is HistoryPoint => {
@@ -651,7 +670,7 @@ const isHistoryPoint = (value: unknown): value is HistoryPoint => {
 
 async function scanHistory(root: string): Promise<HistoryScan> {
   const file = Bun.file(join(root, ".envs/history.ndjson"));
-  const scan: HistoryScan = { points: [], damaged: [], torn: false, complete: "", endsWithNewline: true };
+  const scan: HistoryScan = { points: [], damaged: [], torn: false, complete: "", endsWithNewline: true, broken: [] };
   if (!(await file.exists())) return scan;
   const text = await file.text();
   scan.endsWithNewline = text === "" || text.endsWith("\n");
@@ -670,8 +689,35 @@ async function scanHistory(root: string): Promise<HistoryScan> {
     else if (i === lines.length - 1 && !scan.endsWithNewline) scan.torn = true;
     else scan.damaged.push(i + 1);
   });
+  scan.broken = verifyChain(scan.points);
   return scan;
 }
+
+/** The hash a point must carry: the start of the sha256 of its line without the `hash` field. */
+const hashOf = (point: HistoryPoint) => {
+  const { hash: _, ...rest } = point;
+  return createHash("sha256").update(JSON.stringify(rest)).digest("hex").slice(0, 12);
+};
+
+/**
+ * Checks the hash chain: every point's `hash` must match its content (so nothing in it was edited)
+ * and its `prev` must be the previous point's hash (so none was removed, inserted or reordered).
+ */
+function verifyChain(points: HistoryPoint[]): HistoryScan["broken"] {
+  const broken: HistoryScan["broken"] = [];
+  let previous: string | null = null;
+  for (const point of points) {
+    if (hashOf(point) !== point.hash) broken.push({ hash: point.hash, reason: "content" });
+    else if (point.prev !== previous) broken.push({ hash: point.hash, reason: "prev" });
+    previous = point.hash;
+  }
+  return broken;
+}
+
+const describeBroken = (broken: HistoryScan["broken"]) =>
+  broken
+    .map(({ hash, reason }) => `${hash} (${reason === "content" ? "its content does not match its hash" : "it does not follow the previous point"})`)
+    .join(", ");
 
 /** The valid points of .envs/history.ndjson, oldest first (none when the file does not exist). */
 export async function readHistoryPoints(root: string): Promise<HistoryPoint[]> {
@@ -683,9 +729,9 @@ export async function readHistoryPoints(root: string): Promise<HistoryPoint[]> {
  * prefix of the hash is enough), writes it, records the difference as a new point and pushes.
  * Existing points are never removed or rewritten.
  */
-export async function restore(ctx: Context, hash?: string): Promise<number> {
+export async function restore(ctx: Context, hash?: string, options: { force?: boolean } = {}): Promise<number> {
   if (!hash) {
-    ctx.error("Usage: envs restore <hash>");
+    ctx.error("Usage: envs restore <hash> [--force]");
     return 1;
   }
   const read = await readValues(ctx);
@@ -698,6 +744,14 @@ export async function restore(ctx: Context, hash?: string): Promise<number> {
       `.envs/history.ndjson has damaged lines (${scan.damaged.join(", ")}), so the state of a point cannot be rebuilt exactly. Repair or remove those lines and try again.`,
     );
     return 1;
+  }
+  if (scan.broken.length > 0) {
+    const message = `.envs/history.ndjson: the hash chain is broken at ${describeBroken(scan.broken)}. The history may have been altered, so the state of a point cannot be trusted.`;
+    if (!options.force) {
+      ctx.error(`${message} Check the file, or run \`envs restore ${hash} --force\` to restore anyway.`);
+      return 1;
+    }
+    ctx.error(`${message} Restoring anyway (--force).`);
   }
   const points = scan.points;
   const found = findHistoryPoint(points, hash);
@@ -827,13 +881,18 @@ export async function loadUiState(ctx: Context) {
 /** History the web editor shows: whether it is on and its points, oldest first (none while it is off). */
 export async function loadUiHistory(
   ctx: Context,
-): Promise<{ enabled: boolean; points: HistoryPoint[]; damaged?: number[] }> {
+): Promise<{ enabled: boolean; points: HistoryPoint[]; damaged?: number[]; broken?: string[] }> {
   const root = await findRoot(ctx.cwd);
   const enabled = await historyEnabled(root);
   if (!enabled) return { enabled, points: [] };
-  const { points, damaged } = await scanHistory(root);
-  // `damaged` (the numbers of the lines that could not be read) is only present when there are any.
-  return damaged.length > 0 ? { enabled, points, damaged } : { enabled, points };
+  const { points, damaged, broken } = await scanHistory(root);
+  // `damaged` (line numbers that could not be read) and `broken` (hashes where the chain breaks) are only present when there are any.
+  return {
+    enabled,
+    points,
+    ...(damaged.length > 0 && { damaged }),
+    ...(broken.length > 0 && { broken: broken.map(({ hash }) => hash) }),
+  };
 }
 
 /** Writes values sent by the web editor to values.yml (creating profiles named in `uses`), then pushes. */
@@ -854,6 +913,21 @@ export async function saveUiState(
       }
     }
   }
+  // Refuse before writing anything: push could not write these values to a .env.
+  let safe = true;
+  for (const [profileName, profile] of Object.entries(values.profiles)) {
+    const check = (key: string, value: Value, where: string) => {
+      const problem = dotenvProblem(key, String(value));
+      if (!problem) return;
+      safe = false;
+      ctx.error(`${JSON.stringify(key)} (${where}): ${problem}. Nothing was saved.`);
+    };
+    for (const [key, value] of Object.entries(profile.defaults)) check(key, value, `${profileName} defaults`);
+    for (const [key, byWorktree] of Object.entries(profile.envs)) {
+      for (const [worktree, value] of Object.entries(byWorktree)) check(key, value, `${profileName} ${worktree}`);
+    }
+  }
+  if (!safe) return { created: [], code: 1 };
   const created = materializeProfiles(values);
   const root = await findRoot(ctx.cwd);
   const path = join(root, ".envs/values.yml");
@@ -897,7 +971,7 @@ export async function run(
     case "use":
       return await use(ctx, args[1]);
     case "restore":
-      return await restore(ctx, args[1]);
+      return await restore(ctx, args.slice(1).find((arg) => !arg.startsWith("--")), { force: args.includes("--force") });
     case "config":
       return await config(ctx, args.slice(1));
     default:
