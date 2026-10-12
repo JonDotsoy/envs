@@ -20,6 +20,13 @@ export interface NormalizedValues {
 export const DEFAULT_PROFILE = "default";
 
 /**
+ * What the history stores instead of a secret: the prefix and a keyed fingerprint of the value. It
+ * lets `diffValues` tell that a secret changed without the history ever holding the secret.
+ */
+export const REDACTED_PREFIX = "envs:redacted:";
+export const isRedacted = (value: unknown): value is string => typeof value === "string" && value.startsWith(REDACTED_PREFIX);
+
+/**
  * A map keyed by names that come from files and requests (variables, profiles, worktrees). It has
  * no prototype, so `__proto__`, `constructor` or `toString` are plain names: they cannot reach
  * `Object.prototype` and are not mistaken for inherited members.
@@ -224,6 +231,9 @@ export interface StateDiff {
 export function compareStates(current: NormalizedValues, target: NormalizedValues): StateDiff {
   const asText = (v?: Value) => (v === undefined ? undefined : String(v));
   const entry = (key: string, a?: Value, b?: Value, worktree?: string): DiffEntry | undefined => {
+    // The history does not keep secrets: a redacted value says only that one existed, so a variable the
+    // editor has cannot be told apart from it (restoring keeps the current value).
+    if (isRedacted(b) && a !== undefined) return undefined;
     if (asText(a) === asText(b)) return undefined;
     const kind: DiffKind = b === undefined ? "removed" : a === undefined ? "added" : "changed";
     return {

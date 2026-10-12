@@ -44,6 +44,13 @@ Resumen de las funcionalidades de `@jondotsoy/envs`. Para el detalle de uso, con
 - Activo por defecto; se desactiva con `envs config set history false`.
 - Detalle en [history.md](history.md).
 
+## Secretos, concurrencia y permisos
+
+- El historial guarda los secretos (nombres sensibles, URLs con contraseña) solo como huellas con clave; `envs restore` conserva el valor actual de un secreto y lo avisa. `envs history redact` limpia un historial antiguo y `envs config set history.secrets true` guarda los secretos en claro. Detalle en [history.md](history.md#secretos).
+- La consola enmascara también la contraseña de una URL (`postgres://user:********@host/db`).
+- Los comandos que escriben toman `.envs/lock`: varios procesos a la vez no bifurcan la cadena ni pierden cambios.
+- `.envs/` se crea `700` y sus archivos `600`; los comandos que escriben aprietan los de un proyecto anterior.
+
 ## Perfiles
 
 - Cada worktree usa un perfil (`uses.<worktree>`); si no se indica, usa `default`.

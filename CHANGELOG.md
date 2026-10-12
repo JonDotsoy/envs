@@ -29,6 +29,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- The history never holds a secret: sensitive variable names and URLs with a password are stored as keyed fingerprints (`envs:redacted:…`, key in `.envs/history.key`), so a rotated secret is not kept. `envs restore` keeps the current value of a secret and says so; `envs history redact` cleans an existing history and `history.secrets true` opts out. The console masks the password and the sensitive query parameters of a URL.
+- Writing commands take `.envs/lock`: concurrent `envs` processes no longer fork the history chain, repeat a hash or lose a `use`.
+- `.envs/` is created `700` and its files `600` (existing projects are tightened by the next writing command); a `.env` created by `push` is `600`.
 - The history records the creation and the removal of a profile (`["profiles", name]`), so an empty profile is no longer lost and a deleted one no longer comes back, empty, on a replay or a `restore`.
 - `envs lint` also checks the history (`tracked-history`, `unignored-history`, and `open-permissions`, `executable-files` and `writable-files`) and reports values of worktrees git no longer lists (`unknown-worktree`).
 - `envs pull` says when a variable of the defaults is missing from a `.env` (`push` writes it back; remove it from the defaults to drop it everywhere).

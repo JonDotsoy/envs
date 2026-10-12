@@ -48,7 +48,8 @@ A walkthrough with a screenshot of each action is in [docs/ui.md](docs/ui.md) (i
 | `envs pull` | Reads the `.env` of the main repo and of each worktree and writes it to `values.yml`. Variables that are no longer in a `.env` are removed from `values.yml` for that worktree. |
 | `envs push` | Writes `values.yml` to the `.env` of each worktree. Updates existing variables in place, appends new ones at the end, keeps comments, refuses (writing nothing) a variable name that is not valid or a value with a line break, and removes the orphan variables: those `envs` manages (they are, or were, in `values.yml` or its history) but that the worktree no longer resolves, for example after `envs restore`. Variables that `envs` never saw are left alone. |
 | `envs use [profile]` | Sets the profile of the current worktree (`uses.<worktree>`) and pushes that worktree. Without arguments it lists the profile of each worktree. The profile must already exist in `values.yml`. |
-| `envs restore <hash> [--force]` | Restores `values.yml` to the state it had after the history point `<hash>` (a unique prefix is enough), adds a new point with the difference and runs `push`. Existing points are never removed. It refuses, changing nothing, if the hash chain of the history is broken (an altered, removed or reordered point) unless you pass `--force`. See [docs/history.md](docs/history.md). |
+| `envs restore <hash> [--force]` | Restores `values.yml` to the state it had after the history point `<hash>` (a unique prefix is enough), adds a new point with the difference and runs `push`. Existing points are never removed. The history keeps secrets only as fingerprints, so a restored secret keeps the value it has now (and `restore` says so). It refuses, changing nothing, if the hash chain of the history is broken (an altered, removed or reordered point) unless you pass `--force`. See [docs/history.md](docs/history.md). |
+| `envs history redact` | Rewrites an existing history so it no longer holds any secret in clear (points written before secrets were redacted) and relinks its hash chain. See [docs/history.md](docs/history.md). |
 | `envs config set <key> <value>` | Saves a setting in `.envs/config.yml` (created on demand with mode `600`, along with `.envs/.gitignore` if missing). `true`, `false` and numbers are stored as such; the rest as strings. |
 | `envs config get [key]` | Prints the value of a setting, or every `key=value` when no key is given. Exits with code 1 if the key does not exist. |
 | `envs config delete <key>` | Removes a setting. Exits with code 1 if the key does not exist. |
@@ -141,6 +142,14 @@ A point is written only when `values.yml` actually changed.
 ### Reading it
 
 Applying the points in order, from the first one, rebuilds the snapshot as it was after each of them. Because the first point contains the whole initial state, the result after the last point equals `values.yml`. A change made outside the history (a manual edit of `values.yml`, or a period with the history off) is recorded by the next command that writes a point, which first adds a *resync point* (`"resync": true`) holding the difference.
+
+### Secrets
+
+The history never holds a secret. A variable whose name looks sensitive (`PASSWORD`, `TOKEN`, `SECRET`, `API_KEY`…) or whose value is a URL with a password (or a sensitive query parameter) is stored as `envs:redacted:<fingerprint>`: the fingerprint is keyed with `.envs/history.key`, changes when the secret changes (so the history still shows *that* it was rotated) and cannot be reversed. Consequently, `envs restore` cannot bring back an old secret: it keeps the current one (and says so). Set `envs config set history.secrets true` to keep secrets in clear in the history instead. On an existing history, run `envs history redact` once. The same masking applies to the console: `push` and `restore` show `postgres://user:********@host/db`.
+
+### Concurrency and permissions
+
+Commands that write take `.envs/lock`, so two `envs` processes (or the web editor and a terminal) never interleave: the history stays one linear chain. A lock left by a process that died is taken over. `.envs/` is created `700` and its files (`values.yml`, the history, its key and the config) `600`, and any command that writes tightens a project created with looser modes; a `.env` that `push` creates is `600` too.
 
 ### Damaged history
 

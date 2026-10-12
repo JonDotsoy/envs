@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   compareStates,
+  isRedacted,
   statesAfterEach,
   type DiffEntry,
   type HistoryPoint,
@@ -25,7 +26,7 @@ const formatTime = (iso: string) => {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 };
-const show = (v?: Value) => (v === "" ? '""' : String(v));
+const show = (v?: Value) => (v === "" ? '""' : isRedacted(v) ? "(secret, not kept)" : String(v));
 
 const KIND_LABEL = { removed: "removed", changed: "changed", added: "added" } as const;
 const SIGN = { removed: "−", changed: "~", added: "+" } as const;

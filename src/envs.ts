@@ -1,7 +1,8 @@
-import { chmod, mkdir } from "node:fs/promises";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { chmod, mkdir, open, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { stat } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { appendFile, truncate } from "node:fs/promises";
 import { $ } from "bun";
 import { dotenvProblem, isSensitiveKey, rules, type LintContext } from "./lint-rules";
@@ -9,8 +10,10 @@ import {
   DEFAULT_PROFILE,
   cloneProfile,
   cloneState,
+  REDACTED_PREFIX,
   dict,
   diffValues,
+  isRedacted,
   findHistoryPoint,
   stateAfter,
   type Change,
@@ -20,7 +23,7 @@ import {
   type Value,
 } from "./history";
 
-export { applyChanges, compareStates, diffValues, findHistoryPoint, stateAfter, statesAfterEach } from "./history";
+export { applyChanges, cloneState, compareStates, diffValues, emptyState, findHistoryPoint, stateAfter, statesAfterEach } from "./history";
 export type { Change, HistoryPoint, NormalizedValues, StateDiff } from "./history";
 
 export const HELP = `Usage: envs <command>
@@ -34,6 +37,7 @@ Commands:
           With --ui, serve a web editor instead; its Save button pushes
   use     Select the profile of the current worktree (envs use <profile>), or list them
   restore Restore values.yml to the state after a history point (envs restore <hash> [--force]), adding a new point
+  history Manage the history (history redact: remove secrets in clear from an existing history)
   config  Read or change .envs/config.yml (config set <key> <value>, config get [key], config delete <key>)
   help    Show this help message
 `;
@@ -60,6 +64,21 @@ const MASK = "********";
 /** Sensitive per the lint rules, plus a bare KEY word (KEY_FOO, FOO_KEY). */
 const isMaskedKey = (key: string) =>
   isSensitiveKey(key) || /(^|_)KEY(_|$)/i.test(key);
+/** The password of a URL (`scheme://user:PASSWORD@host`) and the values of its sensitive query parameters, if it has any. */
+const URL_SECRET = /^([a-z][a-z0-9+.-]*:\/\/[^\/\s:@]*:)([^@\/\s]+)(@)/i;
+const hasUrlSecret = (value: string) => URL_SECRET.test(value) || (/^[a-z][a-z0-9+.-]*:\/\//i.test(value) && sensitiveQuery(value));
+const sensitiveQuery = (value: string) =>
+  [...value.matchAll(/[?&]([^=&\s#]+)=([^&\s#]*)/g)].some(([, name]) => isMaskedKey(name!.toUpperCase().replace(/[^A-Z0-9]+/g, "_")));
+/** A value with the secrets of a URL hidden (everything else untouched). */
+const maskUrlSecrets = (value: string) =>
+  value.replace(URL_SECRET, `$1${MASK}$3`).replace(/([?&])([^=&\s#]+)=([^&\s#]*)/g, (all, sep: string, name: string) =>
+    isMaskedKey(name.toUpperCase().replace(/[^A-Z0-9]+/g, "_")) ? `${sep}${name}=${MASK}` : all,
+  );
+/** Whether a variable is a secret: by its name (as the console does) or because its value is a URL with a password. */
+const isSecretEntry = (name: string, value: string) => isMaskedKey(name) || hasUrlSecret(value);
+/** What the console shows for a variable: the value, or `********` for a secret; a URL keeps its host and hides only its secrets. */
+const displayValue = (name: string, value: string) =>
+  isMaskedKey(name) ? MASK : formatDotenvValue(maskUrlSecrets(value));
 const paint = (code: number, text: string) =>
   colorsDisabled() ? text : `\x1b[${code}m${text}\x1b[0m`;
 const green = (text: string) => paint(32, text);
@@ -145,6 +164,104 @@ export function materializeProfiles(values: NormalizedValues): string[] {
   return created;
 }
 
+/** A state as the history stores it (secrets redacted): what to compare with a replay of the history. */
+export async function redactForHistory(root: string, state: NormalizedValues): Promise<NormalizedValues> {
+  return (await redactor(root)).state(state);
+}
+
+/** `envs config set history.secrets true` keeps secrets in the history in clear; by default they are redacted. */
+async function keepsSecrets(root: string): Promise<boolean> {
+  return (await readConfig(join(root, ".envs/config.yml")))["history.secrets"] === true;
+}
+
+/** The secret of this project's fingerprints (`.envs/history.key`, mode 600, created on first use). */
+async function historyKey(root: string): Promise<string> {
+  const path = join(root, ".envs/history.key");
+  const read = async () => (await Bun.file(path).text()).trim();
+  if (await Bun.file(path).exists()) return await read();
+  await mkdir(join(root, ".envs"), { recursive: true, mode: 0o700 });
+  try {
+    await writeFile(path, randomBytes(32).toString("hex") + "\n", { mode: 0o600, flag: "wx" });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+  return await read();
+}
+
+interface Redactor {
+  /** The marker for a secret value of the variable `name`. */
+  mark(name: string, value: string): string;
+  /** A copy of a state where every secret value is its marker (values already redacted are kept). */
+  state(state: NormalizedValues): NormalizedValues;
+}
+
+/**
+ * How values are written to the history. A secret (a variable whose name looks sensitive, or a URL
+ * with a password) is stored as `envs:redacted:<keyed fingerprint>`: the fingerprint changes when the
+ * secret does, so the history still shows *that* it changed, but never holds it, not even after it
+ * is rotated. With `history.secrets` set to true nothing is redacted.
+ */
+async function redactor(root: string): Promise<Redactor> {
+  if (await keepsSecrets(root)) return { mark: (_, value) => value, state: (state) => cloneState(state) };
+  const key = await historyKey(root);
+  const mark = (name: string, value: string) =>
+    REDACTED_PREFIX + createHmac("sha256", key).update(`${name}\0${value}`).digest("hex").slice(0, 16);
+  const one = (name: string, value: Value): Value =>
+    typeof value === "string" && isRedacted(value) ? value : isSecretEntry(name, String(value)) ? mark(name, String(value)) : value;
+  return {
+    mark,
+    state(state) {
+      const copy = cloneState(state);
+      for (const profile of Object.values(copy.profiles)) {
+        for (const [name, value] of Object.entries(profile.defaults)) profile.defaults[name] = one(name, value);
+        for (const [name, byWorktree] of Object.entries(profile.envs)) {
+          for (const [worktree, value] of Object.entries(byWorktree)) byWorktree[worktree] = one(name, value);
+        }
+      }
+      return copy;
+    },
+  };
+}
+
+/**
+ * Puts the current secrets back into a state rebuilt from the history, which only has their markers.
+ * A secret keeps the value it has now (the old one is not stored); one the project no longer has
+ * cannot be restored and is left out. Returns what could not be restored exactly.
+ */
+function unredact(restored: NormalizedValues, current: NormalizedValues, mark: Redactor["mark"]) {
+  const notes: string[] = [];
+  for (const [profileName, profile] of Object.entries(restored.profiles)) {
+    const now = Object.hasOwn(current.profiles, profileName) ? current.profiles[profileName] : undefined;
+    /** `key` is the entry of `map` to settle; `variable` is the variable it belongs to. */
+    const settle = (map: Record<string, Value>, key: string, variable: string, where: string, currentValue: Value | undefined) => {
+      const value = map[key];
+      if (!isRedacted(value)) return;
+      if (currentValue === undefined) {
+        delete map[key];
+        notes.push(`${variable} (${where}): not restored, the history does not keep its value`);
+        return;
+      }
+      map[key] = currentValue;
+      if (mark(variable, String(currentValue)) !== value) {
+        notes.push(`${variable} (${where}): kept the current value, the history does not keep the old one`);
+      }
+    };
+    for (const variable of Object.keys(profile.defaults)) {
+      const nowValue = now && Object.hasOwn(now.defaults, variable) ? now.defaults[variable] : undefined;
+      settle(profile.defaults, variable, variable, `${profileName} defaults`, nowValue);
+    }
+    for (const [variable, byWorktree] of Object.entries(profile.envs)) {
+      const nowByWorktree = now && Object.hasOwn(now.envs, variable) ? now.envs[variable] : undefined;
+      for (const worktree of Object.keys(byWorktree)) {
+        const nowValue = nowByWorktree && Object.hasOwn(nowByWorktree, worktree) ? nowByWorktree[worktree] : undefined;
+        settle(byWorktree, worktree, variable, `${profileName} ${worktree}`, nowValue);
+      }
+      if (Object.keys(byWorktree).length === 0) delete profile.envs[variable];
+    }
+  }
+  return notes;
+}
+
 /**
  * Appends points to `.envs/history.ndjson`: `{prev, timestamp, changes, hash}` on one line each.
  * `prev` is the hash of the previous point (null for the first) and `hash` covers the rest of the
@@ -166,6 +283,17 @@ export async function recordHistory(
   after: NormalizedValues,
   now: () => Date = () => new Date(),
   warn: (message: string) => void = () => {},
+): Promise<string | undefined> {
+  // Reading the last point and appending the next must be one step, or two writers fork the chain.
+  return await withLock(root, () => recordHistoryLocked(root, before, after, now, warn));
+}
+
+async function recordHistoryLocked(
+  root: string,
+  before: NormalizedValues,
+  after: NormalizedValues,
+  now: () => Date,
+  warn: (message: string) => void,
 ): Promise<string | undefined> {
   if (!(await historyEnabled(root))) return undefined;
   const historyPath = join(root, ".envs/history.ndjson");
@@ -196,14 +324,78 @@ export async function recordHistory(
     prev = hash;
     return hash;
   };
+  // Everything below works on redacted states, so the history never holds a secret.
+  const { state: redact } = await redactor(root);
+  const redactedBefore = redact(before);
+  const redactedAfter = redact(after);
   if (points.length === 0) {
-    const changes = diffValues({ uses: {}, profiles: {} }, after);
+    const changes = diffValues({ uses: {}, profiles: {} }, redactedAfter);
     return changes.length === 0 ? undefined : await append(changes);
   }
-  const drift = diffValues(stateAfter(points, points.at(-1)!), before);
+  // (Points written before secrets were redacted still hold them in clear; they compare as redacted too.)
+  const drift = diffValues(redact(stateAfter(points, points.at(-1)!)), redactedBefore);
   if (drift.length > 0) await append(drift, { resync: true });
-  const changes = diffValues(before, after);
+  const changes = diffValues(redactedBefore, redactedAfter);
   return changes.length === 0 ? undefined : await append(changes);
+}
+
+/**
+ * `envs history redact`: rewrites the history so it no longer holds any secret in clear (points
+ * written before secrets were redacted), and relinks its hash chain. Nothing else changes; points
+ * keep their order and timestamps, but their hashes do. Run it once on an existing history.
+ */
+async function redactHistory(ctx: Context): Promise<number> {
+  const root = await findRoot(ctx.cwd);
+  return await withLock(root, async () => {
+    const scan = await scanHistory(root);
+    if (scan.points.length === 0 && scan.damaged.length === 0) {
+      ctx.log("There is no history to redact.");
+      return 0;
+    }
+    if (scan.damaged.length > 0 || scan.broken.length > 0) {
+      ctx.error(".envs/history.ndjson is damaged or its hash chain is broken: check it before rewriting it.");
+      return 1;
+    }
+    const { mark } = await redactor(root);
+    let redacted = 0;
+    const redactValue = (variable: string, value: Value | undefined) => {
+      if (value === undefined || isRedacted(value) || !isSecretEntry(variable, String(value))) return value;
+      redacted++;
+      return mark(variable, String(value));
+    };
+    let prev: string | null = null;
+    const lines: string[] = [];
+    for (const old of scan.points) {
+      const changes = old.changes.map((change): Change => {
+        const [section, , kind, variable] = change.path;
+        if (section !== "profiles" || (kind !== "defaults" && kind !== "envs") || variable === undefined) return change;
+        const from = redactValue(variable, change.from);
+        const to = redactValue(variable, change.to);
+        return { path: change.path, ...(from !== undefined && { from }), ...(to !== undefined && { to }) };
+      });
+      const point: Omit<HistoryPoint, "hash"> = { prev, timestamp: old.timestamp, changes, ...(old.resync && { resync: true }) };
+      const hash: string = createHash("sha256").update(JSON.stringify(point)).digest("hex").slice(0, 12);
+      lines.push(JSON.stringify({ hash, ...point }));
+      prev = hash;
+    }
+    if (redacted === 0) {
+      ctx.log("No secrets in clear in the history: nothing to redact.");
+      return 0;
+    }
+    // Write the new file next to the old one and swap it in: the history is never half written.
+    const path = join(root, ".envs/history.ndjson");
+    await writeFile(`${path}.tmp`, lines.join("\n") + "\n", { mode: 0o600 });
+    await rename(`${path}.tmp`, path);
+    ctx.log(green(`✓ redacted ${redacted} secret value(s) in the history; its hash chain was rewritten (the hashes of its points changed)`));
+    return 0;
+  });
+}
+
+/** `envs history <redact>`. */
+export async function historyCommand(ctx: Context, args: string[]): Promise<number> {
+  if (args[0] === "redact") return await redactHistory(ctx);
+  ctx.error("Usage: envs history redact");
+  return 1;
 }
 
 /** `envs config set history false` turns the history off; it is on unless set to false. */
@@ -401,6 +593,81 @@ async function managedVariables(root: string, values: NormalizedValues): Promise
   return names;
 }
 
+/**
+ * `.envs/` holds every secret of the project, so only the owner may read it: the folder is 700 and
+ * its files (values.yml, the history, the config) are 600. Applied on every command that writes, so a
+ * project created before this, or by hand, is tightened too. Modes do not apply on Windows.
+ */
+async function hardenPermissions(root: string): Promise<void> {
+  if (process.platform === "win32") return;
+  const dir = join(root, ".envs");
+  const tighten = async (path: string, mode: number) => {
+    const current = await stat(path).catch(() => undefined);
+    if (current && (current.mode & 0o777 & ~mode) !== 0) await chmod(path, mode).catch(() => {});
+  };
+  await tighten(dir, 0o700);
+  for (const file of ["values.yml", "history.ndjson", "history.key", "config.yml"]) await tighten(join(dir, file), 0o600);
+}
+
+/** The lock of `.envs/` is held by another running `envs` command. */
+class LockError extends Error {}
+
+/** The roots whose lock the current async flow already holds (a command that calls another, e.g. `use` → `push`). */
+const heldLocks = new AsyncLocalStorage<Set<string>>();
+
+const processAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM: it exists but belongs to someone else.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/**
+ * Runs `fn` holding `.envs/lock`, so two `envs` processes (or two flows in one) never read, change
+ * and write values.yml and the history at the same time. It waits up to 30 s for the lock; one left
+ * by a process that died is taken over. Without a `.envs/` folder (before `init`) there is nothing to protect.
+ */
+async function withLock<T>(root: string, fn: () => Promise<T>): Promise<T> {
+  const held = heldLocks.getStore();
+  if (held?.has(root)) return await fn();
+  const dir = join(root, ".envs");
+  if (!(await Bun.file(join(dir, ".gitignore")).exists()) && !(await Bun.file(join(dir, "values.yml")).exists())) {
+    return await fn();
+  }
+  await hardenPermissions(root);
+  const path = join(dir, "lock");
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    try {
+      const handle = await open(path, "wx", 0o600);
+      await handle.writeFile(`${process.pid} ${Date.now()}\n`);
+      await handle.close();
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      const text = await Bun.file(path).text().catch(() => "");
+      const pid = Number(text.split(" ")[0]);
+      const age = Date.now() - ((await stat(path).catch(() => undefined))?.mtimeMs ?? Date.now());
+      if ((Number.isInteger(pid) && pid > 0 && !processAlive(pid)) || age > 120_000) {
+        await unlink(path).catch(() => {});
+        continue;
+      }
+      if (Date.now() > deadline) {
+        throw new LockError(`.envs/lock is held by another envs command (pid ${Number.isInteger(pid) ? pid : "unknown"}). Wait for it, or remove .envs/lock if it is not running.`);
+      }
+      await Bun.sleep(15 + Math.random() * 35);
+    }
+  }
+  try {
+    return await heldLocks.run(new Set([...(held ?? []), root]), fn);
+  } finally {
+    await unlink(path).catch(() => {});
+  }
+}
+
 /** Reads values.yml; returns undefined (after reporting) when `envs init` was not run. */
 async function readValues(
   ctx: Context,
@@ -417,7 +684,7 @@ async function readValues(
 export async function init(ctx: Context): Promise<number> {
   const root = await findRoot(ctx.cwd);
   const files = { ".envs/.gitignore": "*\n", ".envs/values.yml": SCHEMA_COMMENT };
-  await mkdir(join(root, ".envs"), { recursive: true });
+  await mkdir(join(root, ".envs"), { recursive: true, mode: 0o700 });
   for (const [name, content] of Object.entries(files)) {
     const path = join(root, name);
     if (await Bun.file(path).exists()) {
@@ -427,6 +694,7 @@ export async function init(ctx: Context): Promise<number> {
       ctx.log(`Created ${path}`);
     }
   }
+  await hardenPermissions(root);
   return 0;
 }
 
@@ -441,7 +709,7 @@ async function readConfig(path: string): Promise<Config> {
 }
 
 async function writeConfig(root: string, path: string, config: Config) {
-  await mkdir(join(root, ".envs"), { recursive: true });
+  await mkdir(join(root, ".envs"), { recursive: true, mode: 0o700 });
   const gitignore = join(root, ".envs/.gitignore");
   if (!(await Bun.file(gitignore).exists())) await Bun.write(gitignore, "*\n");
   const sorted = Object.fromEntries(
@@ -501,8 +769,24 @@ export async function config(ctx: Context, args: string[]): Promise<number> {
   }
 }
 
-/** Writes the values of each worktree's profile to its `.env`; `only` limits it to one worktree. */
 export async function push(ctx: Context, only?: string): Promise<number> {
+  return await withLock(await findRoot(ctx.cwd), () => pushLocked(ctx, only));
+}
+
+export async function pull(ctx: Context): Promise<number> {
+  return await withLock(await findRoot(ctx.cwd), () => pullLocked(ctx));
+}
+
+export async function use(ctx: Context, profile?: string): Promise<number> {
+  return await withLock(await findRoot(ctx.cwd), () => useLocked(ctx, profile));
+}
+
+export async function restore(ctx: Context, hash?: string, options: { force?: boolean } = {}): Promise<number> {
+  return await withLock(await findRoot(ctx.cwd), () => restoreLocked(ctx, hash, options));
+}
+
+/** Writes the values of each worktree's profile to its `.env`; `only` limits it to one worktree. */
+async function pushLocked(ctx: Context, only?: string): Promise<number> {
   const read = await readValues(ctx);
   if (!read) return 1;
   const values = normalizeValues(read.values);
@@ -543,13 +827,14 @@ export async function push(ctx: Context, only?: string): Promise<number> {
     if (Object.keys(entries).length === 0 && orphans.size === 0) continue;
     for (const [key, value] of Object.entries(entries)) {
       if (existing[key] === value) continue;
-      const shown = isMaskedKey(key) ? MASK : formatDotenvValue(value);
+      const shown = displayValue(key, value);
       const line = `${key}=${shown}`;
       // Different secret values share a masked line, so group by what is printed.
       changes.set(line, [...(changes.get(line) ?? []), label]);
     }
     for (const key of orphans) removals.set(key, [...(removals.get(key) ?? []), label]);
-    await Bun.write(dotenv, updateDotenv(current, entries, orphans));
+    // A .env that did not exist is created readable only by its owner; an existing one keeps its mode.
+    await writeFile(join(path, ".env"), updateDotenv(current, entries, orphans), { mode: 0o600 });
   }
   for (const [line, names] of changes) {
     ctx.log(yellow(`↻ ${line} → ${names.join(", ")}`));
@@ -560,7 +845,7 @@ export async function push(ctx: Context, only?: string): Promise<number> {
   return 0;
 }
 
-export async function pull(ctx: Context): Promise<number> {
+async function pullLocked(ctx: Context): Promise<number> {
   const read = await readValues(ctx);
   if (!read) return 1;
   const values = normalizeValues(read.values);
@@ -627,7 +912,7 @@ export async function pull(ctx: Context): Promise<number> {
 }
 
 /** Selects the profile of the current worktree and pushes it; without a profile, lists the profile of each worktree. */
-export async function use(ctx: Context, profile?: string): Promise<number> {
+async function useLocked(ctx: Context, profile?: string): Promise<number> {
   const read = await readValues(ctx);
   if (!read) return 1;
   const values = normalizeValues(read.values);
@@ -747,7 +1032,7 @@ export async function readHistoryPoints(root: string): Promise<HistoryPoint[]> {
  * prefix of the hash is enough), writes it, records the difference as a new point and pushes.
  * Existing points are never removed or rewritten.
  */
-export async function restore(ctx: Context, hash?: string, options: { force?: boolean } = {}): Promise<number> {
+async function restoreLocked(ctx: Context, hash?: string, options: { force?: boolean } = {}): Promise<number> {
   if (!hash) {
     ctx.error("Usage: envs restore <hash> [--force]");
     return 1;
@@ -789,7 +1074,10 @@ export async function restore(ctx: Context, hash?: string, options: { force?: bo
   const target = found.point;
   const restored = stateAfter(points, target);
   const current = normalizeValues(read.values);
+  // The history keeps secrets only as fingerprints: they keep the value they have now.
+  const notes = unredact(restored, current, (await redactor(root)).mark);
   await Bun.write(read.path, stringifyValues(restored));
+  for (const note of notes) ctx.log(yellow(`! ${note}`));
   const added = await recordHistory(root, current, restored, ctx.now, ctx.error);
   ctx.log(
     added
@@ -884,19 +1172,22 @@ export async function edit(ctx: Context, options: { ui?: boolean } = {}): Promis
   if (edited.startsWith(EDIT_NOTICE)) {
     await Bun.write(valuesPath, edited.slice(EDIT_NOTICE.length));
   }
-  // A profile newly named in `uses` starts as a copy of `default`.
-  const raw = (Bun.YAML.parse(await Bun.file(valuesPath).text()) ?? {}) as Values;
-  const values = normalizeValues(raw);
-  const created = materializeProfiles(values);
-  // Rewrite only when something changed, so comments and formatting survive otherwise.
-  if (created.length > 0 || !hasCompleteProfiles(raw)) {
-    await Bun.write(valuesPath, stringifyValues(values));
-  }
-  if (created.length > 0) {
-    ctx.log(green(`+ created ${created.join(", ")} from ${DEFAULT_PROFILE}`));
-  }
-  await recordHistory(await findRoot(ctx.cwd), before, values, ctx.now, ctx.error);
-  return await push(ctx);
+  // The editor ran without the lock (it can stay open for hours); what follows needs it.
+  return await withLock(await findRoot(ctx.cwd), async () => {
+    // A profile newly named in `uses` starts as a copy of `default`.
+    const raw = (Bun.YAML.parse(await Bun.file(valuesPath).text()) ?? {}) as Values;
+    const values = normalizeValues(raw);
+    const created = materializeProfiles(values);
+    // Rewrite only when something changed, so comments and formatting survive otherwise.
+    if (created.length > 0 || !hasCompleteProfiles(raw)) {
+      await Bun.write(valuesPath, stringifyValues(values));
+    }
+    if (created.length > 0) {
+      ctx.log(green(`+ created ${created.join(", ")} from ${DEFAULT_PROFILE}`));
+    }
+    await recordHistory(await findRoot(ctx.cwd), before, values, ctx.now, ctx.error);
+    return await push(ctx);
+  });
 }
 
 /** State the web editor shows: the normalized values plus the worktree names. */
@@ -929,6 +1220,14 @@ export async function loadUiHistory(
 
 /** Writes values sent by the web editor to values.yml (creating profiles named in `uses`), then pushes. */
 export async function saveUiState(
+  ctx: Context,
+  input: NormalizedValues,
+  options: { base?: string } = {},
+): Promise<{ created: string[]; code: number; conflict?: boolean }> {
+  return await withLock(await findRoot(ctx.cwd), () => saveUiStateLocked(ctx, input, options));
+}
+
+async function saveUiStateLocked(
   ctx: Context,
   input: NormalizedValues,
   options: { base?: string } = {},
@@ -998,6 +1297,16 @@ export async function run(
   args: string[],
   ctx: Context = defaultContext(),
 ): Promise<number> {
+  try {
+    return await dispatch(args, ctx);
+  } catch (error) {
+    if (!(error instanceof LockError)) throw error;
+    ctx.error(error.message);
+    return 1;
+  }
+}
+
+async function dispatch(args: string[], ctx: Context): Promise<number> {
   const [command = "help"] = args;
   switch (command) {
     case "help":
@@ -1017,6 +1326,8 @@ export async function run(
       return await edit(ctx, { ui: args.includes("--ui") });
     case "use":
       return await use(ctx, args[1]);
+    case "history":
+      return await historyCommand(ctx, args.slice(1));
     case "restore":
       return await restore(ctx, args.slice(1).find((arg) => !arg.startsWith("--")), { force: args.includes("--force") });
     case "config":

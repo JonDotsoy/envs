@@ -1515,3 +1515,178 @@ describe("values that cannot be written to a .env", () => {
   });
 });
 
+describe.skipIf(process.platform === "win32")("file permissions of .envs", () => {
+  let ws: Workspace;
+  beforeAll(async () => {
+    ws = await createWorkspace({ worktrees: ["feature-x"] });
+  });
+  afterAll(() => ws.cleanup());
+
+  const mode = async (path: string) => (await stat(path)).mode & 0o777;
+  const envs = () => join(ws.main, ".envs");
+
+  test("init creates the folder 700 and values.yml 600", async () => {
+    await rm(envs(), { recursive: true, force: true });
+    await run(["init"], testContext(ws.main).ctx);
+    expect(await mode(envs())).toBe(0o700);
+    expect(await mode(join(envs(), "values.yml"))).toBe(0o600);
+  });
+
+  test("a project created before (folder 755, files 644) is tightened by the next command, history included", async () => {
+    await Bun.write(join(ws.main, ".env"), "A=1\n");
+    await run(["pull"], testContext(ws.main).ctx);
+    await Bun.write(join(envs(), "config.yml"), "history: true\n");
+    await chmod(envs(), 0o755);
+    for (const file of ["values.yml", "history.ndjson", "config.yml"]) await chmod(join(envs(), file), 0o644);
+    await Bun.write(join(ws.main, ".env"), "A=2\n");
+    expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
+    expect(await mode(envs())).toBe(0o700);
+    for (const file of ["values.yml", "history.ndjson", "config.yml"]) expect(await mode(join(envs(), file))).toBe(0o600);
+    expect(await Bun.file(join(envs(), "lock")).exists()).toBe(false);
+  });
+
+  test("push creates a missing .env 600 and leaves the mode of an existing one alone", async () => {
+    await rm(join(ws.main, ".env"), { force: true });
+    await Bun.write(join(ws.worktrees["feature-x"]!, ".env"), "B=1\n");
+    await chmod(join(ws.worktrees["feature-x"]!, ".env"), 0o640);
+    await Bun.write(join(envs(), "values.yml"), "defaults:\n  D: 1\n");
+    expect(await run(["push"], testContext(ws.main).ctx)).toBe(0);
+    expect(await mode(join(ws.main, ".env"))).toBe(0o600);
+    expect(await mode(join(ws.worktrees["feature-x"]!, ".env"))).toBe(0o640);
+  });
+});
+
+describe("secrets in the history and in the console", () => {
+  let ws: Workspace;
+  beforeAll(async () => {
+    ws = await createWorkspace({ worktrees: ["feature-x"] });
+  });
+  afterAll(() => ws.cleanup());
+
+  const envs = () => join(ws.main, ".envs");
+  const historyText = () => Bun.file(join(envs(), "history.ndjson")).text();
+  const points = async () => (await historyText()).trim().split("\n").map((l) => JSON.parse(l));
+  const dotenv = (dir = ws.main) => Bun.file(join(dir, ".env")).text();
+  const project = async (dotenvText: string, options: { keepSecrets?: boolean } = {}) => {
+    await rm(envs(), { recursive: true, force: true });
+    await rm(join(ws.worktrees["feature-x"]!, ".env"), { force: true });
+    await run(["init"], testContext(ws.main).ctx);
+    if (options.keepSecrets) await run(["config", "set", "history.secrets", "true"], testContext(ws.main).ctx);
+    await Bun.write(join(ws.main, ".env"), dotenvText);
+    expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
+  };
+
+  test("secrets never reach the history: sensitive names and URLs with a password are stored as fingerprints", async () => {
+    await project("PORT=3000\nAPI_TOKEN=tok-one\nDB_PASSWORD=pw-one\nDATABASE_URL=postgres://shop:urlpass@db.invalid/shop\nCALLBACK=https://x.invalid/cb?api_key=qs-secret&page=2\nSAFE_URL=https://example.com/a\n");
+    const text = await historyText();
+    for (const secret of ["tok-one", "pw-one", "urlpass", "qs-secret"]) expect(text).not.toContain(secret);
+    expect(text).toContain("envs:redacted:");
+    // What is not a secret stays readable.
+    expect(text).toContain("https://example.com/a");
+    expect(text).toContain('"to":3000');
+    // values.yml is untouched: it still has the real values.
+    expect(await Bun.file(join(envs(), "values.yml")).text()).toContain("tok-one");
+  });
+
+  test("a rotated secret is recorded as a change (its fingerprint differs) without ever being stored", async () => {
+    await project("API_TOKEN=tok-one\n");
+    const [first] = await points();
+    const fingerprint = first.changes.find((c: any) => c.path.at(-2) === "API_TOKEN").to;
+    await Bun.write(join(ws.main, ".env"), "API_TOKEN=tok-two\n");
+    expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
+    const [, second, ...rest] = await points();
+    expect(rest).toHaveLength(0);
+    expect(second.changes).toEqual([
+      { path: ["profiles", "default", "envs", "API_TOKEN", "main"], from: fingerprint, to: expect.stringMatching(/^envs:redacted:[0-9a-f]{16}$/) },
+    ]);
+    expect(second.changes[0].to).not.toBe(fingerprint);
+    expect(await historyText()).not.toMatch(/tok-(one|two)/);
+    // Pulling again with the same secret adds nothing: the fingerprint is stable.
+    expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
+    expect(await points()).toHaveLength(2);
+  });
+
+  test("the key of the fingerprints is created 600 and nothing else needs it to replay the history", async () => {
+    await project("API_TOKEN=tok-one\n");
+    const key = join(envs(), "history.key");
+    expect(await Bun.file(key).exists()).toBe(true);
+    if (process.platform !== "win32") expect((await stat(key)).mode & 0o777).toBe(0o600);
+    expect((await Bun.file(key).text()).trim()).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("restore keeps the current secrets and says so; it drops a secret the project no longer has", async () => {
+    await project("PORT=3000\nAPI_TOKEN=tok-one\n");
+    const [first] = await points();
+    await Bun.write(join(ws.main, ".env"), "PORT=4000\nAPI_TOKEN=tok-two\nOLD_PASSWORD=gone-soon\n");
+    await run(["pull"], testContext(ws.main).ctx);
+    // Remove OLD_PASSWORD from values.yml and the .env, then restore the first point.
+    const values = Bun.YAML.parse(await Bun.file(join(envs(), "values.yml")).text()) as any;
+    delete values.profiles.default.envs.OLD_PASSWORD;
+    await Bun.write(join(envs(), "values.yml"), Bun.YAML.stringify(values, null, 2));
+    const { ctx, logs } = testContext(ws.main);
+    expect(await run(["restore", first.hash], ctx)).toBe(0);
+    const restored = Bun.YAML.parse(await Bun.file(join(envs(), "values.yml")).text()) as any;
+    expect(restored.profiles.default.envs.PORT.main).toBe(3000);
+    // The old token (tok-one) is not stored, so the current one (tok-two) stays.
+    expect(restored.profiles.default.envs.API_TOKEN.main).toBe("tok-two");
+    expect(logs.join("\n")).toContain("! API_TOKEN (default main): kept the current value, the history does not keep the old one");
+    expect(logs.join("\n")).not.toMatch(/tok-(one|two)/);
+  });
+
+  test("history.secrets true keeps secrets in clear, and restore then restores them exactly", async () => {
+    await project("API_TOKEN=tok-one\n", { keepSecrets: true });
+    const [first] = await points();
+    expect(await historyText()).toContain("tok-one");
+    await Bun.write(join(ws.main, ".env"), "API_TOKEN=tok-two\n");
+    await run(["pull"], testContext(ws.main).ctx);
+    expect(await run(["restore", first.hash], testContext(ws.main).ctx)).toBe(0);
+    expect(await dotenv()).toContain("API_TOKEN=tok-one");
+    expect(await Bun.file(join(envs(), "history.key")).exists()).toBe(false);
+  });
+
+  test("`envs history redact` removes the secrets in clear from an old history and relinks its chain", async () => {
+    await project("PORT=3000\nAPI_TOKEN=tok-one\n", { keepSecrets: true });
+    await Bun.write(join(ws.main, ".env"), "PORT=3001\nAPI_TOKEN=tok-two\n");
+    await run(["pull"], testContext(ws.main).ctx);
+    expect(await historyText()).toMatch(/tok-one/);
+    const before = await points();
+    await run(["config", "set", "history.secrets", "false"], testContext(ws.main).ctx);
+
+    const { ctx, logs } = testContext(ws.main);
+    expect(await run(["history", "redact"], ctx)).toBe(0);
+    expect(logs[0]).toContain("redacted 3 secret value(s)");
+    expect(await historyText()).not.toMatch(/tok-(one|two)/);
+    // Same points, same order and timestamps, a valid chain (restore does not complain).
+    const after = await points();
+    expect(after.map((p) => p.timestamp)).toEqual(before.map((p) => p.timestamp));
+    expect(after[0].prev).toBeNull();
+    expect(after[1].prev).toBe(after[0].hash);
+    const restoreRun = testContext(ws.main);
+    expect(await run(["restore", after[0].hash], restoreRun.ctx)).toBe(0);
+    expect(restoreRun.errors).toEqual([]);
+    // Nothing left to redact: a second run says so and does not touch the file.
+    const text = await historyText();
+    const again = testContext(ws.main);
+    expect(await run(["history", "redact"], again.ctx)).toBe(0);
+    expect(again.logs[0]).toContain("nothing to redact");
+    expect(await historyText()).toBe(text);
+    // And it refuses a history whose chain is broken.
+    await Bun.write(join(envs(), "history.ndjson"), text.replace('"to":3001', '"to":9999'));
+    const broken = testContext(ws.main);
+    expect(await run(["history", "redact"], broken.ctx)).toBe(1);
+    expect(await run(["history"], testContext(ws.main).ctx)).toBe(1);
+  });
+
+  test("push and restore never print a URL password, nor the values of sensitive variables", async () => {
+    await project("DATABASE_URL=postgres://localhost/shop\nAPI_TOKEN=tok-one\n");
+    await Bun.write(join(envs(), "values.yml"), (await Bun.file(join(envs(), "values.yml")).text()).replace("postgres://localhost/shop", "postgres://shop:urlpass@db.invalid/shop?sslmode=require&token=qs-secret"));
+    const { ctx, logs } = testContext(ws.main);
+    expect(await run(["push"], ctx)).toBe(0);
+    const out = logs.join("\n");
+    expect(out).not.toMatch(/urlpass|qs-secret|tok-one/);
+    expect(out).toContain("postgres://shop:********@db.invalid/shop?sslmode=require&token=********");
+    // The .env itself has the real value.
+    expect(await dotenv()).toContain("urlpass");
+  });
+});
+

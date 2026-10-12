@@ -320,7 +320,7 @@ describe("web editor access control", () => {
   test("without the token (or with a wrong one) every route answers 401 and reveals nothing", async () => {
     const ui = await open();
     try {
-      for (const headers of [{}, { "x-envs-token": "wrong" }, { "x-envs-token": ui.token.slice(0, -1) + "x" }] as Record<string, string>[]) {
+      for (const headers of [{}, { "x-envs-token": "wrong" }, { "x-envs-token": ui.token.slice(0, -1) + (ui.token.endsWith("x") ? "y" : "x") }] as Record<string, string>[]) {
         for (const path of ["/", "/api/values", "/api/history", "/index.html"]) {
           const res = await realFetch(ui.origin + path, { headers });
           expect(res.status).toBe(401);

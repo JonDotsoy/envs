@@ -1,17 +1,12 @@
 /**
- * Known issues of the history feature, found by the audit. One test per finding (H01…H34).
+ * Regression tests for the findings of the audit of the history feature (H01…H34): one test per
+ * finding, each asserting the correct behavior. They were written first as known issues (failing on
+ * purpose) and turned into regular tests as each gap was fixed; every title says "(fixed)", or
+ * "(reported)" for H11, which is by design (a default applies to every worktree) and is now explained
+ * by `pull` instead of surprising later.
  *
- * Every test asserts the CORRECT behavior, so each one fails today: it reproduces a known gap.
- * They are declared with `bug(...)`, which is `test.failing`: the suite stays green while the gap
- * exists, and a test starts failing ("expected to fail but passed") as soon as its gap is fixed,
- * which is the signal to turn it into a regular `test`.
- *
- * To see the real failures (the assertion that does not hold) run:
- *
- *   SHOW_KNOWN_ISSUES=1 bun test test/history.known-issues.test.ts
- *
- * Not reproduced here: H30 (ruled out by the audit) and the process-level races of `envs use`
- * (non-deterministic); H15 is reproduced in-process with two concurrent `recordHistory` calls.
+ * Not reproduced here: H30 (ruled out by the audit). The races between real processes are in
+ * test/concurrency.test.ts; H15 and H16 are also reproduced here in-process.
  */
 import { afterEach, describe, expect, test } from "bun:test";
 import { $ } from "bun";
@@ -28,6 +23,7 @@ import {
   parseDotenv,
   readHistoryPoints,
   recordHistory,
+  redactForHistory,
   run,
   saveUiState,
   type Context,
@@ -36,8 +32,6 @@ import {
 import { fromVarRows, toVarRows } from "../src/ui/rows";
 import { serveUi } from "../src/ui/server";
 import { createWorkspace, type Workspace } from "./fixtures/workspace";
-
-const bug = process.env.SHOW_KNOWN_ISSUES ? test : test.failing;
 
 // ── Demo project ─────────────────────────────────────────────────────────────────────────────
 
@@ -104,6 +98,9 @@ async function demo(options: { init?: boolean } = {}): Promise<Demo> {
 
 const snapshotOf = async (d: Demo) =>
   normalizeValues((Bun.YAML.parse(await d.text()) ?? {}) as never) as NormalizedValues;
+
+/** values.yml as the history stores it (secrets redacted), to compare with a replay. */
+const storedSnapshotOf = async (d: Demo) => redactForHistory(d.main, await snapshotOf(d));
 
 /** The state obtained by applying every history point in order. */
 const replayOf = async (d: Demo): Promise<NormalizedValues> => {
@@ -211,7 +208,7 @@ describe("data loss and orphan variables", () => {
     (state.profiles.default!.envs.PORT as any).main = "4000";
     await saveUiState(saveCtx(d), state);
     const points = await readHistoryPoints(d.main);
-    expect(canon(await replayOf(d))).toBe(canon(await snapshotOf(d)));
+    expect(canon(await replayOf(d))).toBe(canon(await storedSnapshotOf(d)));
     await d.cmd(["restore", points[0]!.hash]);
     expect(await d.text()).toContain("DATABASE_URL");
   }, T);
@@ -226,7 +223,7 @@ describe("data loss and orphan variables", () => {
     await Bun.write(join(d.login, ".env"), (await d.dotenv(d.login)).replace("LOG_LEVEL=info", "LOG_LEVEL=debug"));
     await d.cmd(["pull"]);
     const last = (await readHistoryPoints(d.main)).at(-1)!;
-    expect(canon(await replayOf(d))).toBe(canon(await snapshotOf(d)));
+    expect(canon(await replayOf(d))).toBe(canon(await storedSnapshotOf(d)));
     await d.cmd(["restore", last.hash]);
     expect(await d.text()).toContain("STRIPE_SECRET");
   }, T);
@@ -237,7 +234,7 @@ describe("data loss and orphan variables", () => {
     await Bun.write(d.values, text.replace("    defaults: \n      {}\n", "    defaults: \n      SENTRY_DSN: https://demo@sentry.invalid/1\n"));
     await d.cmd(["pull"]);
     expect(await Bun.file(d.history).text()).toContain("SENTRY_DSN");
-    expect(canon(await replayOf(d))).toBe(canon(await snapshotOf(d)));
+    expect(canon(await replayOf(d))).toBe(canon(await storedSnapshotOf(d)));
   }, T);
 
   test("H05 (fixed) a cancelled envs edit (editor exits non-zero) leaves values.yml as it was", async () => {
@@ -379,7 +376,7 @@ describe("history integrity", () => {
     const pulled = await d.cmd(["pull"]);
     // A crash in the middle of an append must not brick the project, nor leave a change without a point.
     expect(pulled.code).toBe(0);
-    expect(canon(await replayOf(d).catch(() => ({ uses: {}, profiles: {} })))).toBe(canon(await snapshotOf(d)));
+    expect(canon(await replayOf(d).catch(() => ({ uses: {}, profiles: {} })))).toBe(canon(await storedSnapshotOf(d)));
   }, T);
 
   // Fixed: restore refuses with a clear message and the panel loads, flagging the damaged lines.
@@ -411,7 +408,7 @@ describe("history integrity", () => {
     expect(await d.dotenv(d.main)).not.toContain("attacker.invalid");
   }, T);
 
-  bug("H15 concurrent writers fork the chain: two points with the same prev", async () => {
+  test("H15 (fixed) concurrent writers no longer fork the chain (see test/concurrency.test.ts for separate processes)", async () => {
     const d = await demo();
     const before = await snapshotOf(d);
     const a = structuredClone(before);
@@ -423,7 +420,7 @@ describe("history integrity", () => {
     points.forEach((point, i) => i > 0 && expect(point.prev).toBe(points[i - 1]!.hash));
   }, T);
 
-  bug("H16 two identical points get the same hash, which makes restore ambiguous forever", async () => {
+  test("H16 (fixed) two identical concurrent points no longer share a hash", async () => {
     const d = await demo();
     const before = await snapshotOf(d);
     const after = structuredClone(before);
@@ -516,7 +513,7 @@ describe("security", () => {
     }
   }, T);
 
-  bug("H20 permissions: values.yml and .envs/ are created readable by others; an existing history.ndjson is not hardened", async () => {
+  test("H20 (fixed) permissions: .envs/ is 700, its files 600, and an existing history.ndjson is hardened", async () => {
     const d = await demo();
     expect((await stat(d.values)).mode & 0o777).toBe(0o600);
     expect((await stat(join(d.main, ".envs"))).mode & 0o777).toBe(0o700);
@@ -534,7 +531,7 @@ describe("security", () => {
     expect((await d.cmd(["lint"])).out).toMatch(/history/i);
   }, T);
 
-  bug("H22 credentials inside URLs (DATABASE_URL) are not masked in push/restore logs", async () => {
+  test("H22 (fixed) credentials inside URLs (DATABASE_URL) are masked in push/restore logs", async () => {
     const d = await demo();
     await Bun.write(join(d.main, ".env"), (await d.dotenv(d.main)).replace("postgres://localhost/shop", "postgres://shop:demo-pass@db.invalid/shop"));
     await d.cmd(["pull"]);
@@ -544,7 +541,7 @@ describe("security", () => {
     expect(restored.out).not.toContain("demo-pass");
   }, T);
 
-  bug("H23 the history keeps rotated secrets forever, in clear (sensitive values should not be stored as is)", async () => {
+  test("H23 (fixed) the history does not keep secrets in clear, so a rotated one is gone (see `envs history redact` for old histories)", async () => {
     const d = await demo();
     for (const dir of [d.main, d.checkout, d.login]) {
       await Bun.write(join(dir, ".env"), (await d.dotenv(dir)).replace("demo-not-a-real-token", "demo-rotated-token"));

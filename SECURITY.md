@@ -55,14 +55,14 @@ The server listens on `127.0.0.1` only and exposes the values of every `.env`, s
 
 ## The history
 
-`.envs/history.ndjson` keeps the previous and the new value of every variable that changes, in plain text, including secrets, and it is append-only: a value that was recorded cannot be removed without rewriting the file (which breaks its hash chain). It is created with mode `600` and, like the rest of `.envs/`, ignored by git. Turn it off with `envs config set history false` if you do not want it.
+`.envs/history.ndjson` keeps the previous and the new value of every variable that changes. Secrets (a sensitive variable name, or a URL with a password or a sensitive query parameter) are stored only as keyed fingerprints (`envs:redacted:…`, key in `.envs/history.key`), never in clear, unless you set `envs config set history.secrets true`. It is append-only: a value that was recorded cannot be removed without rewriting the file; on a history written before this, run `envs history redact`. `.envs/` is `700` and its files `600`, and, like the rest of `.envs/`, it is ignored by git. `envs lint` checks its permissions and that git ignores it. Turn it off with `envs config set history false` if you do not want it. Writing commands take `.envs/lock`, so concurrent processes cannot corrupt it.
 
 ## Console output
 
 `envs push` prints one line for each variable whose value changes, in the form `↻ NAME=VALUE → branch, ...`, and `envs pull` prints `↓ pulling branch, ... - N variables`. To keep secrets out of the terminal and CI logs:
 
 - The value is replaced by `********` when the variable name contains a sensitive word: `SECRET`, `PASSWORD`, `PASSWD`, `PWD`, `TOKEN`, `KEY` (including `API_KEY` and `PRIVATE_KEY`), `CREDENTIAL`, `AUTH`, `SALT` or `SIGNING`. The match is case-insensitive and applies to whole `_`-separated words, so `KEY_FOO` and `AWS_BUCKET_SECRET` are masked but `MONKEY` is not.
-- Masking is based on the name only. A secret stored in a variable with an innocuous name (for example `DATABASE_URL` with a password inside) is printed as is.
+- A URL keeps its host and loses its secrets: `postgres://user:********@host/db?token=********` (the password and the values of sensitive query parameters are masked). A secret stored in a variable with an innocuous name and no URL form is still printed as is.
 - `envs pull` never prints values, only branch names and the number of variables.
 - `envs lint` messages never include the matched value.
 - Set `NO_COLOR` to a non-empty value to print the output without colors.

@@ -233,3 +233,21 @@ describe("profiles are part of the history even when empty", () => {
   });
 });
 
+describe("redacted secrets in comparisons", () => {
+  const state = (value: string | undefined): NormalizedValues => ({
+    uses: {},
+    profiles: { default: { defaults: {}, envs: value === undefined ? {} : { API_TOKEN: { main: value } } } },
+  });
+  const MARK = "envs:redacted:0123456789abcdef";
+
+  test("a redacted value in the target is not a difference when the editor has the variable", () => {
+    expect(compareStates(state("tok"), state(MARK)).same).toBe(true);
+    expect(compareStates(state("other"), state(MARK)).same).toBe(true);
+  });
+
+  test("but a variable the editor lacks is an addition, and the target's absence is still a removal", () => {
+    expect(compareStates(state(undefined), state(MARK)).profiles[0]!.envs[0]).toMatchObject({ kind: "added", key: "API_TOKEN", target: MARK });
+    expect(compareStates(state("tok"), state(undefined)).profiles[0]!.envs[0]).toMatchObject({ kind: "removed" });
+  });
+});
+

@@ -40,7 +40,7 @@ Además, el servidor nunca responde a las peticiones previas CORS, de modo que n
 
 ![Edición de un valor](assets/images/ui/ui-02-edit-value.png)
 
-Escribe en cualquier celda. Una celda vacía hereda el valor por defecto. En el ejemplo, `PORT` de `main` pasó de `3000` a `8080`. Mientras haya cambios sin guardar, el encabezado muestra **Unsaved changes**.
+Escribe en cualquier celda. Una celda vacía hereda el valor por defecto; para fijar una variable en la cadena vacía (`FOO=`) escribe `""` (así se muestra también una variable que ya está vacía). En el ejemplo, `PORT` de `main` pasó de `3000` a `8080`. Mientras haya cambios sin guardar, el encabezado muestra **Unsaved changes**.
 
 ## 3. Aplicar un valor por defecto a todos los worktrees
 
@@ -76,6 +76,8 @@ El selector **Worktree** deja en la tabla solo la columna de un worktree.
 
 Los números y booleanos conservan su tipo: guardar `3000` sin tocarlo no genera un cambio.
 
+Si `values.yml` cambió después de abrir el editor (otro comando o editor lo guardó), Save responde `409` y no guarda nada, para no pisar ese cambio: recarga el editor y aplica de nuevo tus cambios. Un nombre de variable inválido o un valor con salto de línea también se rechaza antes de guardar.
+
 ## Historial
 
 El panel **History** lista los puntos de `.envs/history.ndjson`, del más nuevo al más antiguo, con su hash corto, fecha y número de cambios. Las etiquetas indican el punto `latest`, el `initial`, el que coincide con lo que hay en el editor (`in editor`) y los puntos de resincronización (`external`).
@@ -94,7 +96,7 @@ Pasa el cursor por un punto para ver la diferencia entre el estado de ese punto 
 | **Verde** (`CHANGED`) | El valor cambiaría: `valor actual → valor del punto`. |
 | **Verde** (`ADDED`) | La propiedad no existe ahora y aparecería. |
 
-Los cambios se agrupan en *Worktree profiles* (`uses`) y por perfil, separando `defaults` y `envs`. Un perfil que existe solo de un lado lleva la etiqueta *profile removed* o *profile added*. Si no hay diferencias, el panel lo indica y el botón **Restore** de ese punto queda deshabilitado.
+Los secretos no se guardan en el historial (ver [history.md](history.md#secretos)): el panel no los marca como diferencia si el editor ya tiene la variable, y muestra `(secret, not kept)` cuando falta. Los cambios se agrupan en *Worktree profiles* (`uses`) y por perfil, separando `defaults` y `envs`. Un perfil que existe solo de un lado lleva la etiqueta *profile removed* o *profile added*. Si no hay diferencias, el panel lo indica y el botón **Restore** de ese punto queda deshabilitado.
 
 ### 9. Fijar un punto con un clic
 

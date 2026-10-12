@@ -160,8 +160,32 @@ envs config set history true    # registrar de nuevo (o `envs config delete hist
 
 Los cambios hechos mientras está desactivado no tienen punto en ese momento, pero no se pierden: al reactivarlo, el siguiente comando que registra un punto agrega primero un [punto de resincronización](#puntos-de-resincronización) con lo que cambió.
 
+## Secretos
+
+El historial nunca guarda un secreto. Un valor es secreto si el nombre de su variable parece sensible (`PASSWORD`, `TOKEN`, `SECRET`, `API_KEY`…, las mismas palabras que enmascara la consola) o si es una URL con contraseña o con un parámetro de consulta sensible. En `from` y `to` se guarda entonces un **marcador**:
+
+```json
+{"path":["profiles","default","envs","API_TOKEN","main"],"from":"envs:redacted:3f9a1c0b7d2e4a55","to":"envs:redacted:91b0c4d2e6f7a813"}
+```
+
+El marcador es una huella con clave (HMAC-SHA256 con la clave de `.envs/history.key`, modo `600`): cambia cuando cambia el secreto, así que el historial sigue mostrando que se rotó, pero no permite recuperarlo ni, con la clave guardada aparte, comprobar si una contraseña débil coincide.
+
+Consecuencias:
+
+- **`envs restore`** no puede devolver un secreto antiguo: conserva el valor actual de esa variable y lo avisa (`! API_TOKEN (default main): kept the current value, the history does not keep the old one`). Si la variable ya no existe, no se restablece y también se avisa.
+- **El panel** del editor web no marca como diferencia un secreto que el editor ya tiene, y muestra `(secret, not kept)` cuando falta.
+- **Perder la clave** (borrar `history.key`) no pierde datos: se genera otra y el siguiente comando agrega un punto de resincronización.
+- **`envs config set history.secrets true`** guarda los secretos en claro, con restablecimiento exacto, para quien prefiera eso.
+- **Historiales anteriores** pueden tener secretos en claro. `envs history redact` los reemplaza por marcadores y vuelve a enlazar la cadena (los hashes de los puntos cambian; sus fechas y su orden, no). Se niega si el historial está dañado o su cadena rota.
+
+## Concurrencia y permisos
+
+Los comandos que escriben toman `.envs/lock` (un archivo creado de forma exclusiva), de modo que dos procesos `envs`, o el editor web y una terminal, nunca se entrelazan: la cadena de hashes sigue siendo una sola línea. Espera hasta 30 s; un bloqueo dejado por un proceso que murió se retoma. Sin `.envs/` (antes de `init`) no hay nada que bloquear.
+
+`.envs/` se crea con modo `700` y sus archivos (`values.yml`, el historial, `history.key` y `config.yml`) con `600`. Cualquier comando que escribe aprieta los permisos de un proyecto creado con modos más abiertos.
+
 ## Seguridad
 
 - El archivo se crea con modo `600`, porque guarda valores de variables.
-- Guarda tanto `from` como `to` con los valores reales, secretos incluidos. Al ser append-only, un valor que ya se registró no se puede quitar sin reescribir el archivo (lo que rompe la cadena).
+- Los secretos se guardan como marcadores (ver arriba); el resto de los valores, en claro. Al ser append-only, un valor que ya se registró no se puede quitar sin reescribir el archivo: para un historial antiguo, `envs history redact` lo hace y vuelve a enlazar la cadena.
 - `.envs/.gitignore` contiene `*`, así que el historial no se versiona. No lo agregues al repositorio.
