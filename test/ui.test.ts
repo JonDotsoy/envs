@@ -336,6 +336,31 @@ describe("web editor access control", () => {
     expect(line).toMatch(/^Could not open the browser\. Open this address manually: http:\/\/127\.0\.0\.1:\d+\/\?token=[A-Za-z0-9_-]{32}$/);
   });
 
+  test("what the opener left behind (the temporary page) is removed as soon as the token is used", async () => {
+    let opened = "";
+    let removed = 0;
+    let stop!: () => void;
+    const exit = new Promise<void>((resolve) => (stop = resolve));
+    const done = run(["edit", "--ui"], {
+      cwd: aws.main,
+      log: () => {},
+      error: () => {},
+      openEditor: async () => 0,
+      openUrl: async (u) => {
+        opened = u;
+        return () => void removed++;
+      },
+      waitForExit: () => exit,
+    });
+    while (!opened) await Bun.sleep(20);
+    expect(removed).toBe(0);
+    await redeem(opened);
+    await Bun.sleep(20);
+    expect(removed).toBe(1);
+    stop();
+    await done;
+  });
+
   test("the opened URL carries a random token, different on every run", async () => {
     const a = await open();
     await a.stop();

@@ -51,8 +51,9 @@ export interface Context {
   error(message: string): void;
   /** Opens a file in the editor and resolves with its exit code once closed. */
   openEditor(path: string): Promise<number>;
-  /** Opens a URL in the default browser; rejects when it cannot (the caller then shows the URL). */
-  openUrl?(url: string): Promise<void>;
+  /** Opens a URL in the default browser; rejects when it cannot (the caller then shows the URL).
+   * May resolve with a function that removes what it left behind; the caller runs it once the URL is used. */
+  openUrl?(url: string): Promise<void | (() => void)>;
   /** Resolves when the `--ui` server should stop (Ctrl+C by default). */
   waitForExit?(): Promise<void>;
   /** Clock used to timestamp history points (tests pin it so hashes are stable). */
@@ -112,6 +113,7 @@ export const defaultContext = (): Context => ({
       setTimeout(cleanup, 60_000).unref();
       const code = await Bun.spawn([opener, page], { stdio: ["ignore", "ignore", "ignore"] }).exited;
       if (code !== 0) throw new Error(`${opener} exited with code ${code}`);
+      return cleanup;
     } catch (error) {
       cleanup();
       throw error;

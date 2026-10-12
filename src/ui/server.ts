@@ -111,6 +111,7 @@ function presentedToken(req: Request): string | undefined {
 export async function serveUi(ctx: Context): Promise<number> {
   const assets = await loadAssets();
   // The token in the URL, valid for one visit and then replaced by a new one; `session` is what that visit trades it for.
+  let opened: Promise<void | (() => void)> | undefined;
   let token = randomBytes(24).toString("base64url");
   const session = randomBytes(24).toString("base64url");
   const guard = (handler: (req: Request) => Response | Promise<Response>) => async (req: Request) => {
@@ -129,6 +130,8 @@ export async function serveUi(ctx: Context): Promise<number> {
       // The token is spent: print a fresh single-use URL right away (for another browser or after closing this one).
       token = randomBytes(24).toString("base64url");
       ctx.log(`New single-use URL: ${urlWith(token)}`);
+      // The page that redirected to the spent token is no longer needed.
+      void opened?.then((cleanup) => cleanup?.(), () => {});
       return new Response(null, {
         status: 302,
         headers: {
@@ -192,7 +195,8 @@ export async function serveUi(ctx: Context): Promise<number> {
   const url = urlWith(token);
   ctx.log(`Web editor running at ${url} (Ctrl+C to stop)`);
   try {
-    await ctx.openUrl?.(url);
+    opened = ctx.openUrl?.(url);
+    await opened;
   } catch {
     // The opener is missing or failed: the user opens the address by hand.
     ctx.log(`Could not open the browser. Open this address manually: ${url}`);
