@@ -170,6 +170,11 @@ export function HistoryPanel(props: {
                     <code className="hash" title={point.hash}>{short(point.hash)}</code>
                     {i === points.length - 1 && <span className="tag">latest</span>}
                     {i === 0 && <span className="tag">initial</span>}
+                    {point.resync && (
+                      <span className="tag external" title="Changes made outside the history (a manual edit of values.yml, or while the history was off)">
+                        external
+                      </span>
+                    )}
                     {diff.same && <span className="tag current">in editor</span>}
                   </span>
                   <span className="point-meta">

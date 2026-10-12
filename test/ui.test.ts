@@ -222,3 +222,33 @@ describe("history panel endpoints", () => {
     }
   });
 });
+
+describe("resync points in the history list", () => {
+  test("GET /api/history exposes `resync` so the panel can tag the point as external", async () => {
+    const rws = await createWorkspace({ worktrees: [] });
+    try {
+      const quiet = { cwd: rws.main, log() {}, error() {}, openEditor: async () => 0 };
+      await Bun.write(join(rws.main, ".env"), "A=1\n");
+      expect(await run(["init"], quiet)).toBe(0);
+      expect(await run(["pull"], quiet)).toBe(0);
+      // A manual edit of values.yml, then the next command that records a point.
+      const file = join(rws.main, ".envs/values.yml");
+      const values = Bun.YAML.parse(await Bun.file(file).text()) as any;
+      values.profiles.default.defaults.MANUAL = "by-hand";
+      await Bun.write(file, Bun.YAML.stringify(values));
+      await Bun.write(join(rws.main, ".env"), "A=2\n");
+      expect(await run(["pull"], quiet)).toBe(0);
+
+      const ui = await startUi(rws.main);
+      try {
+        const body = (await (await fetch(`${ui.url}/api/history`)).json()) as any;
+        expect(body.points.map((p: any) => p.resync)).toEqual([undefined, true, undefined]);
+        expect(body.points[1].changes).toEqual([{ path: ["profiles", "default", "defaults", "MANUAL"], to: "by-hand" }]);
+      } finally {
+        await ui.stop();
+      }
+    } finally {
+      await rws.cleanup();
+    }
+  });
+});

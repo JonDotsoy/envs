@@ -64,7 +64,7 @@ Los números y booleanos conservan su tipo: guardar `3000` sin tocarlo no genera
 
 ## Historial
 
-El panel **History** lista los puntos de `.envs/history.ndjson`, del más nuevo al más antiguo, con su hash corto, fecha y número de cambios. Las etiquetas indican el punto `latest`, el `initial` y el que coincide con lo que hay en el editor (`in editor`).
+El panel **History** lista los puntos de `.envs/history.ndjson`, del más nuevo al más antiguo, con su hash corto, fecha y número de cambios. Las etiquetas indican el punto `latest`, el `initial`, el que coincide con lo que hay en el editor (`in editor`) y los puntos de resincronización (`external`).
 
 ![Panel de historial](assets/images/ui/ui-08-history.png)
 
@@ -103,6 +103,12 @@ Al confirmar, `values.yml` vuelve al estado de ese punto, se ejecuta `push` y se
 ![Historial tras restablecer](assets/images/ui/ui-13-restored-history.png)
 
 En el ejemplo, `8ed3d4a` pasó a ser el punto `in editor` y el nuevo punto `latest` registra el regreso.
+
+### 12. Puntos externos
+
+Un punto de [resincronización](history.md#puntos-de-resincronización) lleva la etiqueta **external**: registra cambios hechos fuera del historial, como una edición manual de `values.yml` o cambios con el historial desactivado. Pasa el cursor sobre la etiqueta para ver su descripción. Se comparan y se restablecen como cualquier otro punto.
+
+![Punto con la etiqueta external](assets/images/ui/ui-14-external.png)
 
 ## Notas
 
