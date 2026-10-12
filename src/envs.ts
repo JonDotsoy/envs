@@ -60,6 +60,7 @@ const paint = (code: number, text: string) =>
   colorsDisabled() ? text : `\x1b[${code}m${text}\x1b[0m`;
 const green = (text: string) => paint(32, text);
 const yellow = (text: string) => paint(33, text);
+const red = (text: string) => paint(31, text);
 
 export const defaultContext = (): Context => ({
   cwd: process.cwd(),
@@ -308,24 +309,55 @@ export function formatDotenvValue(value: string): string {
   return value.includes('"') ? `'${value}'` : `"${value}"`;
 }
 
-/** Sets KEY=VALUE for each entry, updating existing lines in place and appending new ones. */
+/**
+ * Sets KEY=VALUE for each entry, updating existing lines in place and appending new ones.
+ * Lines whose key is in `remove` are dropped (a key that is also in `entries` is kept).
+ */
 export function updateDotenv(
   text: string,
   entries: Record<string, string>,
+  remove: ReadonlySet<string> = new Set(),
 ): string {
   const pending = new Map(Object.entries(entries));
   const lines = text === "" ? [] : text.replace(/\n$/, "").split("\n");
-  const updated = lines.map((line) => {
+  const updated: string[] = [];
+  for (const line of lines) {
     const key = line.trim().match(/^(?:export\s+)?([\w.-]+)\s*=/)?.[1];
-    if (key === undefined || !pending.has(key)) return line;
+    if (key !== undefined && remove.has(key) && !pending.has(key)) continue;
+    if (key === undefined || !pending.has(key)) {
+      updated.push(line);
+      continue;
+    }
     const value = pending.get(key)!;
     pending.delete(key);
-    return `${key}=${formatDotenvValue(value)}`;
-  });
+    updated.push(`${key}=${formatDotenvValue(value)}`);
+  }
   for (const [key, value] of pending) {
     updated.push(`${key}=${formatDotenvValue(value)}`);
   }
-  return updated.join("\n") + "\n";
+  return updated.length === 0 ? "" : updated.join("\n") + "\n";
+}
+
+/**
+ * The variables `envs` manages: every name in any profile of values.yml plus every name that ever
+ * appeared in the history. A variable of a `.env` that is in none of them was never managed.
+ */
+async function managedVariables(root: string, values: NormalizedValues): Promise<Set<string>> {
+  const names = new Set<string>();
+  for (const profile of Object.values(values.profiles)) {
+    for (const key of Object.keys(profile.defaults)) names.add(key);
+    for (const key of Object.keys(profile.envs)) names.add(key);
+  }
+  // A damaged history must not stop a push: the names in values.yml still apply.
+  const points = await readHistoryPoints(root).catch(() => []);
+  for (const { changes } of points) {
+    for (const { path } of changes) {
+      if (path[0] === "profiles" && (path[2] === "defaults" || path[2] === "envs") && path[3] !== undefined) {
+        names.add(path[3]);
+      }
+    }
+  }
+  return names;
 }
 
 /** Reads values.yml; returns undefined (after reporting) when `envs init` was not run. */
@@ -437,17 +469,23 @@ export async function push(ctx: Context, only?: string): Promise<number> {
     ({ name }) => only === undefined || name === only,
   );
   if (!checkProfiles(ctx, values, worktrees)) return 1;
+  const managed = await managedVariables(await findRoot(ctx.cwd), values);
   // Changed variables, grouped by `KEY=VALUE` so each log line lists every branch it changed in.
   const changes = new Map<string, string[]>();
+  // Orphan variables removed from a .env, grouped by name.
+  const removals = new Map<string, string[]>();
   for (const { name, path } of worktrees) {
     const profile = values.uses[name] ?? DEFAULT_PROFILE;
     const entries = resolveEntries(values, name, profile);
-    if (Object.keys(entries).length === 0) continue;
     // Worktrees on a profile other than `default` are labelled in the log.
     const label = profile === DEFAULT_PROFILE ? name : `${name} [${profile}]`;
     const dotenv = Bun.file(join(path, ".env"));
     const current = (await dotenv.exists()) ? await dotenv.text() : "";
     const existing = parseDotenv(current);
+    // Orphans: managed by `envs` (they were in values.yml or its history) but no longer resolved for
+    // this worktree, e.g. after a restore. Variables `envs` never managed stay untouched.
+    const orphans = new Set(Object.keys(existing).filter((key) => managed.has(key) && !(key in entries)));
+    if (Object.keys(entries).length === 0 && orphans.size === 0) continue;
     for (const [key, value] of Object.entries(entries)) {
       if (existing[key] === value) continue;
       const shown = isMaskedKey(key) ? MASK : formatDotenvValue(value);
@@ -455,10 +493,14 @@ export async function push(ctx: Context, only?: string): Promise<number> {
       // Different secret values share a masked line, so group by what is printed.
       changes.set(line, [...(changes.get(line) ?? []), label]);
     }
-    await Bun.write(dotenv, updateDotenv(current, entries));
+    for (const key of orphans) removals.set(key, [...(removals.get(key) ?? []), label]);
+    await Bun.write(dotenv, updateDotenv(current, entries, orphans));
   }
   for (const [line, names] of changes) {
     ctx.log(yellow(`↻ ${line} → ${names.join(", ")}`));
+  }
+  for (const [key, names] of removals) {
+    ctx.log(red(`✕ ${key} removed from ${names.join(", ")}`));
   }
   return 0;
 }

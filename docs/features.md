@@ -20,7 +20,8 @@ Resumen de las funcionalidades de `@jondotsoy/envs`. Para el detalle de uso, con
 | `envs restore <hash>` | Restablece `values.yml` al estado de un punto del historial, agrega un punto nuevo y sincroniza. No borra puntos. |
 | `envs config set <clave> <valor>` / `get [clave]` / `delete <clave>` | Gestiona la configuración guardada en `.envs/config.yml`. |
 
-- `push` actualiza las variables existentes en su lugar, agrega las nuevas al final y conserva comentarios y variables que no están en `values.yml`.
+- `push` actualiza las variables existentes en su lugar, agrega las nuevas al final y conserva los comentarios.
+- `push` también **elimina las variables huérfanas**: las que `envs` administra (están o estuvieron en `values.yml` o en su historial) pero que el worktree ya no resuelve, por ejemplo tras `envs restore`. Las variables que `envs` nunca administró no se tocan. Cada eliminación se informa en la salida (`✕ VARIABLE removed from …`), sin mostrar valores.
 - Con `envs push` solo se muestran las variables cuyo valor cambia.
 
 ## Editores

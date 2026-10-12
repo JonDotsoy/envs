@@ -28,6 +28,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- `envs push` removes orphan variables from the `.env` files: the ones `envs` manages (in `values.yml` or its history) that the worktree no longer resolves, e.g. after `envs restore`, so the next `pull` does not bring them back. Variables that `envs` never saw are kept.
 - Web editor: the sticky header is no longer covered by the sticky columns of the variables table when scrolling.
 - `envs pull` no longer writes to `envs:` the values that are equal to their entry in `defaults:`.
 

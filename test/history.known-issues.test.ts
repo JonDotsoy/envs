@@ -175,7 +175,8 @@ const T = 60_000;
 // ── A/B: data loss, orphan variables and drift between the snapshot and the history ───────────
 
 describe("data loss and orphan variables", () => {
-  bug("H01 (high) restore to a point without a variable leaves it orphan in the .env and the next pull brings it back", async () => {
+  // Fixed: push removes the variables envs manages that the state no longer has.
+  test("H01 (fixed) restore to a point without a variable removes it from the .env and the next pull does not bring it back", async () => {
     const d = await demo();
     const [first] = await readHistoryPoints(d.main);
     await appendFile(join(d.main, ".env"), "NEW_SECRET_KEY=demo-new\n");
@@ -183,7 +184,8 @@ describe("data loss and orphan variables", () => {
     expect(await d.text()).toContain("NEW_SECRET_KEY");
     expect((await d.cmd(["restore", first!.hash])).code).toBe(0);
     expect(await d.text()).not.toContain("NEW_SECRET_KEY");
-    // The restored state must stick: the variable is gone from the .env too, so pull does not resurrect it.
+    // The restored state sticks: push removed the variable from the .env too, so pull does not resurrect it.
+    expect(await d.dotenv(d.main)).not.toContain("NEW_SECRET_KEY");
     await d.cmd(["pull"]);
     expect(await d.text()).not.toContain("NEW_SECRET_KEY");
   }, T);

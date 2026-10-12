@@ -181,8 +181,8 @@ describe("history panel endpoints", () => {
       expect(state.profiles.default.envs.B).toBeUndefined();
       const history = (await (await fetch(`${ui.url}/api/history`)).json()) as any;
       expect(history.points).toHaveLength(4);
-      // push updates and adds variables; it never deletes lines from a .env, so B stays.
-      expect(await Bun.file(join(hws.main, ".env")).text()).toBe("A=1\nB=x\nLOG=info\n");
+      // push also removes the variables envs manages that the restored state no longer has: B is gone.
+      expect(await Bun.file(join(hws.main, ".env")).text()).toBe("A=1\nLOG=info\n");
     } finally {
       expect(await ui.stop()).toBe(0);
     }

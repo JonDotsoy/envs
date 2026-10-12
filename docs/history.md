@@ -100,7 +100,7 @@ Restablece `values.yml` al estado que tenía justo después del punto `<hash>` (
 1. Reconstruye ese estado aplicando los puntos en orden hasta el indicado.
 2. Escribe el resultado en `values.yml`.
 3. Registra la diferencia entre el estado actual y el restablecido como un **punto nuevo** al final del historial.
-4. Ejecuta `push` para actualizar los `.env`.
+4. Ejecuta `push` para actualizar los `.env`. `push` también elimina de los `.env` las variables que el estado restablecido ya no tiene (y que `envs` administraba), para que el siguiente `pull` no las vuelva a incorporar.
 
 Nunca se borra ni se reescribe un punto: si el historial tiene 4 puntos, después de restablecer tiene 5, y el último dice, con `from` y `to`, cómo se volvió atrás. Si el estado actual ya es el pedido, no se agrega nada.
 

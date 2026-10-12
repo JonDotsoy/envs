@@ -8,7 +8,7 @@ import {
   test,
 } from "bun:test";
 import { $ } from "bun";
-import { chmod, mkdtemp, realpath, rm, stat } from "node:fs/promises";
+import { appendFile, chmod, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -316,6 +316,8 @@ describe("commands (in-process)", () => {
   });
 
   test("push masks the value of sensitive variables (snapshot)", async () => {
+    // Variables left over from earlier tests are not the point here: forget they were ever managed.
+    await rm(join(ws.main, ".envs/history.ndjson"), { force: true });
     // Fake values: only the shape of the log output matters here.
     await Bun.write(
       valuesPath(),
@@ -364,6 +366,8 @@ describe("commands (in-process)", () => {
   });
 
   test("push writes defaults to every worktree, overridden by envs", async () => {
+    // `A` was never managed by values.yml or the history, so push keeps it.
+    await rm(join(ws.main, ".envs/history.ndjson"), { force: true });
     await Bun.write(
       valuesPath(),
       "defaults:\n  D: 1\n  E: def\nenvs:\n  E:\n    one: custom\n",
@@ -991,5 +995,60 @@ describe("saving from the web editor keeps value types", () => {
     expect(all[1].changes).toEqual([
       { path: ["profiles", "default", "envs", "PORT", "main"], from: 3000, to: 3001 },
     ]);
+  });
+});
+
+describe("push removes orphan variables", () => {
+  let ws: Workspace;
+  beforeAll(async () => {
+    ws = await createWorkspace({ worktrees: ["feature-x"] });
+  });
+  afterAll(() => ws.cleanup());
+
+  const main = () => join(ws.main, ".env");
+  const feature = () => join(ws.worktrees["feature-x"]!, ".env");
+  const valuesPath = () => join(ws.main, ".envs/values.yml");
+
+  test("updateDotenv drops the lines of the keys to remove and keeps the rest", () => {
+    const text = "# comment\nA=1\nB=2\nexport C=3\nD=4\n";
+    expect(updateDotenv(text, { D: "x" }, new Set(["B", "C", "D"]))).toBe("# comment\nA=1\nD=x\n");
+    expect(updateDotenv("A=1\n", {}, new Set(["A"]))).toBe("");
+  });
+
+  test("a variable envs managed and no longer resolves is removed; unmanaged ones and comments stay", async () => {
+    await run(["init"], testContext(ws.main).ctx);
+    await Bun.write(main(), "KEEP=1\nGONE=2\n");
+    await Bun.write(feature(), "GONE=2\n");
+    expect(await run(["pull"], testContext(ws.main).ctx)).toBe(0);
+    // A variable and a comment envs never saw (never pulled): they must survive.
+    await appendFile(main(), "# my note\nUNMANAGED=secret\n");
+    // GONE is dropped from values.yml (it stays in the history), KEEP stays.
+    const values = Bun.YAML.parse(await Bun.file(valuesPath()).text()) as any;
+    delete values.profiles.default.envs.GONE;
+    await Bun.write(valuesPath(), Bun.YAML.stringify(values));
+
+    const { ctx, logs } = testContext(ws.main);
+    expect(await run(["push"], ctx)).toBe(0);
+    expect(await Bun.file(main()).text()).toBe("KEEP=1\n# my note\nUNMANAGED=secret\n");
+    // A worktree left with nothing to write is cleaned too.
+    expect(await Bun.file(feature()).text()).toBe("");
+    expect(logs).toEqual(["\x1b[31m✕ GONE removed from main, feature-x\x1b[0m"]);
+    // The log never prints values.
+    expect(logs.join("")).not.toContain("=2");
+
+    // Nothing left to remove: a second push is silent.
+    const again = testContext(ws.main);
+    expect(await run(["push"], again.ctx)).toBe(0);
+    expect(again.logs).toEqual([]);
+  });
+
+  test("a damaged history does not stop push: values.yml still decides what is managed", async () => {
+    await Bun.write(main(), "KEEP=1\nSTALE=1\n");
+    await appendFile(join(ws.main, ".envs/history.ndjson"), "not json\n");
+    const values = Bun.YAML.parse(await Bun.file(valuesPath()).text()) as any;
+    values.profiles.default.envs.STALE = { main: "1" };
+    await Bun.write(valuesPath(), Bun.YAML.stringify(values));
+    expect(await run(["push"], testContext(ws.main).ctx)).toBe(0);
+    expect(await Bun.file(main()).text()).toBe("KEEP=1\nSTALE=1\n");
   });
 });
