@@ -28,7 +28,7 @@ Resumen de las funcionalidades de `@jondotsoy/envs`. Para el detalle de uso, con
 ## Editores
 
 - **VS Code** (`envs edit`): abre `values.yml` con `code -w`; si el editor falla, no se hace `push`.
-- **Editor web** (`envs edit --ui`): servidor local (`127.0.0.1`, puerto aleatorio) con una interfaz React para perfiles, valores por defecto y valores por worktree. El botón **Save** guarda y hace `push`.
+- **Editor web** (`envs edit --ui`): servidor local (`127.0.0.1`, puerto aleatorio) con una interfaz React para perfiles, valores por defecto y valores por worktree. El botón **Save** guarda y hace `push`. La dirección que imprime lleva un token de **un solo uso** (el navegador lo cambia por una cookie de sesión; al usarlo se imprime una dirección nueva) que no aparece en `ps`; si no se puede abrir el navegador, se imprime la dirección para abrirla a mano (ver [ui.md](ui.md)).
 - **Panel History** del editor web: lista los puntos del historial (el más reciente primero). Al pasar el mouse o hacer clic en un punto (el clic solo lo selecciona) muestra qué cambiaría respecto al editor: en rojo lo que se eliminaría y en verde lo que cambiaría o se agregaría. El botón **Restore** pide confirmación y restablece ese punto agregando uno nuevo.
 
 ![Editor web iniciado con envs edit --ui](assets/images/edit-ui.png)

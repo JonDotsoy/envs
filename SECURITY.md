@@ -28,7 +28,7 @@ I will reply as soon as possible and we will coordinate the fix and the disclosu
 | `envs init` | — | Creates `<root>/.envs/`, `<root>/.envs/.gitignore` and `<root>/.envs/values.yml`, only if they do not exist. Never overwrites. |
 | `envs pull` | `<worktree>/.env` of each worktree | Rewrites `<root>/.envs/values.yml`. The file is serialized again, so YAML comments are lost. |
 | `envs push` | `<root>/.envs/values.yml` | Creates or updates `<worktree>/.env` of each worktree that has values. Updates existing variables in place, appends new ones at the end and keeps the rest of the file (it sets the mode of every `.env` it writes to `600`, so another user, such as a container mounting it, can no longer read it), except the orphan variables: those `envs` manages (they are or were in `values.yml` or its history) that the worktree no longer resolves are removed. If there are `defaults`, this includes all worktrees. |
-| `envs edit` | Same as `pull` and `push` | Same as `pull` and `push`. It also runs `code -w <root>/.envs/values.yml`. With `--ui` it serves the web editor instead (see below). |
+| `envs edit` | Same as `pull` and `push` | Same as `pull` and `push`. It also runs `code -w <root>/.envs/values.yml`. With `--ui` it serves the web editor instead and runs the system opener (`xdg-open`, `open` or `explorer`) on a temporary redirect page under the OS temp directory (see below). |
 | `envs use`, `envs restore` | `<root>/.envs/values.yml`, `<root>/.envs/history.ndjson` | Rewrite `values.yml` and then act as `push`. |
 | `envs config` | `<root>/.envs/config.yml` | Creates or updates `<root>/.envs/config.yml` (mode `600`). |
 
@@ -51,7 +51,14 @@ Additionally:
 
 ## Web editor (`envs edit --ui`)
 
-The server listens on `127.0.0.1` only and exposes the values of every `.env`, secrets included, so each request must pass these checks: a random per-run access token (in the printed URL, then an `HttpOnly`, `SameSite=Strict` cookie), a `Host` of this server (no DNS rebinding), an `Origin` of this server, `application/json` bodies and a body of at most 5 MiB; it never answers CORS preflights. Open only the address printed by the command and do not share it: it carries the token. See [docs/ui.md](docs/ui.md).
+The server listens on `127.0.0.1` only and exposes the values of every `.env`, secrets included, so each request must pass these checks: a random per-run access token (in the printed URL, **single-use**: the first visit trades it for a different session secret, set as an `HttpOnly`, `SameSite=Strict` cookie), a `Host` of this server (no DNS rebinding), an `Origin` of this server, `application/json` bodies and a body of at most 5 MiB; it never answers CORS preflights. Open only the address printed by the command and do not share it: it carries the token. See [docs/ui.md](docs/ui.md).
+
+How the access token is handled:
+
+- **Single-use.** Once the token in the URL is used it stops working (`401`), so a copy left in the browser history, the terminal or a screenshot is useless afterwards. Using it prints a fresh single-use URL to stdout (`New single-use URL: …`) to open the editor from another browser; every URL gives the same session. The session secret is never in a URL.
+- **Not in `ps`.** The URL is not passed as an argument to `xdg-open`/`open`/`explorer`, where any user could read it in the process list. The opener receives a private temporary page (a directory made with `mkdtemp`, file mode `600`) that redirects to the URL. The page is removed as soon as the token is used, after 60 seconds at most, when the process exits, or when the opener fails.
+- **If the browser cannot be opened** the command prints `Could not open the browser. Open this address manually: …`.
+- **Remaining exposure.** The token is printed to stdout and is in the address bar until it is used, so anyone who can read your screen or your terminal output in that moment can use it before you do. If the address is opened by someone else first, your own visit gets a `401`: stop the server (Ctrl+C) and start it again.
 
 ## The history
 
