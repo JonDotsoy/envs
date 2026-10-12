@@ -10,7 +10,20 @@ Las capturas usan un proyecto de ejemplo con tres worktrees (`main`, `feature-ch
 envs edit --ui
 ```
 
-Ejecuta `init` (si hace falta) y `pull`, y levanta un servidor en `127.0.0.1` con un puerto aleatorio. Abre la dirección que se imprime (se intenta abrir el navegador por ti). Detén el servidor con Ctrl+C.
+Ejecuta `init` (si hace falta) y `pull`, y levanta un servidor en `127.0.0.1` con un puerto aleatorio. Abre la dirección que se imprime (se intenta abrir el navegador por ti). Tiene la forma `http://127.0.0.1:<puerto>/?token=<token>`: el token es aleatorio, distinto en cada ejecución, y el navegador lo cambia en la primera visita por una cookie (`HttpOnly`, `SameSite=Strict`) y lo quita de la barra de direcciones. Detén el servidor con Ctrl+C.
+
+### Acceso al servidor
+
+El servidor expone los valores de tus `.env` (secretos incluidos), así que cada petición se comprueba:
+
+| Comprobación | Respuesta si falla |
+| --- | --- |
+| Token (cookie o cabecera `x-envs-token`) | `401` |
+| `Host` debe ser `127.0.0.1:<puerto>` o `localhost:<puerto>`: bloquea el DNS rebinding | `421` |
+| `Origin`, si viene, debe ser el propio servidor: otro sitio no puede escribir | `403` |
+| Las peticiones con cuerpo deben ser `application/json`: bloquea formularios y peticiones «simples» entre sitios | `415` |
+
+Además, el servidor nunca responde a las peticiones previas CORS, de modo que ningún otro sitio puede enviarle una escritura JSON. Si abres la dirección sin token, o con el token de otra ejecución, ves un `401`: vuelve a abrir la que imprimió `envs edit --ui`.
 
 ## 1. Vista general
 
@@ -113,5 +126,5 @@ Un punto de [resincronización](history.md#puntos-de-resincronización) lleva la
 ## Notas
 
 - Con el historial desactivado (`envs config set history false`), el panel muestra un mensaje y no ofrece restablecer.
-- El servidor solo escucha en `127.0.0.1` y expone `GET/PUT /api/values`, `GET /api/history` y `POST /api/restore`.
+- El servidor solo escucha en `127.0.0.1`, exige el token en todas las rutas (ver «Acceso al servidor») y expone `GET/PUT /api/values`, `GET /api/history` y `POST /api/restore`.
 - Las capturas se generaron con Chromium (Playwright) sobre un proyecto de ejemplo; las fechas y hashes varían en cada ejecución.

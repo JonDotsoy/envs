@@ -1,7 +1,20 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { $ } from "bun";
 import { compareStates, run, stateAfter, type Context } from "../src/envs";
 import { createWorkspace, type Workspace } from "./fixtures/workspace";
+
+const realFetch = globalThis.fetch;
+let uiToken = "";
+/** fetch that presents the editor's token, as the browser does with the cookie it gets from the URL. */
+const fetch = ((input: string | URL | Request, init: RequestInit = {}) =>
+  realFetch(input, { ...init, headers: { "x-envs-token": uiToken, ...(init.headers as Record<string, string>) } })) as typeof globalThis.fetch;
+/** The URL `envs edit --ui` opens carries the token: remember it and return the plain origin. */
+const split = (opened: string) => {
+  const parsed = new URL(opened);
+  uiToken = parsed.searchParams.get("token") ?? "";
+  return parsed.origin;
+};
 
 let ws: Workspace;
 beforeAll(async () => {
@@ -27,6 +40,7 @@ test("edit --ui serves the values and Save writes values.yml and pushes", async 
   };
   const done = run(["edit", "--ui"], ctx);
   while (!url) await Bun.sleep(20);
+  url = split(url);
 
   const html = await (await fetch(url)).text();
   expect(html).toContain('<div id="root">');
@@ -34,7 +48,7 @@ test("edit --ui serves the values and Save writes values.yml and pushes", async 
   expect(state.profiles.default.envs.A).toBeDefined();
   expect(state.worktrees).toContain("one");
 
-  const bad = await fetch(`${url}/api/values`, { method: "PUT", body: "{}" });
+  const bad = await fetch(`${url}/api/values`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
   expect(bad.status).toBe(400);
 
   const res = await fetch(`${url}/api/values`, {
@@ -72,6 +86,7 @@ async function startUi(cwd: string, now?: () => Date) {
   };
   const done = run(["edit", "--ui"], ctx);
   while (!url) await Bun.sleep(20);
+  url = split(url);
   return {
     url,
     stop: async () => {
@@ -252,3 +267,177 @@ describe("resync points in the history list", () => {
     }
   });
 });
+
+describe("web editor access control", () => {
+  const SECRET = "demo-not-a-real-token";
+  let aws: Workspace;
+  beforeAll(async () => {
+    aws = await createWorkspace({ worktrees: [] });
+    await Bun.write(join(aws.main, ".env"), `API_TOKEN=${SECRET}\nPORT=3000\n`);
+    const quiet = { cwd: aws.main, log() {}, error() {}, openEditor: async () => 0 };
+    await run(["init"], quiet);
+    await run(["pull"], quiet);
+  });
+  afterAll(() => aws.cleanup());
+
+  /** Starts the editor and also returns the URL exactly as it is opened (with the token). */
+  async function open() {
+    let opened = "";
+    let stop!: () => void;
+    const exit = new Promise<void>((resolve) => (stop = resolve));
+    const done = run(["edit", "--ui"], {
+      cwd: aws.main,
+      log: () => {},
+      error: () => {},
+      openEditor: async () => 0,
+      openUrl: async (u) => {
+        opened = u;
+      },
+      waitForExit: () => exit,
+    });
+    while (!opened) await Bun.sleep(20);
+    const parsed = new URL(opened);
+    return {
+      opened,
+      origin: parsed.origin,
+      host: parsed.host,
+      port: parsed.port,
+      token: parsed.searchParams.get("token")!,
+      stop: async () => (stop(), await done),
+    };
+  }
+
+  test("the opened URL carries a random token, different on every run", async () => {
+    const a = await open();
+    await a.stop();
+    const b = await open();
+    await b.stop();
+    expect(a.token).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(a.token).not.toBe(b.token);
+  });
+
+  test("without the token (or with a wrong one) every route answers 401 and reveals nothing", async () => {
+    const ui = await open();
+    try {
+      for (const headers of [{}, { "x-envs-token": "wrong" }, { "x-envs-token": ui.token.slice(0, -1) + "x" }] as Record<string, string>[]) {
+        for (const path of ["/", "/api/values", "/api/history", "/index.html"]) {
+          const res = await realFetch(ui.origin + path, { headers });
+          expect(res.status).toBe(401);
+          expect(await res.text()).not.toContain(SECRET);
+        }
+        const put = await realFetch(ui.origin + "/api/values", {
+          method: "PUT",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ uses: {}, profiles: { default: { defaults: { PORT: "1" }, envs: {} } } }),
+        });
+        expect(put.status).toBe(401);
+        const restore = await realFetch(ui.origin + "/api/restore", {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ hash: "0123456789ab" }),
+        });
+        expect(restore.status).toBe(401);
+      }
+      expect(await Bun.file(join(aws.main, ".env")).text()).toBe(`API_TOKEN=${SECRET}\nPORT=3000\n`);
+    } finally {
+      await ui.stop();
+    }
+  });
+
+  test("the URL's token is traded for an HttpOnly SameSite=Strict cookie, and the cookie alone gives access", async () => {
+    const ui = await open();
+    try {
+      const first = await realFetch(ui.opened, { redirect: "manual" });
+      expect(first.status).toBe(302);
+      expect(first.headers.get("location")).toBe("/");
+      const cookie = first.headers.get("set-cookie")!;
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).toContain("SameSite=Strict");
+      const pair = cookie.split(";")[0]!;
+      const page = await realFetch(ui.origin + "/", { headers: { cookie: pair } });
+      expect(page.status).toBe(200);
+      expect(await page.text()).toContain('<div id="root">');
+      const values = await realFetch(ui.origin + "/api/values", { headers: { cookie: pair } });
+      expect(values.status).toBe(200);
+      // A wrong token in the URL gets no cookie.
+      const bad = await realFetch(ui.origin + "/?token=nope", { redirect: "manual" });
+      expect(bad.status).toBe(401);
+      expect(bad.headers.get("set-cookie")).toBeNull();
+    } finally {
+      await ui.stop();
+    }
+  });
+
+  test("a foreign Host (DNS rebinding) is refused with 421 even with a valid token; localhost is accepted", async () => {
+    const ui = await open();
+    try {
+      const status = async (host: string, path = "/api/values") =>
+        (await $`curl -s -o /dev/null -w %{http_code} -H ${"Host: " + host} -H ${"x-envs-token: " + ui.token} ${ui.origin + path}`.text());
+      expect(await status(`evil.example:${ui.port}`)).toBe("421");
+      expect(await status("evil.example")).toBe("421");
+      expect(await status(`127.0.0.1:${Number(ui.port) + 1}`)).toBe("421");
+      expect(await status(`evil.example:${ui.port}`, "/api/history")).toBe("421");
+      expect(await status(`127.0.0.1:${ui.port}`)).toBe("200");
+      expect(await status(`localhost:${ui.port}`)).toBe("200");
+    } finally {
+      await ui.stop();
+    }
+  });
+
+  test("a foreign Origin is refused with 403, for reads and writes, even with a valid token", async () => {
+    const ui = await open();
+    try {
+      const call = (origin: string, init: RequestInit = {}) =>
+        realFetch(ui.origin + "/api/values", {
+          ...init,
+          headers: { "x-envs-token": ui.token, "content-type": "application/json", origin, ...(init.headers as object) },
+        });
+      expect((await call("http://evil.example")).status).toBe(403);
+      expect((await call("null")).status).toBe(403);
+      expect((await call(`http://evil.example:${ui.port}`)).status).toBe(403);
+      expect((await call("http://evil.example", { method: "PUT", body: "{}" })).status).toBe(403);
+      expect((await call(ui.origin)).status).toBe(200);
+      expect((await call(`http://localhost:${ui.port}`)).status).toBe(200);
+    } finally {
+      await ui.stop();
+    }
+  });
+
+  test("a body that is not application/json is refused with 415 (a cross-site form or a simple request)", async () => {
+    const ui = await open();
+    try {
+      for (const type of ["text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x"]) {
+        const res = await realFetch(ui.origin + "/api/values", {
+          method: "PUT",
+          headers: { "x-envs-token": ui.token, "content-type": type },
+          body: JSON.stringify({ uses: {}, profiles: { default: { defaults: { PORT: "1" }, envs: {} } } }),
+        });
+        expect(res.status).toBe(415);
+      }
+      const noType = await realFetch(ui.origin + "/api/restore", {
+        method: "POST",
+        headers: { "x-envs-token": ui.token },
+        body: JSON.stringify({ hash: "0123456789ab" }),
+      });
+      expect(noType.status).toBe(415);
+      expect(await Bun.file(join(aws.main, ".env")).text()).toBe(`API_TOKEN=${SECRET}\nPORT=3000\n`);
+    } finally {
+      await ui.stop();
+    }
+  });
+
+  test("the server never answers CORS preflights, so no other site can send a JSON write", async () => {
+    const ui = await open();
+    try {
+      const res = await realFetch(ui.origin + "/api/values", {
+        method: "OPTIONS",
+        headers: { origin: "http://evil.example", "access-control-request-method": "PUT" },
+      });
+      expect(res.headers.get("access-control-allow-origin")).toBeNull();
+      expect(res.status).toBeGreaterThanOrEqual(400);
+    } finally {
+      await ui.stop();
+    }
+  });
+});
+

@@ -27,8 +27,12 @@ I will reply as soon as possible and we will coordinate the fix and the disclosu
 | --- | --- | --- |
 | `envs init` | — | Creates `<root>/.envs/`, `<root>/.envs/.gitignore` and `<root>/.envs/values.yml`, only if they do not exist. Never overwrites. |
 | `envs pull` | `<worktree>/.env` of each worktree | Rewrites `<root>/.envs/values.yml`. The file is serialized again, so YAML comments are lost. |
-| `envs push` | `<root>/.envs/values.yml` | Creates or updates `<worktree>/.env` of each worktree that has values. Updates existing variables in place, appends new ones at the end and keeps the rest of the file. If there are `defaults`, this includes all worktrees. |
-| `envs edit` | Same as `pull` and `push` | Same as `pull` and `push`. It also runs `code -w <root>/.envs/values.yml`. |
+| `envs push` | `<root>/.envs/values.yml` | Creates or updates `<worktree>/.env` of each worktree that has values. Updates existing variables in place, appends new ones at the end and keeps the rest of the file, except the orphan variables: those `envs` manages (they are or were in `values.yml` or its history) that the worktree no longer resolves are removed. If there are `defaults`, this includes all worktrees. |
+| `envs edit` | Same as `pull` and `push` | Same as `pull` and `push`. It also runs `code -w <root>/.envs/values.yml`. With `--ui` it serves the web editor instead (see below). |
+| `envs use`, `envs restore` | `<root>/.envs/values.yml`, `<root>/.envs/history.ndjson` | Rewrite `values.yml` and then act as `push`. |
+| `envs config` | `<root>/.envs/config.yml` | Creates or updates `<root>/.envs/config.yml` (mode `600`). |
+
+Every command that changes `values.yml` also appends to `<root>/.envs/history.ndjson` (mode `600`, append-only) unless the history is turned off with `envs config set history false`.
 
 Additionally:
 
@@ -44,6 +48,14 @@ Additionally:
 - `envs init` creates `.envs/.gitignore` with `*`, so the `.envs/` folder is not committed to git. Do not remove that file.
 - `envs push` writes the values to the `.env` files of each worktree. Make sure `.env` is in your project's `.gitignore`.
 - Do not share `values.yml` or paste it in issues or logs.
+
+## Web editor (`envs edit --ui`)
+
+The server listens on `127.0.0.1` only and exposes the values of every `.env`, secrets included, so each request must pass these checks: a random per-run access token (in the printed URL, then an `HttpOnly`, `SameSite=Strict` cookie), a `Host` of this server (no DNS rebinding), an `Origin` of this server and `application/json` bodies; it never answers CORS preflights. Open only the address printed by the command and do not share it: it carries the token. See [docs/ui.md](docs/ui.md).
+
+## The history
+
+`.envs/history.ndjson` keeps the previous and the new value of every variable that changes, in plain text, including secrets, and it is append-only: a value that was recorded cannot be removed without rewriting the file (which breaks its hash chain). It is created with mode `600` and, like the rest of `.envs/`, ignored by git. Turn it off with `envs config set history false` if you do not want it.
 
 ## Console output
 

@@ -10,6 +10,7 @@ import {
   type NormalizedValues,
 } from "../envs";
 import { join } from "node:path";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readdir } from "node:fs/promises";
 
 const ANSI = /\x1b\[[0-9;]*m/g;
@@ -67,29 +68,89 @@ async function loadAssets(): Promise<Map<string, Blob>> {
   return assets;
 }
 
-/** Serves the web editor on localhost until `ctx.waitForExit` resolves. */
+const TOKEN_COOKIE = "envs_token";
+
+/** Constant-time comparison of a presented token with the real one. */
+function sameToken(presented: string | null | undefined, token: string): boolean {
+  if (!presented) return false;
+  const a = Buffer.from(presented);
+  const b = Buffer.from(token);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** The token a request carries: the `x-envs-token` header, or the cookie the browser got from the URL. */
+function presentedToken(req: Request): string | undefined {
+  const header = req.headers.get("x-envs-token");
+  if (header) return header;
+  return req.headers.get("cookie")?.split(";").map((c) => c.trim().split("=")).find(([name]) => name === TOKEN_COOKIE)?.[1];
+}
+
+/**
+ * Serves the web editor on localhost until `ctx.waitForExit` resolves.
+ *
+ * It is the only thing between the values (secrets included) and any other program, so every
+ * request is checked:
+ * - `Host` must be this server (127.0.0.1 or localhost on its port): a page reaching it through DNS
+ *   rebinding sends its own host name and is refused (421).
+ * - `Origin`, when present, must be this server too (403): another site cannot write to it.
+ * - A random token, unique to each run and printed only in the URL that is opened, is required
+ *   (401). The browser trades it for an HttpOnly, SameSite=Strict cookie on the first visit, so a
+ *   program that merely finds the port cannot read or change anything.
+ * - Requests with a body must be `application/json` (415), which a cross-site form or a
+ *   "simple" fetch cannot send without a preflight this server never allows.
+ */
 export async function serveUi(ctx: Context): Promise<number> {
   const assets = await loadAssets();
+  const token = randomBytes(24).toString("base64url");
+  const guard = (handler: (req: Request) => Response | Promise<Response>) => async (req: Request) => {
+    const port = server.port;
+    const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
+    if (!hosts.includes(req.headers.get("host") ?? "")) {
+      return new Response("Misdirected request", { status: 421 });
+    }
+    const origin = req.headers.get("origin");
+    if (origin !== null && !hosts.some((host) => origin === `http://${host}`)) {
+      return new Response("Forbidden origin", { status: 403 });
+    }
+    const url = new URL(req.url);
+    // First visit: trade the token in the URL for the cookie and drop it from the address bar.
+    if (url.pathname === "/" && sameToken(url.searchParams.get("token"), token)) {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: "/",
+          "set-cookie": `${TOKEN_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/`,
+        },
+      });
+    }
+    if (!sameToken(presentedToken(req), token)) {
+      return new Response("Unauthorized: open the address printed by `envs edit --ui`.", { status: 401 });
+    }
+    if (req.method !== "GET" && req.method !== "HEAD" && !req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+      return new Response("Unsupported media type", { status: 415 });
+    }
+    return handler(req);
+  };
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     routes: {
       "/api/values": {
-        GET: async () => Response.json(await loadUiState(ctx)),
-        PUT: async (req) => {
+        GET: guard(async () => Response.json(await loadUiState(ctx))),
+        PUT: guard(async (req) => {
           const values = parseBody(await req.json().catch(() => undefined));
           if (!values) return Response.json({ error: "Invalid values" }, { status: 400 });
           const { ctx: captured, logs, errors } = capture(ctx);
           const { created, code } = await saveUiState(captured, values);
           return Response.json({ ok: code === 0, created, logs, errors }, { status: code === 0 ? 200 : 500 });
-        },
+        }),
       },
       "/api/history": {
-        GET: async () => Response.json(await loadUiHistory(ctx)),
+        GET: guard(async () => Response.json(await loadUiHistory(ctx))),
       },
       // Restores values.yml to the state after a point: a new point is appended, none is removed.
       "/api/restore": {
-        POST: async (req) => {
+        POST: guard(async (req) => {
           const hash = parseRestoreBody(await req.json().catch(() => undefined));
           if (!hash) return Response.json({ error: "Invalid hash" }, { status: 400 });
           const root = await findRoot(ctx.cwd);
@@ -101,16 +162,17 @@ export async function serveUi(ctx: Context): Promise<number> {
           const { ctx: captured, logs, errors } = capture(ctx);
           const code = await restore(captured, hash);
           return Response.json({ ok: code === 0, created: [], logs, errors }, { status: code === 0 ? 200 : 500 });
-        },
+        }),
       },
     },
-    fetch: (req) => {
+    fetch: guard((req) => {
       const path = new URL(req.url).pathname.slice(1) || "index.html";
       const asset = assets.get(path);
       return asset ? new Response(asset) : new Response("Not found", { status: 404 });
-    },
+    }),
   });
-  const url = `http://127.0.0.1:${server.port}`;
+  // The token travels only in this URL (printed and opened), never stored or logged elsewhere.
+  const url = `http://127.0.0.1:${server.port}/?token=${token}`;
   ctx.log(`Web editor running at ${url} (Ctrl+C to stop)`);
   await ctx.openUrl?.(url);
   await (ctx.waitForExit ?? (() => new Promise<void>(() => {})))();

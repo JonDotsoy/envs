@@ -146,7 +146,7 @@ const saveCtx = (d: Demo): Context => ({
   openEditor: async () => 0,
 });
 
-/** Starts the web editor server; resolves with its URL and a stop function. */
+/** Starts the web editor server; resolves with its origin, its access token and a stop function. */
 async function startUi(d: Demo) {
   let url = "";
   let stop!: () => void;
@@ -160,7 +160,13 @@ async function startUi(d: Demo) {
   });
   const done = serveUi(ctx);
   await got;
-  return { url, stop: async () => (stop(), await done) };
+  // The opened URL carries the access token: split it into the plain origin and the token.
+  const opened = new URL(url);
+  return {
+    url: opened.origin,
+    token: opened.searchParams.get("token")!,
+    stop: async () => (stop(), await done),
+  };
 }
 
 afterEach(async () => {
@@ -430,33 +436,47 @@ describe("history integrity", () => {
 // ── D: web editor server, permissions, secrets and logs ──────────────────────────────────────
 
 describe("security", () => {
-  bug("H17 (high) the server does not check Host: a foreign Host (DNS rebinding) reads every secret", async () => {
+  // Fixed: the server checks Host, Origin and a per-run token (see test/ui.test.ts for the full set).
+  test("H17 (fixed) no token, or a foreign Host, never reads a secret or writes anything", async () => {
     const d = await demo();
     const ui = await startUi(d);
     try {
       const port = new URL(ui.url).port;
-      const body = await $`curl -s -H ${"Host: evil.example:" + port} ${ui.url + "/api/values"}`.text();
-      expect(body).not.toContain("demo-not-a-real-token");
-      const history = await $`curl -s -H ${"Host: evil.example:" + port} ${ui.url + "/api/history"}`.text();
-      expect(history).not.toContain("demo-not-a-real-token");
+      // Any other program on the machine (no token) and a page reaching the server through DNS rebinding.
+      for (const path of ["/api/values", "/api/history"]) {
+        const anon = await $`curl -s -H ${"Host: evil.example:" + port} ${ui.url + path}`.text();
+        expect(anon).not.toContain("demo-not-a-real-token");
+        const plain = await $`curl -s ${ui.url + path}`.text();
+        expect(plain).not.toContain("demo-not-a-real-token");
+        // Even with a valid token, a foreign Host is refused.
+        const rebound = await $`curl -s -o /dev/null -w %{http_code} -H ${"Host: evil.example:" + port} -H ${"x-envs-token: " + ui.token} ${ui.url + path}`.text();
+        expect(rebound).toBe("421");
+      }
+      const put = await $`curl -s -o /dev/null -w %{http_code} -X PUT -H "content-type: application/json" --data ${'{"uses":{},"profiles":{"default":{"defaults":{"X":"attacker.invalid"},"envs":{}}}}'} ${ui.url + "/api/values"}`.text();
+      expect(put).toBe("401");
+      expect(await d.dotenv(d.main)).not.toContain("attacker.invalid");
     } finally {
       await ui.stop();
     }
   }, T);
 
-  bug("H18 CSRF: POST /api/restore accepts text/plain (a \"simple\" request) and a foreign Origin", async () => {
+  // Fixed: Origin must be this server and bodies must be application/json.
+  test("H18 (fixed) CSRF: a foreign Origin or a text/plain body is refused and changes nothing", async () => {
     const d = await demo();
     await Bun.write(join(d.main, ".env"), (await d.dotenv(d.main)).replace("PORT=3000", "PORT=4000"));
     await d.cmd(["pull"]);
     const [first] = await readHistoryPoints(d.main);
     const ui = await startUi(d);
     try {
-      const res = await fetch(ui.url + "/api/restore", {
-        method: "POST",
-        headers: { "content-type": "text/plain;charset=UTF-8", origin: "http://evil.example" },
-        body: JSON.stringify({ hash: first!.hash }),
-      });
-      expect(res.status).toBeGreaterThanOrEqual(400);
+      const attempt = (headers: Record<string, string>) =>
+        fetch(ui.url + "/api/restore", {
+          method: "POST",
+          headers: { "x-envs-token": ui.token, ...headers },
+          body: JSON.stringify({ hash: first!.hash }),
+        });
+      expect((await attempt({ "content-type": "text/plain;charset=UTF-8", origin: "http://evil.example" })).status).toBe(403);
+      expect((await attempt({ "content-type": "text/plain" })).status).toBe(415);
+      expect((await attempt({ "content-type": "application/json", origin: "http://evil.example" })).status).toBe(403);
       expect(await d.dotenv(d.main)).toContain("PORT=4000");
     } finally {
       await ui.stop();
@@ -467,12 +487,12 @@ describe("security", () => {
     const d = await demo();
     const ui = await startUi(d);
     try {
-      const state: any = await (await fetch(ui.url + "/api/values")).json();
+      const state: any = await (await fetch(ui.url + "/api/values", { headers: { "x-envs-token": ui.token } })).json();
       delete state.worktrees;
       for (let i = 0; i < 2000; i++) state.profiles.default.defaults[`JUNK_${i}`] = "x".repeat(10_000);
       const res = await fetch(ui.url + "/api/values", {
         method: "PUT",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-envs-token": ui.token },
         body: JSON.stringify(state),
       });
       expect(res.status).toBeGreaterThanOrEqual(400);
