@@ -231,7 +231,10 @@ describe("data loss and orphan variables", () => {
   test("H04 (fixed) a manual edit of values.yml (outside envs edit) is recorded by a resync point", async () => {
     const d = await demo();
     const text = await d.text();
-    await Bun.write(d.values, text.replace("    defaults: \n      {}\n", "    defaults: \n      SENTRY_DSN: https://demo@sentry.invalid/1\n"));
+    // Edit the parsed YAML, not its text: the serializer's exact layout depends on the Bun version.
+    const manual = Bun.YAML.parse(text) as any;
+    manual.profiles.default.defaults.SENTRY_DSN = "https://demo@sentry.invalid/1";
+    await Bun.write(d.values, Bun.YAML.stringify(manual, null, 2));
     await d.cmd(["pull"]);
     expect(await Bun.file(d.history).text()).toContain("SENTRY_DSN");
     expect(canon(await replayOf(d))).toBe(canon(await storedSnapshotOf(d)));
@@ -241,13 +244,15 @@ describe("data loss and orphan variables", () => {
     const d = await demo();
     const { code } = await d.cmd(["edit"], {
       openEditor: async (path) => {
-        await Bun.write(path, (await Bun.file(path).text()).replace("main: 3000", "main: 9999"));
+        const values = Bun.YAML.parse(await Bun.file(path).text()) as any;
+        values.profiles.default.envs.PORT.main = 9999;
+        await Bun.write(path, Bun.YAML.stringify(values, null, 2));
         return 130;
       },
     });
     expect(code).toBe(130);
     // A cancelled edit must not change values.yml…
-    expect(await d.text()).not.toContain("main: 9999");
+    expect((await snapshotOf(d)).profiles.default!.envs.PORT!.main).toBe(3000);
     // …so a later push cannot apply it.
     await d.cmd(["push"]);
     expect(await d.dotenv(d.main)).not.toContain("PORT=9999");
@@ -331,7 +336,9 @@ describe("data loss and orphan variables", () => {
     const d = await demo();
     await d.cmd(["edit"], {
       openEditor: async (path) => {
-        await Bun.write(path, (await Bun.file(path).text()).replace("    defaults: \n      {}\n", "    defaults: \n      REGION: eu\n"));
+        const values = Bun.YAML.parse(await Bun.file(path).text()) as any;
+        values.profiles.default.defaults.REGION = "eu";
+        await Bun.write(path, Bun.YAML.stringify(values, null, 2));
         return 0;
       },
     });
@@ -345,7 +352,9 @@ describe("data loss and orphan variables", () => {
     // The way to drop it everywhere: remove it from the defaults; push then removes it from every .env.
     await d.cmd(["edit"], {
       openEditor: async (path) => {
-        await Bun.write(path, (await Bun.file(path).text()).replace("      REGION: eu\n", "      {}\n").replace("    defaults: \n      {}\n      {}\n", "    defaults: \n      {}\n"));
+        const values = Bun.YAML.parse(await Bun.file(path).text()) as any;
+        delete values.profiles.default.defaults.REGION;
+        await Bun.write(path, Bun.YAML.stringify(values, null, 2));
         return 0;
       },
     });
