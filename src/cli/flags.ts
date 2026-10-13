@@ -66,23 +66,23 @@ export const simpleParser = (name: string, description: string) =>
     .program(`envs ${name}`)
     .describe(description);
 
+/** Every action but the root `help` can come with `help: true` (`--help`), leaving out its other options. */
 export type CliAction =
   | { action: "help" }
   | { action: "unknown"; command: string }
-  | { action: "init" | "pull" | "push" | "lint" }
-  | { action: "init.help" | "pull.help" | "push.help" | "lint.help" }
-  | { action: "edit"; ui: boolean }
-  | { action: "edit.help" }
-  | { action: "use"; profile: string | null }
-  | { action: "use.help" }
-  | { action: "restore"; hash: string | null; force: boolean }
-  | { action: "restore.help" }
-  | { action: "history.redact" }
-  | { action: "history.help" }
-  | { action: "config.set"; key: string | null; value: string | null }
-  | { action: "config.get"; key: string | null }
-  | { action: "config.delete"; key: string | null }
-  | { action: "config.help" };
+  | { action: "init" | "pull" | "push" | "lint"; help?: true }
+  | { action: "edit"; ui: boolean; help?: undefined }
+  | { action: "edit"; help: true }
+  | { action: "use"; profile: string | null; help?: undefined }
+  | { action: "use"; help: true }
+  | { action: "restore"; hash: string | null; force: boolean; help?: undefined }
+  | { action: "restore"; help: true }
+  | { action: "history"; redact: true; help?: undefined }
+  | { action: "history"; help: true }
+  | { action: "config.set"; key: string | null; value: string | null; help?: undefined }
+  | { action: "config.get"; key: string | null; help?: undefined }
+  | { action: "config.delete"; key: string | null; help?: undefined }
+  | { action: "config"; help: true };
 
 const simpleCommands = {
   init: "Create the .envs/ directory",
@@ -110,34 +110,34 @@ export function parser(args: string[]): CliAction {
     case "push":
     case "lint": {
       const options = simpleParser(name, simpleCommands[name]).parse(rest);
-      return options.help ? { action: `${name}.help` } : { action: name };
+      return options.help ? { action: name, help: true } : { action: name };
     }
     case "edit": {
       const options = editParser.parse(rest);
-      return options.help ? { action: "edit.help" } : { action: "edit", ui: options.ui };
+      return options.help ? { action: "edit", help: true } : { action: "edit", ui: options.ui };
     }
     case "use": {
       const options = useParser.parse(rest);
-      return options.help ? { action: "use.help" } : { action: "use", profile: options.profile };
+      return options.help ? { action: "use", help: true } : { action: "use", profile: options.profile };
     }
     case "restore": {
       const options = restoreParser.parse(rest);
-      return options.help ? { action: "restore.help" } : { action: "restore", hash: options.hash, force: options.force };
+      return options.help ? { action: "restore", help: true } : { action: "restore", hash: options.hash, force: options.force };
     }
     case "history": {
       const options = historyParser.parse(rest);
-      return options.redact && !options.help ? { action: "history.redact" } : { action: "history.help" };
+      return options.redact && !options.help ? { action: "history", redact: true } : { action: "history", help: true };
     }
     case "config": {
       const options = configParser.parse(rest);
-      if (options.help) return { action: "config.help" };
+      if (options.help) return { action: "config", help: true };
       if (options.set !== null) {
         const [key = null, ...value] = options.set;
         return { action: "config.set", key, value: value.length ? value.join(" ") : null };
       }
       if (options.get !== null) return { action: "config.get", key: options.get[0] ?? null };
       if (options.delete !== null) return { action: "config.delete", key: options.delete[0] ?? null };
-      return { action: "config.help" };
+      return { action: "config", help: true };
     }
     default:
       return { action: "help" };

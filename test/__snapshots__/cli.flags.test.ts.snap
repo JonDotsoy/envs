@@ -524,7 +524,8 @@ exports[`parser ["init"] 1`] = `
 
 exports[`parser ["init","--help"] 1`] = `
 {
-  "action": "init.help",
+  "action": "init",
+  "help": true,
 }
 `;
 
@@ -536,7 +537,8 @@ exports[`parser ["pull"] 1`] = `
 
 exports[`parser ["pull","-h"] 1`] = `
 {
-  "action": "pull.help",
+  "action": "pull",
+  "help": true,
 }
 `;
 
@@ -561,7 +563,8 @@ exports[`parser ["edit"] 1`] = `
 
 exports[`parser ["edit","--help"] 1`] = `
 {
-  "action": "edit.help",
+  "action": "edit",
+  "help": true,
 }
 `;
 
@@ -574,7 +577,8 @@ exports[`parser ["edit","--ui"] 1`] = `
 
 exports[`parser ["edit","--ui","-h"] 1`] = `
 {
-  "action": "edit.help",
+  "action": "edit",
+  "help": true,
 }
 `;
 
@@ -594,7 +598,8 @@ exports[`parser ["use","staging"] 1`] = `
 
 exports[`parser ["use","--help"] 1`] = `
 {
-  "action": "use.help",
+  "action": "use",
+  "help": true,
 }
 `;
 
@@ -624,37 +629,51 @@ exports[`parser ["restore","abc123","--force"] 1`] = `
 
 exports[`parser ["restore","--help"] 1`] = `
 {
-  "action": "restore.help",
+  "action": "restore",
+  "help": true,
 }
 `;
 
 exports[`parser ["history"] 1`] = `
 {
-  "action": "history.help",
+  "action": "history",
+  "help": true,
 }
 `;
 
 exports[`parser ["history","redact"] 1`] = `
 {
-  "action": "history.redact",
+  "action": "history",
+  "redact": true,
 }
 `;
 
 exports[`parser ["history","--help"] 1`] = `
 {
-  "action": "history.help",
+  "action": "history",
+  "help": true,
 }
 `;
 
 exports[`parser ["config"] 1`] = `
 {
-  "action": "config.help",
+  "action": "config",
+  "help": true,
 }
 `;
 
 exports[`parser ["config","--help"] 1`] = `
 {
-  "action": "config.help",
+  "action": "config",
+  "help": true,
+}
+`;
+
+exports[`parser ["config","set","history","false"] 1`] = `
+{
+  "action": "config.set",
+  "key": "history",
+  "value": "false",
 }
 `;
 
@@ -691,13 +710,5 @@ exports[`parser ["config","delete","key"] 1`] = `
 {
   "action": "config.delete",
   "key": "key",
-}
-`;
-
-exports[`parser ["config","set","history","false"] 1`] = `
-{
-  "action": "config.set",
-  "key": "history",
-  "value": "false",
 }
 `;
