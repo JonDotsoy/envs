@@ -25,6 +25,8 @@ import {
   type Value,
 } from "./history";
 
+import { COMMAND_HELP, parseCommand } from "./cli/flags";
+
 export { applyChanges, cloneState, compareStates, diffValues, emptyState, findHistoryPoint, stateAfter, statesAfterEach } from "./history";
 export type { Change, HistoryPoint, NormalizedValues, StateDiff } from "./history";
 
@@ -43,55 +45,6 @@ Commands:
   config  Read or change .envs/config.yml (config set <key> <value>, config get [key], config delete <key>)
   help    Show this help message
 `;
-
-/** Per-command help, shown by `envs <command> --help` (or `-h`). */
-export const COMMAND_HELP: Record<string, string> = {
-  init: `Usage: envs init [--help|-h]
-
-Create the .envs/ directory (.gitignore, values.yml).
-`,
-  pull: `Usage: envs pull [--help|-h]
-
-Read each worktree's .env and write it into .envs/values.yml.
-`,
-  push: `Usage: envs push [--help|-h]
-
-Write defaults and .envs/values.yml into the .env of each worktree.
-`,
-  lint: `Usage: envs lint [--help|-h]
-
-Warn about insecure values and unprotected secret files.
-`,
-  edit: `Usage: envs edit [--ui] [--help|-h]
-
-Pull, open .envs/values.yml in VS Code (code -w), then push.
-
-Options:
-  --ui    Serve a web editor instead; its Save button pushes
-`,
-  use: `Usage: envs use [<profile>] [--help|-h]
-
-Select the profile of the current worktree, or list the profiles when none is given.
-`,
-  restore: `Usage: envs restore <hash> [--force] [--help|-h]
-
-Restore values.yml to the state after a history point, adding a new point.
-
-Options:
-  --force    Restore even if the history hash chain is broken
-`,
-  history: `Usage: envs history <redact> [--help|-h]
-
-Manage the history.
-
-Subcommands:
-  redact    Remove secrets in clear from an existing history
-`,
-  config: `Usage: envs config <set <key> <value> | get [key] | delete <key>> [--help|-h]
-
-Read or change .envs/config.yml.
-`,
-};
 
 export interface Context {
   /** Directory the command runs from. */
@@ -1380,17 +1333,15 @@ export async function run(
 }
 
 async function dispatch(args: string[], ctx: Context): Promise<number> {
-  const [command = "help"] = args;
-  const commandHelp = COMMAND_HELP[command];
-  if (commandHelp && args.slice(1).some((arg) => arg === "--help" || arg === "-h")) {
-    ctx.log(commandHelp);
-    return 0;
+  const parsed = parseCommand(args);
+  if (!parsed.ok) {
+    ctx.error(`${parsed.error}\n\n${HELP}`);
+    return 1;
   }
-  switch (command) {
+  const { command } = parsed;
+  switch (command.name) {
     case "help":
-    case "--help":
-    case "-h":
-      ctx.log(HELP);
+      ctx.log(command.topic ? COMMAND_HELP[command.topic]! : HELP);
       return 0;
     case "init":
       return await init(ctx);
@@ -1401,17 +1352,14 @@ async function dispatch(args: string[], ctx: Context): Promise<number> {
     case "lint":
       return await lint(ctx);
     case "edit":
-      return await edit(ctx, { ui: args.includes("--ui") });
+      return await edit(ctx, { ui: command.ui });
     case "use":
-      return await use(ctx, args[1]);
+      return await use(ctx, command.profile);
     case "history":
-      return await historyCommand(ctx, args.slice(1));
+      return await historyCommand(ctx, command.args);
     case "restore":
-      return await restore(ctx, args.slice(1).find((arg) => !arg.startsWith("--")), { force: args.includes("--force") });
+      return await restore(ctx, command.hash, { force: command.force });
     case "config":
-      return await config(ctx, args.slice(1));
-    default:
-      ctx.error(`Unknown command: ${command}\n\n${HELP}`);
-      return 1;
+      return await config(ctx, command.args);
   }
 }
