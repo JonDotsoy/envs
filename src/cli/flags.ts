@@ -91,49 +91,55 @@ const simpleCommands = {
   lint: "Warn about insecure values and unprotected secret files",
 } as const;
 
-/** Turns `process.argv.slice(2)` into the action to run, with its options already parsed. */
+const commandNames = ["init", "pull", "push", "lint", "edit", "use", "restore", "history", "config"] as const;
+
+/**
+ * Turns `process.argv.slice(2)` into the action to run, with its options already parsed.
+ * `rootParser` only sees the first argument: its `restArgs()` commands would also match
+ * command names inside the rest (`config set history false`), so the rest goes to the command's own parser.
+ */
 export function parser(args: string[]): CliAction {
-  const [ok, , root] = rootParser.safeParse(args);
-  if (!ok) return { action: "unknown", command: args[0] ?? "" };
+  const [first, ...rest] = args;
+  const [ok, , root] = rootParser.safeParse(first === undefined ? [] : [first]);
+  if (!ok) return { action: "unknown", command: first ?? "" };
 
-  for (const name of ["init", "pull", "push", "lint"] as const) {
-    const rest = root[name];
-    if (rest === null) continue;
-    const options = simpleParser(name, simpleCommands[name]).parse(rest);
-    return options.help ? { action: `${name}.help` } : { action: name };
-  }
-
-  if (root.edit !== null) {
-    const options = editParser.parse(root.edit);
-    return options.help ? { action: "edit.help" } : { action: "edit", ui: options.ui };
-  }
-
-  if (root.use !== null) {
-    const options = useParser.parse(root.use);
-    return options.help ? { action: "use.help" } : { action: "use", profile: options.profile };
-  }
-
-  if (root.restore !== null) {
-    const options = restoreParser.parse(root.restore);
-    return options.help ? { action: "restore.help" } : { action: "restore", hash: options.hash, force: options.force };
-  }
-
-  if (root.history !== null) {
-    const options = historyParser.parse(root.history);
-    return options.redact && !options.help ? { action: "history.redact" } : { action: "history.help" };
-  }
-
-  if (root.config !== null) {
-    const options = configParser.parse(root.config);
-    if (options.help) return { action: "config.help" };
-    if (options.set !== null) {
-      const [key = null, ...value] = options.set;
-      return { action: "config.set", key, value: value.length ? value.join(" ") : null };
+  const name = commandNames.find((name) => root[name] !== null);
+  switch (name) {
+    case "init":
+    case "pull":
+    case "push":
+    case "lint": {
+      const options = simpleParser(name, simpleCommands[name]).parse(rest);
+      return options.help ? { action: `${name}.help` } : { action: name };
     }
-    if (options.get !== null) return { action: "config.get", key: options.get[0] ?? null };
-    if (options.delete !== null) return { action: "config.delete", key: options.delete[0] ?? null };
-    return { action: "config.help" };
+    case "edit": {
+      const options = editParser.parse(rest);
+      return options.help ? { action: "edit.help" } : { action: "edit", ui: options.ui };
+    }
+    case "use": {
+      const options = useParser.parse(rest);
+      return options.help ? { action: "use.help" } : { action: "use", profile: options.profile };
+    }
+    case "restore": {
+      const options = restoreParser.parse(rest);
+      return options.help ? { action: "restore.help" } : { action: "restore", hash: options.hash, force: options.force };
+    }
+    case "history": {
+      const options = historyParser.parse(rest);
+      return options.redact && !options.help ? { action: "history.redact" } : { action: "history.help" };
+    }
+    case "config": {
+      const options = configParser.parse(rest);
+      if (options.help) return { action: "config.help" };
+      if (options.set !== null) {
+        const [key = null, ...value] = options.set;
+        return { action: "config.set", key, value: value.length ? value.join(" ") : null };
+      }
+      if (options.get !== null) return { action: "config.get", key: options.get[0] ?? null };
+      if (options.delete !== null) return { action: "config.delete", key: options.delete[0] ?? null };
+      return { action: "config.help" };
+    }
+    default:
+      return { action: "help" };
   }
-
-  return { action: "help" };
 }

@@ -693,3 +693,11 @@ exports[`parser ["config","delete","key"] 1`] = `
   "key": "key",
 }
 `;
+
+exports[`parser ["config","set","history","false"] 1`] = `
+{
+  "action": "config.set",
+  "key": "history",
+  "value": "false",
+}
+`;
