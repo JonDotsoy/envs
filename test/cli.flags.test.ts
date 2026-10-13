@@ -88,7 +88,7 @@ describe("parser", () => {
     ["restore"], ["restore", "abc123"], ["restore", "abc123", "--force"], ["restore", "--help"],
     ["history"], ["history", "redact"], ["history", "--help"],
     ["config"], ["config", "--help"], ["config", "set", "history", "false"], ["config", "set", "key"],
-    ["config", "get"], ["config", "get", "key"], ["config", "delete"], ["config", "delete", "key"],
+    ["config", "bogus"], ["config", "set"], ["config", "set", "key", "-h"], ["config", "set", "key", "a", "b"], ["config", "get", "-h"], ["config", "get"], ["config", "get", "key"], ["config", "delete"], ["config", "delete", "key"],
   ];
   for (const args of cases) {
     test(JSON.stringify(args), () => {

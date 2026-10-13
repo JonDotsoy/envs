@@ -50,7 +50,7 @@ export const historyParser = flags({
   .program("envs history")
   .describe("Manage the history");
 
-/** `envs config <set|get|delete> [key] [value]` */
+/** `envs config <set|get|delete>`: picks the subcommand and keeps its arguments for that subcommand's parser. */
 export const configParser = flags({
   help: flag("-h", "--help").boolean().describe("Show this help message"),
   set: command("set").restArgs().describe("config set <key> <value>"),
@@ -59,6 +59,31 @@ export const configParser = flags({
 })
   .program("envs config")
   .describe("Read or change .envs/config.yml");
+
+/** `envs config set <key> <value...>` */
+export const configSetParser = flags({
+  help: flag("-h", "--help").boolean().describe("Show this help message"),
+  key: argument().string().describe("Key to set"),
+  value: argument().strings().describe("Value to store"),
+})
+  .program("envs config set")
+  .describe("Set a key in .envs/config.yml");
+
+/** `envs config get [key]` */
+export const configGetParser = flags({
+  help: flag("-h", "--help").boolean().describe("Show this help message"),
+  key: argument().string().describe("Key to read; omit to list them all"),
+})
+  .program("envs config get")
+  .describe("Read a key from .envs/config.yml");
+
+/** `envs config delete <key>` */
+export const configDeleteParser = flags({
+  help: flag("-h", "--help").boolean().describe("Show this help message"),
+  key: argument().string().describe("Key to delete"),
+})
+  .program("envs config delete")
+  .describe("Delete a key from .envs/config.yml");
 
 /** Commands without options of their own (besides --help). */
 export const simpleParser = (name: string, description: string) =>
@@ -75,10 +100,10 @@ export type CliAction =
   | { action: "use"; help: boolean; profile: string | null }
   | { action: "restore"; help: boolean; force: boolean; hash: string | null }
   | { action: "history"; help: boolean; redact: boolean }
-  | { action: "config.set"; key: string | null; value: string | null }
-  | { action: "config.get"; key: string | null }
-  | { action: "config.delete"; key: string | null }
-  | { action: "config"; help: true };
+  | { action: "config"; help: boolean }
+  | { action: "config.set"; help: boolean; key: string | null; value: string[] | null }
+  | { action: "config.get"; help: boolean; key: string | null }
+  | { action: "config.delete"; help: boolean; key: string | null };
 
 const simpleCommands = {
   init: "Create the .envs/ directory",
@@ -114,18 +139,30 @@ export function parser(args: string[]): CliAction {
       return { action: "restore", ...restoreParser.parse(rest) };
     case "history":
       return { action: "history", ...historyParser.parse(rest) };
-    case "config": {
-      const options = configParser.parse(rest);
-      if (options.help) return { action: "config", help: true };
-      if (options.set !== null) {
-        const [key = null, ...value] = options.set;
-        return { action: "config.set", key, value: value.length ? value.join(" ") : null };
-      }
-      if (options.get !== null) return { action: "config.get", key: options.get[0] ?? null };
-      if (options.delete !== null) return { action: "config.delete", key: options.delete[0] ?? null };
-      return { action: "config", help: true };
-    }
+    case "config":
+      return parserConfig(rest);
     default:
       return { action: "help" };
+  }
+}
+
+const configCommandNames = ["set", "get", "delete"] as const;
+
+/** Same as `parser`, one level down: `configParser` sees only the subcommand. */
+function parserConfig(args: string[]): CliAction {
+  const [first, ...rest] = args;
+  const [ok, , config] = configParser.safeParse(first === undefined ? [] : [first]);
+  if (!ok) return { action: "unknown", command: `config ${first}` };
+
+  const name = configCommandNames.find((name) => config[name] !== null);
+  switch (name) {
+    case "set":
+      return { action: "config.set", ...configSetParser.parse(rest) };
+    case "get":
+      return { action: "config.get", ...configGetParser.parse(rest) };
+    case "delete":
+      return { action: "config.delete", ...configDeleteParser.parse(rest) };
+    default:
+      return { action: "config", help: true };
   }
 }

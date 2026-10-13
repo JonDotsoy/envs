@@ -691,22 +691,72 @@ exports[`parser ["config","--help"] 1`] = `
 exports[`parser ["config","set","history","false"] 1`] = `
 {
   "action": "config.set",
+  "help": false,
   "key": "history",
-  "value": "false",
+  "value": [
+    "false",
+  ],
 }
 `;
 
 exports[`parser ["config","set","key"] 1`] = `
 {
   "action": "config.set",
+  "help": false,
   "key": "key",
   "value": null,
+}
+`;
+
+exports[`parser ["config","bogus"] 1`] = `
+{
+  "action": "unknown",
+  "command": "config bogus",
+}
+`;
+
+exports[`parser ["config","set"] 1`] = `
+{
+  "action": "config.set",
+  "help": false,
+  "key": null,
+  "value": null,
+}
+`;
+
+exports[`parser ["config","set","key","-h"] 1`] = `
+{
+  "action": "config.set",
+  "help": true,
+  "key": "key",
+  "value": null,
+}
+`;
+
+exports[`parser ["config","set","key","a","b"] 1`] = `
+{
+  "action": "config.set",
+  "help": false,
+  "key": "key",
+  "value": [
+    "a",
+    "b",
+  ],
+}
+`;
+
+exports[`parser ["config","get","-h"] 1`] = `
+{
+  "action": "config.get",
+  "help": true,
+  "key": null,
 }
 `;
 
 exports[`parser ["config","get"] 1`] = `
 {
   "action": "config.get",
+  "help": false,
   "key": null,
 }
 `;
@@ -714,6 +764,7 @@ exports[`parser ["config","get"] 1`] = `
 exports[`parser ["config","get","key"] 1`] = `
 {
   "action": "config.get",
+  "help": false,
   "key": "key",
 }
 `;
@@ -721,6 +772,7 @@ exports[`parser ["config","get","key"] 1`] = `
 exports[`parser ["config","delete"] 1`] = `
 {
   "action": "config.delete",
+  "help": false,
   "key": null,
 }
 `;
@@ -728,6 +780,7 @@ exports[`parser ["config","delete"] 1`] = `
 exports[`parser ["config","delete","key"] 1`] = `
 {
   "action": "config.delete",
+  "help": false,
   "key": "key",
 }
 `;
