@@ -12,6 +12,8 @@ export const rootParser = flags({
   restore: command("restore").restArgs().describe("Restore values.yml to a history point"),
   history: command("history").restArgs().describe("Manage the history"),
   config: command("config").restArgs().describe("Read or change .envs/config.yml"),
+  version: flag("-V", "--version").boolean().describe("Show the version"),
+  versionCommand: command("version").boolean().describe("Show the version"),
   helpCommand: command("help").boolean().describe("Show this help message"),
 })
   .program("envs")
@@ -94,6 +96,7 @@ export const simpleParser = (name: string, description: string) =>
 /** `help` is true when `--help` was given; the other options are parsed as usual. */
 export type CliAction =
   | { action: "help" }
+  | { action: "version" }
   | { action: "init" | "pull" | "push" | "lint"; help: boolean }
   | { action: "edit"; help: boolean; ui: boolean }
   | { action: "use"; help: boolean; profile: string | null }
@@ -131,6 +134,8 @@ export function parser(args: string[]): CliResult {
   const [first, ...rest] = args;
   const [ok, error, root] = rootParser.safeParse(first === undefined ? [] : [first]);
   if (!ok) return { ok: false, error };
+
+  if (root!.version || root!.versionCommand) return { ok: true, action: "version" };
 
   const name = commandNames.find((name) => root![name] !== null);
   switch (name) {

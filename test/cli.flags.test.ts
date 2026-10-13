@@ -96,3 +96,11 @@ describe("parser", () => {
     });
   }
 });
+
+describe("version", () => {
+  for (const args of [["-V"], ["--version"], ["version"]]) {
+    test(JSON.stringify(args), () => {
+      expect(parser(args)).toEqual({ ok: true, action: "version" });
+    });
+  }
+});

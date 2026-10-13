@@ -9,6 +9,7 @@ import { appendFile, truncate } from "node:fs/promises";
 import { $ } from "bun";
 import { UnexpectedArgumentError } from "@jondotsoy/flags";
 import { parser } from "./cli/flags";
+import pkg from "../package.json" with { type: "json" };
 import { dotenvProblem, hasSecretPattern, isSensitiveKey, rules, type LintContext } from "./lint-rules";
 import {
   DEFAULT_PROFILE,
@@ -43,6 +44,7 @@ Commands:
   restore Restore values.yml to the state after a history point (envs restore <hash> [--force]), adding a new point
   history Manage the history (history redact: remove secrets in clear from an existing history)
   config  Read or change .envs/config.yml (config set <key> <value>, config get [key], config delete <key>)
+  version Show the version
   help    Show this help message
 `;
 
@@ -1339,6 +1341,10 @@ async function dispatch(args: string[], ctx: Context): Promise<number> {
     const unknownCommand = error instanceof UnexpectedArgumentError && error.argument === args[0];
     ctx.error(`${unknownCommand ? `Unknown command: ${args[0]}` : (error instanceof Error ? error.message : String(error))}\n\n${HELP}`);
     return 1;
+  }
+  if (parsed.action === "version") {
+    ctx.log(pkg.version);
+    return 0;
   }
   if (parsed.action === "help" || parsed.help) {
     ctx.log(HELP);
