@@ -44,6 +44,55 @@ Commands:
   help    Show this help message
 `;
 
+/** Per-command help, shown by `envs <command> --help` (or `-h`). */
+export const COMMAND_HELP: Record<string, string> = {
+  init: `Usage: envs init [--help|-h]
+
+Create the .envs/ directory (.gitignore, values.yml).
+`,
+  pull: `Usage: envs pull [--help|-h]
+
+Read each worktree's .env and write it into .envs/values.yml.
+`,
+  push: `Usage: envs push [--help|-h]
+
+Write defaults and .envs/values.yml into the .env of each worktree.
+`,
+  lint: `Usage: envs lint [--help|-h]
+
+Warn about insecure values and unprotected secret files.
+`,
+  edit: `Usage: envs edit [--ui] [--help|-h]
+
+Pull, open .envs/values.yml in VS Code (code -w), then push.
+
+Options:
+  --ui    Serve a web editor instead; its Save button pushes
+`,
+  use: `Usage: envs use [<profile>] [--help|-h]
+
+Select the profile of the current worktree, or list the profiles when none is given.
+`,
+  restore: `Usage: envs restore <hash> [--force] [--help|-h]
+
+Restore values.yml to the state after a history point, adding a new point.
+
+Options:
+  --force    Restore even if the history hash chain is broken
+`,
+  history: `Usage: envs history <redact> [--help|-h]
+
+Manage the history.
+
+Subcommands:
+  redact    Remove secrets in clear from an existing history
+`,
+  config: `Usage: envs config <set <key> <value> | get [key] | delete <key>> [--help|-h]
+
+Read or change .envs/config.yml.
+`,
+};
+
 export interface Context {
   /** Directory the command runs from. */
   cwd: string;
@@ -1332,6 +1381,11 @@ export async function run(
 
 async function dispatch(args: string[], ctx: Context): Promise<number> {
   const [command = "help"] = args;
+  const commandHelp = COMMAND_HELP[command];
+  if (commandHelp && args.slice(1).some((arg) => arg === "--help" || arg === "-h")) {
+    ctx.log(commandHelp);
+    return 0;
+  }
   switch (command) {
     case "help":
     case "--help":
