@@ -82,6 +82,14 @@ const root = flags({
   config: command("config").restArgs(),
 });
 
+/** Commands that take no options besides --help. */
+const initFlags = flags({ help: help() });
+const pullFlags = flags({ help: help() });
+const pushFlags = flags({ help: help() });
+const lintFlags = flags({ help: help() });
+/** `history <subcommand>` and `config <action> [key] [value]`: the words are resolved by the command itself. */
+const historyFlags = flags({ help: help(), args: argument().strings() });
+const configFlags = flags({ help: help(), args: argument().strings() });
 const editFlags = flags({ help: help(), ui: flag("--ui").boolean() });
 const useFlags = flags({ help: help(), profile: argument().string() });
 const restoreFlags = flags({ help: help(), force: flag("--force").boolean(), hash: argument().string() });
@@ -108,17 +116,21 @@ export function parseArgs(args: string[]): ParsedArgs {
   };
   switch (name) {
     case "init":
+      parseRest(initFlags);
       return { init: true };
     case "pull":
+      parseRest(pullFlags);
       return { pull: true };
     case "push":
+      parseRest(pushFlags);
       return { push: true };
     case "lint":
+      parseRest(lintFlags);
       return { lint: true };
     case "history":
-      return { history: true, args: rest };
+      return { history: true, args: parseRest(historyFlags).args ?? [] };
     case "config":
-      return { config: true, args: rest };
+      return { config: true, args: parseRest(configFlags).args ?? [] };
     case "edit":
       return { edit: true, ui: parseRest(editFlags).ui };
     case "use": {
