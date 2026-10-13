@@ -353,8 +353,6 @@ exports[`push with many branches logs one line when the same value changes in 10
 ]
 `;
 
-
-
 exports[`history on the first edit of a project the first edit initializes the history with the whole state 1`] = `
 [
   {

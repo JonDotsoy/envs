@@ -13,6 +13,8 @@ exports[`rootParser [] 1`] = `
   "push": null,
   "restore": null,
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -29,6 +31,8 @@ exports[`rootParser ["help"] 1`] = `
   "push": null,
   "restore": null,
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -45,6 +49,8 @@ exports[`rootParser ["-h"] 1`] = `
   "push": null,
   "restore": null,
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -61,6 +67,8 @@ exports[`rootParser ["--help"] 1`] = `
   "push": null,
   "restore": null,
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -77,6 +85,8 @@ exports[`rootParser ["help","--help"] 1`] = `
   "push": null,
   "restore": null,
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -93,6 +103,8 @@ exports[`rootParser ["init"] 1`] = `
   "push": null,
   "restore": null,
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -109,6 +121,8 @@ exports[`rootParser ["pull"] 1`] = `
   "push": null,
   "restore": null,
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -125,6 +139,8 @@ exports[`rootParser ["push"] 1`] = `
   "push": [],
   "restore": null,
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -141,6 +157,8 @@ exports[`rootParser ["lint"] 1`] = `
   "push": null,
   "restore": null,
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -157,6 +175,8 @@ exports[`rootParser ["edit"] 1`] = `
   "push": null,
   "restore": null,
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -175,6 +195,8 @@ exports[`rootParser ["edit","--ui"] 1`] = `
   "push": null,
   "restore": null,
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -193,6 +215,8 @@ exports[`rootParser ["use","staging"] 1`] = `
   "use": [
     "staging",
   ],
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -212,6 +236,8 @@ exports[`rootParser ["restore","abc123","--force"] 1`] = `
     "--force",
   ],
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -230,6 +256,8 @@ exports[`rootParser ["history","redact"] 1`] = `
   "push": null,
   "restore": null,
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -250,6 +278,8 @@ exports[`rootParser ["config","set","key","value"] 1`] = `
   "push": null,
   "restore": null,
   "use": null,
+  "version": false,
+  "versionCommand": false,
 }
 `;
 
@@ -470,6 +500,7 @@ Manage .env files per worktree
 
 Options:
   -h, --help.              Show this help message
+  -V, --version.           Show the version
 
 Commands:
   init                     Create the .envs/ directory
@@ -481,6 +512,7 @@ Commands:
   restore                  Restore values.yml to a history point
   history                  Manage the history
   config                   Read or change .envs/config.yml
+  versionCommand           Show the version
   helpCommand              Show this help message
 "
 `;
