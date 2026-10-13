@@ -484,3 +484,212 @@ Commands:
   helpCommand              Show this help message
 "
 `;
+
+exports[`parser [] 1`] = `
+{
+  "action": "help",
+}
+`;
+
+exports[`parser ["help"] 1`] = `
+{
+  "action": "help",
+}
+`;
+
+exports[`parser ["-h"] 1`] = `
+{
+  "action": "help",
+}
+`;
+
+exports[`parser ["--help"] 1`] = `
+{
+  "action": "help",
+}
+`;
+
+exports[`parser ["nope"] 1`] = `
+{
+  "action": "unknown",
+  "command": "nope",
+}
+`;
+
+exports[`parser ["init"] 1`] = `
+{
+  "action": "init",
+}
+`;
+
+exports[`parser ["init","--help"] 1`] = `
+{
+  "action": "init.help",
+}
+`;
+
+exports[`parser ["pull"] 1`] = `
+{
+  "action": "pull",
+}
+`;
+
+exports[`parser ["pull","-h"] 1`] = `
+{
+  "action": "pull.help",
+}
+`;
+
+exports[`parser ["push"] 1`] = `
+{
+  "action": "push",
+}
+`;
+
+exports[`parser ["lint"] 1`] = `
+{
+  "action": "lint",
+}
+`;
+
+exports[`parser ["edit"] 1`] = `
+{
+  "action": "edit",
+  "ui": false,
+}
+`;
+
+exports[`parser ["edit","--help"] 1`] = `
+{
+  "action": "edit.help",
+}
+`;
+
+exports[`parser ["edit","--ui"] 1`] = `
+{
+  "action": "edit",
+  "ui": true,
+}
+`;
+
+exports[`parser ["edit","--ui","-h"] 1`] = `
+{
+  "action": "edit.help",
+}
+`;
+
+exports[`parser ["use"] 1`] = `
+{
+  "action": "use",
+  "profile": null,
+}
+`;
+
+exports[`parser ["use","staging"] 1`] = `
+{
+  "action": "use",
+  "profile": "staging",
+}
+`;
+
+exports[`parser ["use","--help"] 1`] = `
+{
+  "action": "use.help",
+}
+`;
+
+exports[`parser ["restore"] 1`] = `
+{
+  "action": "restore",
+  "force": false,
+  "hash": null,
+}
+`;
+
+exports[`parser ["restore","abc123"] 1`] = `
+{
+  "action": "restore",
+  "force": false,
+  "hash": "abc123",
+}
+`;
+
+exports[`parser ["restore","abc123","--force"] 1`] = `
+{
+  "action": "restore",
+  "force": true,
+  "hash": "abc123",
+}
+`;
+
+exports[`parser ["restore","--help"] 1`] = `
+{
+  "action": "restore.help",
+}
+`;
+
+exports[`parser ["history"] 1`] = `
+{
+  "action": "history.help",
+}
+`;
+
+exports[`parser ["history","redact"] 1`] = `
+{
+  "action": "history.redact",
+}
+`;
+
+exports[`parser ["history","--help"] 1`] = `
+{
+  "action": "history.help",
+}
+`;
+
+exports[`parser ["config"] 1`] = `
+{
+  "action": "config.help",
+}
+`;
+
+exports[`parser ["config","--help"] 1`] = `
+{
+  "action": "config.help",
+}
+`;
+
+exports[`parser ["config","set","key"] 1`] = `
+{
+  "action": "config.set",
+  "key": "key",
+  "value": null,
+}
+`;
+
+exports[`parser ["config","get"] 1`] = `
+{
+  "action": "config.get",
+  "key": null,
+}
+`;
+
+exports[`parser ["config","get","key"] 1`] = `
+{
+  "action": "config.get",
+  "key": "key",
+}
+`;
+
+exports[`parser ["config","delete"] 1`] = `
+{
+  "action": "config.delete",
+  "key": null,
+}
+`;
+
+exports[`parser ["config","delete","key"] 1`] = `
+{
+  "action": "config.delete",
+  "key": "key",
+}
+`;

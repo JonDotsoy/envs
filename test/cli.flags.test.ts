@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { configParser, editParser, historyParser, restoreParser, rootParser, simpleParser, useParser } from "../src/cli/flags";
+import { configParser, parser, editParser, historyParser, restoreParser, rootParser, simpleParser, useParser } from "../src/cli/flags";
 
 describe("rootParser", () => {
   const cases: string[][] = [
@@ -77,4 +77,22 @@ describe("simpleParser", () => {
 
 test("help message", () => {
   expect(rootParser.helpMessage()).toMatchSnapshot();
+});
+
+describe("parser", () => {
+  const cases: string[][] = [
+    [], ["help"], ["-h"], ["--help"], ["nope"],
+    ["init"], ["init", "--help"], ["pull"], ["pull", "-h"], ["push"], ["lint"],
+    ["edit"], ["edit", "--help"], ["edit", "--ui"], ["edit", "--ui", "-h"],
+    ["use"], ["use", "staging"], ["use", "--help"],
+    ["restore"], ["restore", "abc123"], ["restore", "abc123", "--force"], ["restore", "--help"],
+    ["history"], ["history", "redact"], ["history", "--help"],
+    ["config"], ["config", "--help"], ["config", "set", "history", "false"], ["config", "set", "key"],
+    ["config", "get"], ["config", "get", "key"], ["config", "delete"], ["config", "delete", "key"],
+  ];
+  for (const args of cases) {
+    test(JSON.stringify(args), () => {
+      expect(parser(args)).toMatchSnapshot();
+    });
+  }
 });

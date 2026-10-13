@@ -65,3 +65,75 @@ export const simpleParser = (name: string, description: string) =>
   flags({ help: flag("-h", "--help").boolean().describe("Show this help message") })
     .program(`envs ${name}`)
     .describe(description);
+
+export type CliAction =
+  | { action: "help" }
+  | { action: "unknown"; command: string }
+  | { action: "init" | "pull" | "push" | "lint" }
+  | { action: "init.help" | "pull.help" | "push.help" | "lint.help" }
+  | { action: "edit"; ui: boolean }
+  | { action: "edit.help" }
+  | { action: "use"; profile: string | null }
+  | { action: "use.help" }
+  | { action: "restore"; hash: string | null; force: boolean }
+  | { action: "restore.help" }
+  | { action: "history.redact" }
+  | { action: "history.help" }
+  | { action: "config.set"; key: string | null; value: string | null }
+  | { action: "config.get"; key: string | null }
+  | { action: "config.delete"; key: string | null }
+  | { action: "config.help" };
+
+const simpleCommands = {
+  init: "Create the .envs/ directory",
+  pull: "Read each worktree's .env into .envs/values.yml",
+  push: "Write defaults and .envs/values.yml into each worktree's .env",
+  lint: "Warn about insecure values and unprotected secret files",
+} as const;
+
+/** Turns `process.argv.slice(2)` into the action to run, with its options already parsed. */
+export function parser(args: string[]): CliAction {
+  const [ok, , root] = rootParser.safeParse(args);
+  if (!ok) return { action: "unknown", command: args[0] ?? "" };
+
+  for (const name of ["init", "pull", "push", "lint"] as const) {
+    const rest = root[name];
+    if (rest === null) continue;
+    const options = simpleParser(name, simpleCommands[name]).parse(rest);
+    return options.help ? { action: `${name}.help` } : { action: name };
+  }
+
+  if (root.edit !== null) {
+    const options = editParser.parse(root.edit);
+    return options.help ? { action: "edit.help" } : { action: "edit", ui: options.ui };
+  }
+
+  if (root.use !== null) {
+    const options = useParser.parse(root.use);
+    return options.help ? { action: "use.help" } : { action: "use", profile: options.profile };
+  }
+
+  if (root.restore !== null) {
+    const options = restoreParser.parse(root.restore);
+    return options.help ? { action: "restore.help" } : { action: "restore", hash: options.hash, force: options.force };
+  }
+
+  if (root.history !== null) {
+    const options = historyParser.parse(root.history);
+    return options.redact && !options.help ? { action: "history.redact" } : { action: "history.help" };
+  }
+
+  if (root.config !== null) {
+    const options = configParser.parse(root.config);
+    if (options.help) return { action: "config.help" };
+    if (options.set !== null) {
+      const [key = null, ...value] = options.set;
+      return { action: "config.set", key, value: value.length ? value.join(" ") : null };
+    }
+    if (options.get !== null) return { action: "config.get", key: options.get[0] ?? null };
+    if (options.delete !== null) return { action: "config.delete", key: options.delete[0] ?? null };
+    return { action: "config.help" };
+  }
+
+  return { action: "help" };
+}
