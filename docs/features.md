@@ -83,4 +83,5 @@ Revisa problemas de seguridad sin imprimir nunca los valores, termina con códig
 
 - Sin instalación: `bunx @jondotsoy/envs <comando>`.
 - Global: `bun add -g @jondotsoy/envs`.
+- Homebrew: `brew install jondotsoy/core/envs`.
 - Requiere [Bun](https://bun.com) y git.
