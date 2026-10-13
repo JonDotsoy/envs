@@ -24,10 +24,16 @@ bunx @jondotsoy/envs help
 
 ### Global install (optional)
 
-To use the shorter `envs` command, install it globally:
+To use the shorter `envs` command, install it globally with Bun:
 
 ```bash
 bun add -g @jondotsoy/envs
+```
+
+Or with [Homebrew](https://brew.sh):
+
+```bash
+brew install jondotsoy/core/envs
 ```
 
 The examples below use `envs`; without a global install, replace it with `bunx @jondotsoy/envs`.
