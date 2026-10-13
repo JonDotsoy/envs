@@ -1,0 +1,486 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`rootParser [] 1`] = `
+{
+  "config": null,
+  "edit": null,
+  "help": false,
+  "helpCommand": false,
+  "history": null,
+  "init": null,
+  "lint": null,
+  "pull": null,
+  "push": null,
+  "restore": null,
+  "use": null,
+}
+`;
+
+exports[`rootParser ["help"] 1`] = `
+{
+  "config": null,
+  "edit": null,
+  "help": false,
+  "helpCommand": true,
+  "history": null,
+  "init": null,
+  "lint": null,
+  "pull": null,
+  "push": null,
+  "restore": null,
+  "use": null,
+}
+`;
+
+exports[`rootParser ["-h"] 1`] = `
+{
+  "config": null,
+  "edit": null,
+  "help": true,
+  "helpCommand": false,
+  "history": null,
+  "init": null,
+  "lint": null,
+  "pull": null,
+  "push": null,
+  "restore": null,
+  "use": null,
+}
+`;
+
+exports[`rootParser ["--help"] 1`] = `
+{
+  "config": null,
+  "edit": null,
+  "help": true,
+  "helpCommand": false,
+  "history": null,
+  "init": null,
+  "lint": null,
+  "pull": null,
+  "push": null,
+  "restore": null,
+  "use": null,
+}
+`;
+
+exports[`rootParser ["help","--help"] 1`] = `
+{
+  "config": null,
+  "edit": null,
+  "help": true,
+  "helpCommand": true,
+  "history": null,
+  "init": null,
+  "lint": null,
+  "pull": null,
+  "push": null,
+  "restore": null,
+  "use": null,
+}
+`;
+
+exports[`rootParser ["init"] 1`] = `
+{
+  "config": null,
+  "edit": null,
+  "help": false,
+  "helpCommand": false,
+  "history": null,
+  "init": [],
+  "lint": null,
+  "pull": null,
+  "push": null,
+  "restore": null,
+  "use": null,
+}
+`;
+
+exports[`rootParser ["pull"] 1`] = `
+{
+  "config": null,
+  "edit": null,
+  "help": false,
+  "helpCommand": false,
+  "history": null,
+  "init": null,
+  "lint": null,
+  "pull": [],
+  "push": null,
+  "restore": null,
+  "use": null,
+}
+`;
+
+exports[`rootParser ["push"] 1`] = `
+{
+  "config": null,
+  "edit": null,
+  "help": false,
+  "helpCommand": false,
+  "history": null,
+  "init": null,
+  "lint": null,
+  "pull": null,
+  "push": [],
+  "restore": null,
+  "use": null,
+}
+`;
+
+exports[`rootParser ["lint"] 1`] = `
+{
+  "config": null,
+  "edit": null,
+  "help": false,
+  "helpCommand": false,
+  "history": null,
+  "init": null,
+  "lint": [],
+  "pull": null,
+  "push": null,
+  "restore": null,
+  "use": null,
+}
+`;
+
+exports[`rootParser ["edit"] 1`] = `
+{
+  "config": null,
+  "edit": [],
+  "help": false,
+  "helpCommand": false,
+  "history": null,
+  "init": null,
+  "lint": null,
+  "pull": null,
+  "push": null,
+  "restore": null,
+  "use": null,
+}
+`;
+
+exports[`rootParser ["edit","--ui"] 1`] = `
+{
+  "config": null,
+  "edit": [
+    "--ui",
+  ],
+  "help": false,
+  "helpCommand": false,
+  "history": null,
+  "init": null,
+  "lint": null,
+  "pull": null,
+  "push": null,
+  "restore": null,
+  "use": null,
+}
+`;
+
+exports[`rootParser ["use","staging"] 1`] = `
+{
+  "config": null,
+  "edit": null,
+  "help": false,
+  "helpCommand": false,
+  "history": null,
+  "init": null,
+  "lint": null,
+  "pull": null,
+  "push": null,
+  "restore": null,
+  "use": [
+    "staging",
+  ],
+}
+`;
+
+exports[`rootParser ["restore","abc123","--force"] 1`] = `
+{
+  "config": null,
+  "edit": null,
+  "help": false,
+  "helpCommand": false,
+  "history": null,
+  "init": null,
+  "lint": null,
+  "pull": null,
+  "push": null,
+  "restore": [
+    "abc123",
+    "--force",
+  ],
+  "use": null,
+}
+`;
+
+exports[`rootParser ["history","redact"] 1`] = `
+{
+  "config": null,
+  "edit": null,
+  "help": false,
+  "helpCommand": false,
+  "history": [
+    "redact",
+  ],
+  "init": null,
+  "lint": null,
+  "pull": null,
+  "push": null,
+  "restore": null,
+  "use": null,
+}
+`;
+
+exports[`rootParser ["config","set","key","value"] 1`] = `
+{
+  "config": [
+    "set",
+    "key",
+    "value",
+  ],
+  "edit": null,
+  "help": false,
+  "helpCommand": false,
+  "history": null,
+  "init": null,
+  "lint": null,
+  "pull": null,
+  "push": null,
+  "restore": null,
+  "use": null,
+}
+`;
+
+exports[`editParser [] 1`] = `
+{
+  "help": false,
+  "ui": false,
+}
+`;
+
+exports[`editParser ["-h"] 1`] = `
+{
+  "help": true,
+  "ui": false,
+}
+`;
+
+exports[`editParser ["--help"] 1`] = `
+{
+  "help": true,
+  "ui": false,
+}
+`;
+
+exports[`editParser ["--ui"] 1`] = `
+{
+  "help": false,
+  "ui": true,
+}
+`;
+
+exports[`editParser ["--ui","--help"] 1`] = `
+{
+  "help": true,
+  "ui": true,
+}
+`;
+
+exports[`useParser [] 1`] = `
+{
+  "help": false,
+  "profile": null,
+}
+`;
+
+exports[`useParser ["-h"] 1`] = `
+{
+  "help": true,
+  "profile": null,
+}
+`;
+
+exports[`useParser ["staging"] 1`] = `
+{
+  "help": false,
+  "profile": "staging",
+}
+`;
+
+exports[`useParser ["staging","--help"] 1`] = `
+{
+  "help": true,
+  "profile": "staging",
+}
+`;
+
+exports[`restoreParser [] 1`] = `
+{
+  "force": false,
+  "hash": null,
+  "help": false,
+}
+`;
+
+exports[`restoreParser ["-h"] 1`] = `
+{
+  "force": false,
+  "hash": null,
+  "help": true,
+}
+`;
+
+exports[`restoreParser ["abc123"] 1`] = `
+{
+  "force": false,
+  "hash": "abc123",
+  "help": false,
+}
+`;
+
+exports[`restoreParser ["abc123","--force"] 1`] = `
+{
+  "force": true,
+  "hash": "abc123",
+  "help": false,
+}
+`;
+
+exports[`restoreParser ["--force","abc123"] 1`] = `
+{
+  "force": true,
+  "hash": "abc123",
+  "help": false,
+}
+`;
+
+exports[`historyParser [] 1`] = `
+{
+  "help": false,
+  "redact": false,
+}
+`;
+
+exports[`historyParser ["-h"] 1`] = `
+{
+  "help": true,
+  "redact": false,
+}
+`;
+
+exports[`historyParser ["redact"] 1`] = `
+{
+  "help": false,
+  "redact": true,
+}
+`;
+
+exports[`historyParser ["redact","--help"] 1`] = `
+{
+  "help": true,
+  "redact": true,
+}
+`;
+
+exports[`configParser [] 1`] = `
+{
+  "delete": null,
+  "get": null,
+  "help": false,
+  "set": null,
+}
+`;
+
+exports[`configParser ["-h"] 1`] = `
+{
+  "delete": null,
+  "get": null,
+  "help": true,
+  "set": null,
+}
+`;
+
+exports[`configParser ["set","key","value"] 1`] = `
+{
+  "delete": null,
+  "get": null,
+  "help": false,
+  "set": [
+    "key",
+    "value",
+  ],
+}
+`;
+
+exports[`configParser ["get"] 1`] = `
+{
+  "delete": null,
+  "get": [],
+  "help": false,
+  "set": null,
+}
+`;
+
+exports[`configParser ["get","key"] 1`] = `
+{
+  "delete": null,
+  "get": [
+    "key",
+  ],
+  "help": false,
+  "set": null,
+}
+`;
+
+exports[`configParser ["delete","key"] 1`] = `
+{
+  "delete": [
+    "key",
+  ],
+  "get": null,
+  "help": false,
+  "set": null,
+}
+`;
+
+exports[`simpleParser [] 1`] = `
+{
+  "help": false,
+}
+`;
+
+exports[`simpleParser ["-h"] 1`] = `
+{
+  "help": true,
+}
+`;
+
+exports[`simpleParser ["--help"] 1`] = `
+{
+  "help": true,
+}
+`;
+
+exports[`help message 1`] = `
+"Usage: envs
+
+Manage .env files per worktree
+
+Options:
+  -h, --help.              Show this help message
+
+Commands:
+  init                     Create the .envs/ directory
+  pull                     Read each worktree's .env into .envs/values.yml
+  push                     Write defaults and .envs/values.yml into each worktree's .env
+  lint                     Warn about insecure values and unprotected secret files
+  edit                     Pull, edit .envs/values.yml, then push
+  use                      Select the profile of the current worktree, or list them
+  restore                  Restore values.yml to a history point
+  history                  Manage the history
+  config                   Read or change .envs/config.yml
+  helpCommand              Show this help message
+"
+`;
