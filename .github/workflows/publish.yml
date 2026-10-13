@@ -31,6 +31,9 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      name: ${{ steps.version.outputs.name }}
     steps:
       - name: Require a branch
         if: ${{ github.ref_type != 'branch' }}
@@ -76,6 +79,7 @@ jobs:
             npm version "pre$BUMP" --preid "$TAG" --no-git-tag-version
           fi
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
 
       - name: Release changelog
         if: ${{ inputs.release_changelog }}
@@ -142,47 +146,6 @@ jobs:
           gh release create "v$VERSION" --verify-tag --title "v$VERSION" \
             --notes "Published to npm: $url" "${args[@]}"
 
-      - name: Checkout Homebrew tap
-        # Only stable releases are distributed through Homebrew.
-        if: ${{ inputs.tag == 'latest' }}
-        uses: actions/checkout@v4
-        with:
-          repository: jondotsoy/homebrew-core
-          path: homebrew-core
-          # Deploy key with write access to jondotsoy/homebrew-core.
-          ssh-key: ${{ secrets.HOMEBREW_CORE_DEPLOY_KEY }}
-
-      - name: Update Homebrew formula
-        if: ${{ inputs.tag == 'latest' }}
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          name=$(node -p "require('./package.json').name")
-          url="https://registry.npmjs.org/$name/-/${name##*/}-$VERSION.tgz"
-
-          # The registry can take a moment to serve a freshly published tarball.
-          for i in 1 2 3 4 5 6; do
-            curl -fsSL "$url" -o package.tgz && break
-            echo "Tarball not available yet, retrying ($i/6)..."
-            sleep 10
-          done
-          sha256=$(sha256sum package.tgz | cut -d' ' -f1)
-
-          cd homebrew-core
-          sed -i -E \
-            -e "s|^( *url \").*(\")\$|\1$url\2|" \
-            -e "s|^( *sha256 \").*(\")\$|\1$sha256\2|" \
-            -e "s|^( *version \").*(\")\$|\1$VERSION\2|" \
-            envs.rb
-          if git diff --quiet; then
-            echo "Formula already up to date"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "envs $VERSION"
-          git push origin HEAD
-
       - name: GitHub summary
         if: ${{ always() }}
         env:
@@ -215,3 +178,47 @@ jobs:
               echo "- [GitHub release]($REPO_URL/releases/tag/v$VERSION)"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  homebrew:
+    # Only stable releases are distributed through Homebrew.
+    if: ${{ inputs.tag == 'latest' }}
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: jondotsoy/homebrew-core
+          path: homebrew-core
+          # Deploy key with write access to jondotsoy/homebrew-core.
+          ssh-key: ${{ secrets.HOMEBREW_CORE_DEPLOY_KEY }}
+
+      - name: Update Homebrew formula
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+          name: ${{ needs.publish.outputs.name }}
+        run: |
+          url="https://registry.npmjs.org/$name/-/${name##*/}-$VERSION.tgz"
+
+          # The registry can take a moment to serve a freshly published tarball.
+          for i in 1 2 3 4 5 6; do
+            curl -fsSL "$url" -o package.tgz && break
+            echo "Tarball not available yet, retrying ($i/6)..."
+            sleep 10
+          done
+          sha256=$(sha256sum package.tgz | cut -d' ' -f1)
+
+          cd homebrew-core
+          sed -i -E \
+            -e "s|^( *url \").*(\")\$|\1$url\2|" \
+            -e "s|^( *sha256 \").*(\")\$|\1$sha256\2|" \
+            -e "s|^( *version \").*(\")\$|\1$VERSION\2|" \
+            envs.rb
+          if git diff --quiet; then
+            echo "Formula already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "envs $VERSION"
+          git push origin HEAD
