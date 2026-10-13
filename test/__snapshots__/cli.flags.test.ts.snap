@@ -8,3 +8,10 @@ exports[`parseCommand with no arguments 1`] = `
   "ok": true,
 }
 `;
+
+exports[`parseCommand with an unknown command 1`] = `
+{
+  "error": "Unknown command: hekp",
+  "ok": false,
+}
+`;

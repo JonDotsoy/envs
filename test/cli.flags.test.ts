@@ -4,3 +4,7 @@ import { parseCommand } from "../src/cli/flags";
 test("parseCommand with no arguments", () => {
   expect(parseCommand([])).toMatchSnapshot();
 });
+
+test("parseCommand with an unknown command", () => {
+  expect(parseCommand(["hekp"])).toMatchSnapshot();
+});
