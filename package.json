@@ -32,5 +32,8 @@
   },
   "scripts": {
     "build": "bun scripts/build.ts"
+  },
+  "dependencies": {
+    "@jondotsoy/flags": "^3.2.1"
   }
 }
