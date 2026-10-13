@@ -488,31 +488,35 @@ Commands:
 exports[`parser [] 1`] = `
 {
   "action": "help",
+  "ok": true,
 }
 `;
 
 exports[`parser ["help"] 1`] = `
 {
   "action": "help",
+  "ok": true,
 }
 `;
 
 exports[`parser ["-h"] 1`] = `
 {
   "action": "help",
+  "ok": true,
 }
 `;
 
 exports[`parser ["--help"] 1`] = `
 {
   "action": "help",
+  "ok": true,
 }
 `;
 
 exports[`parser ["nope"] 1`] = `
 {
-  "action": "unknown",
-  "command": "nope",
+  "error": [UnexpectedArgumentError: Unexpected argument: nope],
+  "ok": false,
 }
 `;
 
@@ -520,6 +524,7 @@ exports[`parser ["init"] 1`] = `
 {
   "action": "init",
   "help": false,
+  "ok": true,
 }
 `;
 
@@ -527,6 +532,7 @@ exports[`parser ["init","--help"] 1`] = `
 {
   "action": "init",
   "help": true,
+  "ok": true,
 }
 `;
 
@@ -534,6 +540,7 @@ exports[`parser ["pull"] 1`] = `
 {
   "action": "pull",
   "help": false,
+  "ok": true,
 }
 `;
 
@@ -541,6 +548,7 @@ exports[`parser ["pull","-h"] 1`] = `
 {
   "action": "pull",
   "help": true,
+  "ok": true,
 }
 `;
 
@@ -548,6 +556,7 @@ exports[`parser ["push"] 1`] = `
 {
   "action": "push",
   "help": false,
+  "ok": true,
 }
 `;
 
@@ -555,6 +564,7 @@ exports[`parser ["lint"] 1`] = `
 {
   "action": "lint",
   "help": false,
+  "ok": true,
 }
 `;
 
@@ -562,6 +572,7 @@ exports[`parser ["edit"] 1`] = `
 {
   "action": "edit",
   "help": false,
+  "ok": true,
   "ui": false,
 }
 `;
@@ -570,6 +581,7 @@ exports[`parser ["edit","--help"] 1`] = `
 {
   "action": "edit",
   "help": true,
+  "ok": true,
   "ui": false,
 }
 `;
@@ -578,6 +590,7 @@ exports[`parser ["edit","--ui"] 1`] = `
 {
   "action": "edit",
   "help": false,
+  "ok": true,
   "ui": true,
 }
 `;
@@ -586,6 +599,7 @@ exports[`parser ["edit","--ui","-h"] 1`] = `
 {
   "action": "edit",
   "help": true,
+  "ok": true,
   "ui": true,
 }
 `;
@@ -594,6 +608,7 @@ exports[`parser ["use"] 1`] = `
 {
   "action": "use",
   "help": false,
+  "ok": true,
   "profile": null,
 }
 `;
@@ -602,6 +617,7 @@ exports[`parser ["use","staging"] 1`] = `
 {
   "action": "use",
   "help": false,
+  "ok": true,
   "profile": "staging",
 }
 `;
@@ -610,6 +626,7 @@ exports[`parser ["use","--help"] 1`] = `
 {
   "action": "use",
   "help": true,
+  "ok": true,
   "profile": null,
 }
 `;
@@ -620,6 +637,7 @@ exports[`parser ["restore"] 1`] = `
   "force": false,
   "hash": null,
   "help": false,
+  "ok": true,
 }
 `;
 
@@ -629,6 +647,7 @@ exports[`parser ["restore","abc123"] 1`] = `
   "force": false,
   "hash": "abc123",
   "help": false,
+  "ok": true,
 }
 `;
 
@@ -638,6 +657,7 @@ exports[`parser ["restore","abc123","--force"] 1`] = `
   "force": true,
   "hash": "abc123",
   "help": false,
+  "ok": true,
 }
 `;
 
@@ -647,6 +667,7 @@ exports[`parser ["restore","--help"] 1`] = `
   "force": false,
   "hash": null,
   "help": true,
+  "ok": true,
 }
 `;
 
@@ -654,6 +675,7 @@ exports[`parser ["history"] 1`] = `
 {
   "action": "history",
   "help": false,
+  "ok": true,
   "redact": false,
 }
 `;
@@ -662,6 +684,7 @@ exports[`parser ["history","redact"] 1`] = `
 {
   "action": "history",
   "help": false,
+  "ok": true,
   "redact": true,
 }
 `;
@@ -670,6 +693,7 @@ exports[`parser ["history","--help"] 1`] = `
 {
   "action": "history",
   "help": true,
+  "ok": true,
   "redact": false,
 }
 `;
@@ -678,6 +702,7 @@ exports[`parser ["config"] 1`] = `
 {
   "action": "config",
   "help": true,
+  "ok": true,
 }
 `;
 
@@ -685,6 +710,7 @@ exports[`parser ["config","--help"] 1`] = `
 {
   "action": "config",
   "help": true,
+  "ok": true,
 }
 `;
 
@@ -693,6 +719,7 @@ exports[`parser ["config","set","history","false"] 1`] = `
   "action": "config.set",
   "help": false,
   "key": "history",
+  "ok": true,
   "value": [
     "false",
   ],
@@ -704,14 +731,15 @@ exports[`parser ["config","set","key"] 1`] = `
   "action": "config.set",
   "help": false,
   "key": "key",
+  "ok": true,
   "value": null,
 }
 `;
 
 exports[`parser ["config","bogus"] 1`] = `
 {
-  "action": "unknown",
-  "command": "config bogus",
+  "error": [UnexpectedArgumentError: Unexpected argument: bogus],
+  "ok": false,
 }
 `;
 
@@ -720,6 +748,7 @@ exports[`parser ["config","set"] 1`] = `
   "action": "config.set",
   "help": false,
   "key": null,
+  "ok": true,
   "value": null,
 }
 `;
@@ -729,6 +758,7 @@ exports[`parser ["config","set","key","-h"] 1`] = `
   "action": "config.set",
   "help": true,
   "key": "key",
+  "ok": true,
   "value": null,
 }
 `;
@@ -738,6 +768,7 @@ exports[`parser ["config","set","key","a","b"] 1`] = `
   "action": "config.set",
   "help": false,
   "key": "key",
+  "ok": true,
   "value": [
     "a",
     "b",
@@ -750,6 +781,7 @@ exports[`parser ["config","get","-h"] 1`] = `
   "action": "config.get",
   "help": true,
   "key": null,
+  "ok": true,
 }
 `;
 
@@ -758,6 +790,7 @@ exports[`parser ["config","get"] 1`] = `
   "action": "config.get",
   "help": false,
   "key": null,
+  "ok": true,
 }
 `;
 
@@ -766,6 +799,7 @@ exports[`parser ["config","get","key"] 1`] = `
   "action": "config.get",
   "help": false,
   "key": "key",
+  "ok": true,
 }
 `;
 
@@ -774,6 +808,7 @@ exports[`parser ["config","delete"] 1`] = `
   "action": "config.delete",
   "help": false,
   "key": null,
+  "ok": true,
 }
 `;
 
@@ -782,5 +817,6 @@ exports[`parser ["config","delete","key"] 1`] = `
   "action": "config.delete",
   "help": false,
   "key": "key",
+  "ok": true,
 }
 `;

@@ -94,7 +94,6 @@ export const simpleParser = (name: string, description: string) =>
 /** `help` is true when `--help` was given; the other options are parsed as usual. */
 export type CliAction =
   | { action: "help" }
-  | { action: "unknown"; command: string }
   | { action: "init" | "pull" | "push" | "lint"; help: boolean }
   | { action: "edit"; help: boolean; ui: boolean }
   | { action: "use"; help: boolean; profile: string | null }
@@ -104,6 +103,15 @@ export type CliAction =
   | { action: "config.set"; help: boolean; key: string | null; value: string[] | null }
   | { action: "config.get"; help: boolean; key: string | null }
   | { action: "config.delete"; help: boolean; key: string | null };
+
+/** What `parser` returns: the action to run, or the error the arguments raised (unknown command or option, ...). */
+export type CliResult = ({ ok: true } & CliAction) | { ok: false; error: unknown };
+
+type Parsed<T> = readonly [ok: boolean, error: unknown, output: T | undefined];
+
+/** Wraps a parsed value, or the error, in a `CliResult`. */
+const result = <T>([ok, error, output]: Parsed<T>, toAction: (output: T) => CliAction): CliResult =>
+  ok ? { ok: true, ...toAction(output as T) } : { ok: false, error };
 
 const simpleCommands = {
   init: "Create the .envs/ directory",
@@ -119,50 +127,50 @@ const commandNames = ["init", "pull", "push", "lint", "edit", "use", "restore", 
  * `rootParser` only sees the first argument: its `restArgs()` commands would also match
  * command names inside the rest (`config set history false`), so the rest goes to the command's own parser.
  */
-export function parser(args: string[]): CliAction {
+export function parser(args: string[]): CliResult {
   const [first, ...rest] = args;
-  const [ok, , root] = rootParser.safeParse(first === undefined ? [] : [first]);
-  if (!ok) return { action: "unknown", command: first ?? "" };
+  const [ok, error, root] = rootParser.safeParse(first === undefined ? [] : [first]);
+  if (!ok) return { ok: false, error };
 
-  const name = commandNames.find((name) => root[name] !== null);
+  const name = commandNames.find((name) => root![name] !== null);
   switch (name) {
     case "init":
     case "pull":
     case "push":
     case "lint":
-      return { action: name, ...simpleParser(name, simpleCommands[name]).parse(rest) };
+      return result(simpleParser(name, simpleCommands[name]).safeParse(rest), (options) => ({ action: name, ...options }));
     case "edit":
-      return { action: "edit", ...editParser.parse(rest) };
+      return result(editParser.safeParse(rest), (options) => ({ action: "edit", ...options }));
     case "use":
-      return { action: "use", ...useParser.parse(rest) };
+      return result(useParser.safeParse(rest), (options) => ({ action: "use", ...options }));
     case "restore":
-      return { action: "restore", ...restoreParser.parse(rest) };
+      return result(restoreParser.safeParse(rest), (options) => ({ action: "restore", ...options }));
     case "history":
-      return { action: "history", ...historyParser.parse(rest) };
+      return result(historyParser.safeParse(rest), (options) => ({ action: "history", ...options }));
     case "config":
       return parserConfig(rest);
     default:
-      return { action: "help" };
+      return { ok: true, action: "help" };
   }
 }
 
 const configCommandNames = ["set", "get", "delete"] as const;
 
 /** Same as `parser`, one level down: `configParser` sees only the subcommand. */
-function parserConfig(args: string[]): CliAction {
+function parserConfig(args: string[]): CliResult {
   const [first, ...rest] = args;
-  const [ok, , config] = configParser.safeParse(first === undefined ? [] : [first]);
-  if (!ok) return { action: "unknown", command: `config ${first}` };
+  const [ok, error, config] = configParser.safeParse(first === undefined ? [] : [first]);
+  if (!ok) return { ok: false, error };
 
-  const name = configCommandNames.find((name) => config[name] !== null);
+  const name = configCommandNames.find((name) => config![name] !== null);
   switch (name) {
     case "set":
-      return { action: "config.set", ...configSetParser.parse(rest) };
+      return result(configSetParser.safeParse(rest), (options) => ({ action: "config.set", ...options }));
     case "get":
-      return { action: "config.get", ...configGetParser.parse(rest) };
+      return result(configGetParser.safeParse(rest), (options) => ({ action: "config.get", ...options }));
     case "delete":
-      return { action: "config.delete", ...configDeleteParser.parse(rest) };
+      return result(configDeleteParser.safeParse(rest), (options) => ({ action: "config.delete", ...options }));
     default:
-      return { action: "config", help: true };
+      return { ok: true, action: "config", help: true };
   }
 }
