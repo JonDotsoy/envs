@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
-import { parseCommand } from "../src/cli/flags";
+import { parseArgs } from "../src/cli/flags";
 
-test("parseCommand with no arguments", () => {
-  expect(parseCommand([])).toMatchSnapshot();
+test("parseArgs with no arguments", () => {
+  expect(parseArgs([])).toMatchSnapshot();
 });
 
-test("parseCommand with an unknown command", () => {
-  expect(parseCommand(["hekp"])).toMatchSnapshot();
+test("parseArgs with an unknown command", () => {
+  expect(() => parseArgs(["hekp"])).toThrow("Unknown command: hekp");
 });
 
-test("parseCommand with the help command", () => {
-  expect(parseCommand(["help"])).toMatchSnapshot();
+test("parseArgs with the help command", () => {
+  expect(parseArgs(["help"])).toMatchSnapshot();
 });

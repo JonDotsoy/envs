@@ -25,7 +25,7 @@ import {
   type Value,
 } from "./history";
 
-import { COMMAND_HELP, parseCommand } from "./cli/flags";
+import { ArgsError, COMMAND_HELP, parseArgs } from "./cli/flags";
 
 export { applyChanges, cloneState, compareStates, diffValues, emptyState, findHistoryPoint, stateAfter, statesAfterEach } from "./history";
 export type { Change, HistoryPoint, NormalizedValues, StateDiff } from "./history";
@@ -1333,33 +1333,25 @@ export async function run(
 }
 
 async function dispatch(args: string[], ctx: Context): Promise<number> {
-  const parsed = parseCommand(args);
-  if (!parsed.ok) {
-    ctx.error(`${parsed.error}\n\n${HELP}`);
+  let parsed;
+  try {
+    parsed = parseArgs(args);
+  } catch (error) {
+    if (!(error instanceof ArgsError)) throw error;
+    ctx.error(`${error.message}\n\n${HELP}`);
     return 1;
   }
-  const { command } = parsed;
-  switch (command.name) {
-    case "help":
-      ctx.log(command.topic ? COMMAND_HELP[command.topic]! : HELP);
-      return 0;
-    case "init":
-      return await init(ctx);
-    case "push":
-      return await push(ctx);
-    case "pull":
-      return await pull(ctx);
-    case "lint":
-      return await lint(ctx);
-    case "edit":
-      return await edit(ctx, { ui: command.ui });
-    case "use":
-      return await use(ctx, command.profile);
-    case "history":
-      return await historyCommand(ctx, command.args);
-    case "restore":
-      return await restore(ctx, command.hash, { force: command.force });
-    case "config":
-      return await config(ctx, command.args);
+  if ("help" in parsed) {
+    ctx.log(parsed.topic ? COMMAND_HELP[parsed.topic]! : HELP);
+    return 0;
   }
+  if ("init" in parsed) return await init(ctx);
+  if ("push" in parsed) return await push(ctx);
+  if ("pull" in parsed) return await pull(ctx);
+  if ("lint" in parsed) return await lint(ctx);
+  if ("edit" in parsed) return await edit(ctx, { ui: parsed.ui });
+  if ("use" in parsed) return await use(ctx, parsed.profile);
+  if ("history" in parsed) return await historyCommand(ctx, parsed.args);
+  if ("restore" in parsed) return await restore(ctx, parsed.hash, { force: parsed.force });
+  return await config(ctx, parsed.args);
 }

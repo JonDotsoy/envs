@@ -1,26 +1,13 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`parseCommand with no arguments 1`] = `
+exports[`parseArgs with no arguments 1`] = `
 {
-  "command": {
-    "name": "help",
-  },
-  "ok": true,
+  "help": true,
 }
 `;
 
-exports[`parseCommand with an unknown command 1`] = `
+exports[`parseArgs with the help command 1`] = `
 {
-  "error": "Unknown command: hekp",
-  "ok": false,
-}
-`;
-
-exports[`parseCommand with the help command 1`] = `
-{
-  "command": {
-    "name": "help",
-  },
-  "ok": true,
+  "help": true,
 }
 `;

@@ -49,15 +49,21 @@ Read or change .envs/config.yml.
 `,
 };
 
-export type ParsedCommand =
-  | { name: "help"; topic?: string }
-  | { name: "init" | "pull" | "push" | "lint" }
-  | { name: "edit"; ui: boolean }
-  | { name: "use"; profile?: string }
-  | { name: "restore"; hash?: string; force: boolean }
-  | { name: "history" | "config"; args: string[] };
+/** The parsed arguments: a plain object whose keys are the command and its options. */
+export type ParsedArgs =
+  | { help: true; topic?: string }
+  | { init: true }
+  | { pull: true }
+  | { push: true }
+  | { lint: true }
+  | { edit: true; ui: boolean }
+  | { use: true; profile?: string }
+  | { restore: true; hash?: string; force: boolean }
+  | { history: true; args: string[] }
+  | { config: true; args: string[] };
 
-export type ParseResult = { ok: true; command: ParsedCommand } | { ok: false; error: string };
+/** Thrown by `parseArgs` for an unknown command or an invalid option. */
+export class ArgsError extends Error {}
 
 const help = () => flag("--help", "-h").boolean();
 
@@ -82,42 +88,46 @@ const restoreFlags = flags({ help: help(), force: flag("--force").boolean(), has
 
 const COMMANDS = ["init", "pull", "push", "lint", "edit", "use", "restore", "history", "config"] as const;
 
-/** Parses the CLI arguments into the command to run and its options. */
-export function parseCommand(args: string[]): ParseResult {
+/** Parses the CLI arguments into the command to run and its options; throws `ArgsError` when they are invalid. */
+export function parseArgs(args: string[]): ParsedArgs {
   const [ok, error, parsed] = root.safeParse(args);
   if (!ok) {
     const unknown = args.find((arg) => !arg.startsWith("-"));
-    return { ok: false, error: unknown ? `Unknown command: ${unknown}` : String((error as Error).message) };
+    throw new ArgsError(unknown ? `Unknown command: ${unknown}` : (error as Error).message);
   }
   // The command is the first word: a later word (`config set history ...`) may also look like one.
   const first = args.find((arg) => !arg.startsWith("-"));
   const name = COMMANDS.find((candidate) => candidate === first);
-  if (!name) return { ok: true, command: { name: "help" } };
-  if (parsed.help) return { ok: true, command: { name: "help", topic: name } };
+  if (!name) return { help: true };
+  if (parsed.help) return { help: true, topic: name };
   const rest = parsed[name] ?? [];
+  const parseRest = <T>(parser: { safeParse(args: string[]): [boolean, unknown, T | undefined] }): T => {
+    const [valid, err, out] = parser.safeParse(rest);
+    if (!valid) throw new ArgsError((err as Error).message);
+    return out as T;
+  };
   switch (name) {
     case "init":
+      return { init: true };
     case "pull":
+      return { pull: true };
     case "push":
+      return { push: true };
     case "lint":
-      return { ok: true, command: { name } };
+      return { lint: true };
     case "history":
+      return { history: true, args: rest };
     case "config":
-      return { ok: true, command: { name, args: rest } };
-    case "edit": {
-      const [valid, err, out] = editFlags.safeParse(rest);
-      if (!valid) return { ok: false, error: (err as Error).message };
-      return { ok: true, command: { name, ui: out.ui } };
-    }
+      return { config: true, args: rest };
+    case "edit":
+      return { edit: true, ui: parseRest(editFlags).ui };
     case "use": {
-      const [valid, err, out] = useFlags.safeParse(rest);
-      if (!valid) return { ok: false, error: (err as Error).message };
-      return { ok: true, command: { name, profile: out.profile ?? undefined } };
+      const { profile } = parseRest(useFlags);
+      return profile === null ? { use: true } : { use: true, profile };
     }
     case "restore": {
-      const [valid, err, out] = restoreFlags.safeParse(rest);
-      if (!valid) return { ok: false, error: (err as Error).message };
-      return { ok: true, command: { name, hash: out.hash ?? undefined, force: out.force } };
+      const { hash, force } = parseRest(restoreFlags);
+      return hash === null ? { restore: true, force } : { restore: true, hash, force };
     }
   }
 }
