@@ -15,3 +15,12 @@ exports[`parseCommand with an unknown command 1`] = `
   "ok": false,
 }
 `;
+
+exports[`parseCommand with the help command 1`] = `
+{
+  "command": {
+    "name": "help",
+  },
+  "ok": true,
+}
+`;

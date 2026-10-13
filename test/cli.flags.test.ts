@@ -8,3 +8,7 @@ test("parseCommand with no arguments", () => {
 test("parseCommand with an unknown command", () => {
   expect(parseCommand(["hekp"])).toMatchSnapshot();
 });
+
+test("parseCommand with the help command", () => {
+  expect(parseCommand(["help"])).toMatchSnapshot();
+});
