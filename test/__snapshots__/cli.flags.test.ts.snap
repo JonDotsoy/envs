@@ -519,6 +519,7 @@ exports[`parser ["nope"] 1`] = `
 exports[`parser ["init"] 1`] = `
 {
   "action": "init",
+  "help": false,
 }
 `;
 
@@ -532,6 +533,7 @@ exports[`parser ["init","--help"] 1`] = `
 exports[`parser ["pull"] 1`] = `
 {
   "action": "pull",
+  "help": false,
 }
 `;
 
@@ -545,18 +547,21 @@ exports[`parser ["pull","-h"] 1`] = `
 exports[`parser ["push"] 1`] = `
 {
   "action": "push",
+  "help": false,
 }
 `;
 
 exports[`parser ["lint"] 1`] = `
 {
   "action": "lint",
+  "help": false,
 }
 `;
 
 exports[`parser ["edit"] 1`] = `
 {
   "action": "edit",
+  "help": false,
   "ui": false,
 }
 `;
@@ -565,12 +570,14 @@ exports[`parser ["edit","--help"] 1`] = `
 {
   "action": "edit",
   "help": true,
+  "ui": false,
 }
 `;
 
 exports[`parser ["edit","--ui"] 1`] = `
 {
   "action": "edit",
+  "help": false,
   "ui": true,
 }
 `;
@@ -579,12 +586,14 @@ exports[`parser ["edit","--ui","-h"] 1`] = `
 {
   "action": "edit",
   "help": true,
+  "ui": true,
 }
 `;
 
 exports[`parser ["use"] 1`] = `
 {
   "action": "use",
+  "help": false,
   "profile": null,
 }
 `;
@@ -592,6 +601,7 @@ exports[`parser ["use"] 1`] = `
 exports[`parser ["use","staging"] 1`] = `
 {
   "action": "use",
+  "help": false,
   "profile": "staging",
 }
 `;
@@ -600,6 +610,7 @@ exports[`parser ["use","--help"] 1`] = `
 {
   "action": "use",
   "help": true,
+  "profile": null,
 }
 `;
 
@@ -608,6 +619,7 @@ exports[`parser ["restore"] 1`] = `
   "action": "restore",
   "force": false,
   "hash": null,
+  "help": false,
 }
 `;
 
@@ -616,6 +628,7 @@ exports[`parser ["restore","abc123"] 1`] = `
   "action": "restore",
   "force": false,
   "hash": "abc123",
+  "help": false,
 }
 `;
 
@@ -624,12 +637,15 @@ exports[`parser ["restore","abc123","--force"] 1`] = `
   "action": "restore",
   "force": true,
   "hash": "abc123",
+  "help": false,
 }
 `;
 
 exports[`parser ["restore","--help"] 1`] = `
 {
   "action": "restore",
+  "force": false,
+  "hash": null,
   "help": true,
 }
 `;
@@ -637,13 +653,15 @@ exports[`parser ["restore","--help"] 1`] = `
 exports[`parser ["history"] 1`] = `
 {
   "action": "history",
-  "help": true,
+  "help": false,
+  "redact": false,
 }
 `;
 
 exports[`parser ["history","redact"] 1`] = `
 {
   "action": "history",
+  "help": false,
   "redact": true,
 }
 `;
@@ -652,6 +670,7 @@ exports[`parser ["history","--help"] 1`] = `
 {
   "action": "history",
   "help": true,
+  "redact": false,
 }
 `;
 
