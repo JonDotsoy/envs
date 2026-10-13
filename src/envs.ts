@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { appendFile, truncate } from "node:fs/promises";
 import { $ } from "bun";
+import { UnexpectedArgumentError } from "@jondotsoy/flags";
+import { parser } from "./cli/flags";
 import { dotenvProblem, hasSecretPattern, isSensitiveKey, rules, type LintContext } from "./lint-rules";
 import {
   DEFAULT_PROFILE,
@@ -1331,13 +1333,18 @@ export async function run(
 }
 
 async function dispatch(args: string[], ctx: Context): Promise<number> {
-  const [command = "help"] = args;
-  switch (command) {
-    case "help":
-    case "--help":
-    case "-h":
-      ctx.log(HELP);
-      return 0;
+  const parsed = parser(args);
+  if (!parsed.ok) {
+    const { error } = parsed;
+    const unknownCommand = error instanceof UnexpectedArgumentError && error.argument === args[0];
+    ctx.error(`${unknownCommand ? `Unknown command: ${args[0]}` : (error instanceof Error ? error.message : String(error))}\n\n${HELP}`);
+    return 1;
+  }
+  if (parsed.action === "help" || parsed.help) {
+    ctx.log(HELP);
+    return 0;
+  }
+  switch (parsed.action) {
     case "init":
       return await init(ctx);
     case "push":
@@ -1347,17 +1354,20 @@ async function dispatch(args: string[], ctx: Context): Promise<number> {
     case "lint":
       return await lint(ctx);
     case "edit":
-      return await edit(ctx, { ui: args.includes("--ui") });
+      return await edit(ctx, { ui: parsed.ui });
     case "use":
-      return await use(ctx, args[1]);
+      return await use(ctx, parsed.profile ?? undefined);
     case "history":
-      return await historyCommand(ctx, args.slice(1));
+      return await historyCommand(ctx, parsed.redact ? ["redact"] : []);
     case "restore":
-      return await restore(ctx, args.slice(1).find((arg) => !arg.startsWith("--")), { force: args.includes("--force") });
-    case "config":
-      return await config(ctx, args.slice(1));
+      return await restore(ctx, parsed.hash ?? undefined, { force: parsed.force });
+    case "config.set":
+      return await config(ctx, ["set", ...(parsed.key === null ? [] : [parsed.key]), ...(parsed.value ?? [])]);
+    case "config.get":
+      return await config(ctx, parsed.key === null ? ["get"] : ["get", parsed.key]);
+    case "config.delete":
+      return await config(ctx, parsed.key === null ? ["delete"] : ["delete", parsed.key]);
     default:
-      ctx.error(`Unknown command: ${command}\n\n${HELP}`);
-      return 1;
+      return await config(ctx, []);
   }
 }
