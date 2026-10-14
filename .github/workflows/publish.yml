@@ -110,6 +110,10 @@ jobs:
       - name: Build
         run: bun run build
 
+      - name: Bundle envs.js
+        # Single-file CLI, attached to the GitHub release. Run after the version bump so `envs version` matches.
+        run: bun build src/bin/envs.ts --target bun --outfile envs.js
+
       - name: Publish to npm
         # Authenticates with GitHub OIDC (id-token: write); no npm token needed.
         env:
@@ -144,7 +148,7 @@ jobs:
           args=()
           if [ "$TAG" != "latest" ]; then args+=(--prerelease); fi
           gh release create "v$VERSION" --verify-tag --title "v$VERSION" \
-            --notes "Published to npm: $url" "${args[@]}"
+            --notes "Published to npm: $url" "${args[@]}" envs.js
 
       - name: GitHub summary
         if: ${{ always() }}
