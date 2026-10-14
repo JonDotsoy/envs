@@ -46,6 +46,8 @@ jobs:
           ref: ${{ github.ref_name }}
           # Deploy key: the only identity allowed to push to the protected `develop` branch.
           ssh-key: ${{ secrets.DEPLOY_KEY }}
+          # Full history and tags, to list the changes since the previous release.
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -148,8 +150,15 @@ jobs:
           url="https://www.npmjs.com/package/$name/v/$VERSION"
           asset="$REPO_URL/releases/download/v$VERSION/envs.js"
           sha256=$(sha256sum envs.js | cut -d' ' -f1)
+
+          # Previous release: stable releases compare with the last stable tag, prereleases with the last tag of any kind.
+          prev=$(git tag --list 'v*' --sort=-v:refname | grep -vx "v$VERSION" | { if [ "$TAG" = "latest" ]; then grep -v -- '-'; else cat; fi; } | head -n1 || true)
+          notes=$(VERSION="$VERSION" PREV="$prev" bun scripts/release-notes.ts)
+
           {
             echo "Published to npm: $url"
+            echo
+            echo "$notes"
             echo
             echo "## Homebrew"
             echo
