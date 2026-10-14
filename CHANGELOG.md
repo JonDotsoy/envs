@@ -18,6 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- `envs edit --ui` opens on a page for the worktree it was run from (the worktree's folder or any folder inside it): a profile selector for that worktree (with **+ Profile**) and its variables with a **Defaults** column (the defaults of the profile in use) and one column per profile with the worktree's own value in that profile; the profile in use is highlighted. The overview of every worktree is still there (**All worktrees** in the header), and each worktree's name opens its page. `GET /api/values` reports `current`, the worktree the command was run from.
 - README and `docs/features.md`: Homebrew install option, `brew install jondotsoy/core/envs`.
 - The web editor (`envs edit --ui`) has a **History** panel: it lists the history points newest first; hovering or clicking a point shows what restoring it would change in the editor (red: removed, green: changed or added), and **Restore** restores it after a confirmation, adding a new point. New endpoints `GET /api/history` and `POST /api/restore`.
 - Saving from the web editor keeps numbers and booleans typed (`3000`, `true`), as `pull` does, so an untouched value is no longer rewritten or recorded in the history as a change to a string.

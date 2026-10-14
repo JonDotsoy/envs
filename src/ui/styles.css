@@ -456,3 +456,46 @@ h2 code { font: inherit; }
   .d-tag { grid-column: 3; grid-row: 1; }
 }
 .history .damaged { grid-column: 1 / -1; margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); border-left: 3px solid var(--color-removed); border-radius: var(--radius-buttons); background: var(--color-removed-bg, var(--color-frost)); color: var(--color-graphite); font-size: 14px; }
+
+/* Pages: a segmented pill in the header, the worktree page and the overview. The page shown is white on frost. */
+.pages { display: inline-flex; min-width: 0; max-width: 100%; padding: 3px; gap: 2px; border-radius: var(--radius-pills); background: var(--color-frost); }
+.pages a { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 6px 14px; border-radius: var(--radius-pills); font: 500 13px/1.4 var(--font-body); color: var(--color-slate-body); text-decoration: none; white-space: nowrap; }
+.pages a:first-child .clip { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-weight: 400; }
+.pages a:hover { color: var(--color-graphite); }
+.pages a[aria-current="page"] { background: var(--color-canvas); color: var(--color-graphite); box-shadow: var(--shadow-small); }
+.pages a:focus-visible, .wt-grid a.name:focus-visible { outline: var(--focus-outline); outline-offset: 2px; }
+/* The worktree the command ran from: a small violet square, the logo's tile. */
+.here { flex: none; width: 6px; height: 6px; background: var(--color-volt-violet); }
+.tag.current-wt { margin-left: var(--space-2); background: var(--color-lilac); color: var(--color-graphite); text-transform: none; letter-spacing: 0; vertical-align: 1px; }
+
+/* Overview: worktree names open their page. */
+.wt-grid a.name { color: var(--color-graphite); text-decoration: underline; text-decoration-color: var(--color-ash-border); text-underline-offset: 3px; border-radius: 2px; }
+.wt-grid a.name:hover { text-decoration-color: var(--color-graphite); }
+
+/* Worktree page: the worktree's name as the page title, the profile it uses right under it. */
+.hero-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); margin-bottom: var(--space-2); }
+.hero-top .eyebrow { margin: 0; display: flex; align-items: center; }
+.wt-title { font-family: var(--font-mono); font-size: 28px; font-weight: 500; letter-spacing: -0.02em; }
+.wt-title:focus, #page-title:focus { outline: none; }
+.switch { display: inline-flex; align-items: center; gap: var(--space-2); font: 500 12px/1.5 var(--font-body); color: var(--color-slate-body); }
+.switch select { min-width: 0; max-width: 220px; padding: 4px 32px 4px 12px; font: 400 13px/1.5 var(--font-mono); border-radius: var(--radius-pills); background-position: right 12px center; }
+.wt-hero .selectors { padding-top: var(--space-4); border-top: 1px solid var(--color-frost); }
+
+/* The table of a worktree: Defaults says whose defaults they are, the profile in use is a lilac wash. */
+.th-sub { display: block; font: 400 11px/1.4 var(--font-mono); color: var(--color-steel); }
+.by-profile th.in-use { color: var(--color-graphite); }
+.by-profile th.in-use, .by-profile td.in-use { background: rgb(223 219 255 / 0.4); }
+.by-profile th.in-use { border-radius: var(--radius-buttons) var(--radius-buttons) 0 0; border-bottom-color: var(--color-lavender); padding-top: var(--space-2); }
+.by-profile tbody tr:last-child td.in-use { border-radius: 0 0 var(--radius-buttons) var(--radius-buttons); }
+.by-profile td.in-use { padding-left: var(--space-2); }
+.in-use-tag { display: inline-block; margin-top: 2px; padding: 0 8px; border: 1px solid var(--color-lavender); border-radius: var(--radius-pills); background: var(--color-canvas); color: var(--color-graphite); font: 500 10px/1.5 var(--font-body); text-transform: uppercase; letter-spacing: 0.04em; }
+.by-profile tbody tr:hover td.in-use { background: rgb(223 219 255 / 0.55); }
+.by-profile tbody tr:focus-within td.in-use { background: var(--color-lilac); }
+/* A name another variable has: kept in the field only, until it changes or the field loses focus. */
+input[aria-invalid="true"], input[aria-invalid="true"]:focus-visible { border-color: var(--color-removed); box-shadow: 0 0 0 2px rgb(180 35 50 / 0.15); }
+
+@media (max-width: 720px) {
+  .pages { order: 10; width: 100%; }
+  .pages a { flex: 1; justify-content: center; }
+  .wt-title { font-size: 22px; }
+}

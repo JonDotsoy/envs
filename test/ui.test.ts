@@ -100,6 +100,31 @@ async function startUi(cwd: string, now?: () => Date) {
   };
 }
 
+test("GET /api/values reports the worktree the editor was started from as `current`", async () => {
+  const cws = await createWorkspace({ worktrees: ["one", "two"] });
+  try {
+    // A folder inside a worktree counts as that worktree (the editor opens on its page).
+    const inside = join(cws.worktrees.two!, "src", "deep");
+    await $`mkdir -p ${inside}`;
+    for (const [cwd, current] of [
+      [cws.worktrees.one!, "one"],
+      [inside, "two"],
+      [cws.main, "main"],
+    ] as const) {
+      const ui = await startUi(cwd);
+      try {
+        const state = (await (await fetch(`${ui.url}/api/values`)).json()) as any;
+        expect(state.current).toBe(current);
+        expect(state.worktrees).toEqual(["main", "one", "two"]);
+      } finally {
+        expect(await ui.stop()).toBe(0);
+      }
+    }
+  } finally {
+    await cws.cleanup();
+  }
+});
+
 describe("history panel endpoints", () => {
   let hws: Workspace;
   let tick = 0;

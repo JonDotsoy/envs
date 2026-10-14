@@ -1,24 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { EMPTY_VALUE, fromVarRows, toVarRows, type Profile, type VarRow } from "./rows";
-import { HistoryPanel, type HistoryState } from "./history-panel";
-import { Logo } from "./logo";
-
-interface State {
-  uses: Record<string, string>;
-  profiles: Record<string, Profile>;
-  worktrees: string[];
-  /** Fingerprint of the values.yml this state was read from; sent back on Save to detect a stale editor. */
-  version: string;
-}
-interface SaveResult {
-  ok: boolean;
-  created: string[];
-  logs: string[];
-  errors: string[];
-}
-/** The outcome of the last Save or Restore, shown in the status badge and the log. */
-type ActionResult = SaveResult & { action: "save" | "restore" };
+import { fromVarRows, toVarRows, type VarRow } from "./rows";
+import type { HistoryState } from "./history-panel";
+import { OverviewPage } from "./overview";
+import { parseRoute, routeHash, type Route } from "./route";
+import { ActionLog, Header, HistoryCard, type ActionResult, type SaveResult, type State } from "./shell";
+import { WorktreePage } from "./worktree-page";
 
 /** JSON with sorted keys, so two states compare equal regardless of key order. */
 const stable = (v: unknown): string =>
@@ -34,79 +21,14 @@ const snapshot = (uses: Record<string, string>, vars: Record<string, VarRow[]>, 
     profiles: Object.fromEntries(Object.entries(vars).map(([n, rows]) => [n, fromVarRows(rows)])),
   });
 
-/** Variables × columns: the default value, then the selected worktree (or every worktree). */
-function VarsEditor(props: { rows: VarRow[]; onChange(rows: VarRow[]): void; columns: string[]; worktrees: string[]; compact: boolean }) {
-  const { rows, onChange, columns, worktrees, compact } = props;
-  const set = (i: number, patch: (row: VarRow) => VarRow) =>
-    onChange(rows.map((row, j) => (j === i ? patch(row) : row)));
-  const add = () => onChange([...rows, { key: "", def: "", byWorktree: {} }]);
-  if (rows.length === 0) {
-    return (
-      <div className="empty">
-        <p className="empty-title">No variables in this profile yet</p>
-        <p>Add one here, or run <code>envs pull</code> to collect them from each worktree's <code>.env</code>.</p>
-        <button className="ghost" onClick={add}>+ Add variable</button>
-      </div>
-    );
-  }
-  return (
-    <>
-      <div className={`table-scroll${compact ? " compact" : ""}`}>
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Variable</th>
-              <th scope="col">Default</th>
-              {columns.map((w) => (
-                <th scope="col" key={w} className="wt"><span className="th-clip" title={w}>{w}</span></th>
-              ))}
-              <th><span className="sr-only">Remove</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={i}>
-                <td><input aria-label="Variable name" value={row.key} onChange={(e) => set(i, (r) => ({ ...r, key: e.target.value }))} /></td>
-                <td>
-                  <div className="with-action">
-                    <input aria-label={`${row.key || "Variable"} default`} value={row.def} placeholder="—" onChange={(e) => set(i, (r) => ({ ...r, def: e.target.value }))} />
-                    <button
-                      className="apply-all"
-                      title={row.def === "" ? "Set a default first" : "Apply this value to every worktree"}
-                      aria-label={`Apply ${row.key || "variable"} default to all worktrees`}
-                      disabled={row.def === ""}
-                      onClick={() => set(i, (r) => ({ ...r, byWorktree: { ...r.byWorktree, ...Object.fromEntries(worktrees.map((w) => [w, r.def])) } }))}
-                    >
-                      → All
-                    </button>
-                  </div>
-                </td>
-                {columns.map((w) => (
-                  <td key={w}>
-                    <input
-                      aria-label={`${row.key || "Variable"} in ${w}`}
-                      value={row.byWorktree[w] ?? ""}
-                      placeholder={row.def === "" ? "—" : row.def}
-                      title={row.byWorktree[w] ? undefined : row.def === "" ? "Not set" : "Inherits the default"}
-                      onChange={(e) => set(i, (r) => ({ ...r, byWorktree: { ...r.byWorktree, [w]: e.target.value } }))}
-                    />
-                  </td>
-                ))}
-                <td className="x"><button className="remove" title="Remove" aria-label={`Remove ${row.key || "variable"}`} onClick={() => onChange(rows.filter((_, j) => j !== i))}>×</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <button className="ghost" onClick={add}>+ Add variable</button>
-    </>
-  );
-}
-
 function App() {
   const [loaded, setLoaded] = useState<State>();
   const [uses, setUses] = useState<Record<string, string>>({});
   const [vars, setVars] = useState<Record<string, VarRow[]>>({});
+  const [route, setRoute] = useState<Route>({ page: "overview" });
+  /** The worktree the header's worktree tab opens while the overview is shown. */
+  const [lastWorktree, setLastWorktree] = useState<string>();
+  // Overview view state, kept here so it survives a visit to a worktree page.
   const [profile, setProfile] = useState("default");
   const [worktree, setWorktree] = useState("");
   const [saving, setSaving] = useState(false);
@@ -132,8 +54,32 @@ function App() {
     fetch("/api/values").then((r) => r.json() as Promise<State>).then(load);
     loadHistory();
   }, []);
+
+  // The page follows the URL hash. Without one, the editor opens on the worktree it was run from.
+  const worktrees = loaded?.worktrees;
+  const current = loaded?.current;
+  useEffect(() => {
+    if (!worktrees) return;
+    const follow = (moved: boolean) => {
+      const next = parseRoute(location.hash, worktrees, current);
+      // Name the page in the URL (replacing, so Back does not bounce between two URLs of one page).
+      if (location.hash !== routeHash(next)) window.history.replaceState(null, "", routeHash(next));
+      setRoute(next);
+      if (next.page === "worktree") setLastWorktree(next.worktree);
+      if (moved) {
+        // A new page: start at its top, with focus on its title for keyboard and screen reader users.
+        scrollTo(0, 0);
+        requestAnimationFrame(() => document.getElementById("page-title")?.focus({ preventScroll: true }));
+      }
+    };
+    follow(false);
+    const onHash = () => follow(true);
+    addEventListener("hashchange", onHash);
+    return () => removeEventListener("hashchange", onHash);
+  }, [worktrees, current]);
+
   /** The editor's values as Save would send them: what the history panel compares each point with. */
-  const current = useMemo(
+  const editorValues = useMemo(
     () => ({ uses, profiles: Object.fromEntries(Object.entries(vars).map(([n, rows]) => [n, fromVarRows(rows)])) }),
     [uses, vars],
   );
@@ -161,20 +107,12 @@ function App() {
   if (!loaded) return <main className="loading" aria-busy="true">Loading…</main>;
 
   const profileNames = Object.keys(vars);
-  const addProfile = () => {
+  /** Asks for a name and adds a profile that starts as a copy of default; returns its name. */
+  const addProfile = (): string | undefined => {
     const name = prompt("New profile name (starts as a copy of default)")?.trim();
     if (!name || name in vars) return;
     setVars({ ...vars, [name]: structuredClone(vars.default ?? []) });
-    setProfile(name);
-  };
-
-  /** Scrolls to the history card (below the variables) and moves focus there for keyboard and screen reader users. */
-  const goToHistory = () => {
-    const card = document.getElementById("history");
-    if (!card) return;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    card.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-    document.getElementById("history-title")?.focus({ preventScroll: true });
+    return name;
   };
 
   const busy = saving || restoring;
@@ -225,113 +163,59 @@ function App() {
 
   saveRef.current = save;
 
-  const columns = worktree ? [worktree] : loaded.worktrees;
-  const compact = compactChoice ?? columns.length > 6;
-  const status = busy
-    ? undefined
-    : result && !result.ok
-      ? { kind: "err", text: result.action === "restore" ? "Restore failed" : "Save failed" }
-      : dirty
-        ? { kind: "dirty", text: "Unsaved changes" }
-        : result?.ok
-          ? { kind: "ok", text: result.action === "restore" ? "Restored and pushed" : "Saved and pushed" }
-          : undefined;
-
   return (
     <>
-      <header>
-        <span className="brand"><Logo state={busy ? "saving" : result ? (result.ok ? "saved" : "error") : "idle"} />envs<span className="dim"> / values.yml</span></span>
-        <span role="status" className={`status ${status?.kind ?? ""}`}>
-          {status?.text}
-        </span>
-        <button className="header-link" onClick={goToHistory} title={history?.enabled === false ? "The history is off" : "Go to the history panel"}>
-          History
-          {history?.enabled !== false && history && history.points.length > 0 && (
-            <span className="count" aria-label={`${history.points.length} points`}>{history.points.length}</span>
-          )}
-        </button>
-        <button className="primary" onClick={save} disabled={busy} aria-keyshortcuts="Control+S Meta+S" title="Save and push (Ctrl+S)">
-          {saving ? "Saving…" : "Save"}
-        </button>
-      </header>
+      <Header
+        route={route}
+        worktree={route.page === "worktree" ? route.worktree : (lastWorktree ?? loaded.current)}
+        current={loaded.current}
+        busy={busy}
+        saving={saving}
+        dirty={dirty}
+        result={result}
+        history={history}
+        onSave={save}
+      />
       <main>
-        <section className="card">
-          <p className="eyebrow">Worktrees</p>
-          <h2>Profile of each worktree</h2>
-          <p className="lede">Each worktree's <code>.env</code> is written from the profile picked here.</p>
-          <ul className="wt-grid">
-            {loaded.worktrees.map((w) => (
-              <li key={w}>
-                <span className="name" title={w}>{w}</span>
-                <select aria-label={`Profile of ${w}`} value={uses[w] ?? "default"} onChange={(e) => setUses({ ...uses, [w]: e.target.value })}>
-                  {profileNames.map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="card inset" aria-label="View">
-          <p className="eyebrow">View</p>
-          <div className="selectors">
-            <label>
-              Profile
-              <select value={profile} onChange={(e) => setProfile(e.target.value)}>
-                {profileNames.map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </label>
-            <button className="ghost" onClick={addProfile}>+ Profile</button>
-            <label>
-              Worktree
-              <select value={worktree} onChange={(e) => setWorktree(e.target.value)}>
-                <option value="">All worktrees</option>
-                {loaded.worktrees.map((w) => (
-                  <option key={w} value={w}>{w}</option>
-                ))}
-              </select>
-            </label>
-            <button className="toggle" aria-pressed={compact} onClick={() => setCompactChoice(!compact)}>
-              Compact
-            </button>
-          </div>
-        </section>
-
-        <section className="card">
-          <p className="eyebrow">Variables</p>
-          <h2>{profile}{worktree && ` · ${worktree}`}</h2>
-          <p className="lede">The default applies to every worktree unless the worktree sets its own value. Empty cells inherit the default; type <code>{EMPTY_VALUE}</code> to set an empty value.</p>
-          <VarsEditor
-            rows={vars[profile] ?? []}
-            onChange={(rows) => setVars({ ...vars, [profile]: rows })}
-            columns={columns}
+        {route.page === "worktree" ? (
+          <WorktreePage
+            key={route.worktree}
+            worktree={route.worktree}
             worktrees={loaded.worktrees}
-            compact={compact}
+            current={loaded.current}
+            uses={uses}
+            setUses={setUses}
+            vars={vars}
+            setVars={setVars}
+            compactChoice={compactChoice}
+            setCompactChoice={setCompactChoice}
+            onAddProfile={() => {
+              const name = addProfile();
+              if (name) setUses({ ...uses, [route.worktree]: name });
+            }}
           />
-        </section>
-
-        <section className="card" id="history" aria-labelledby="history-title">
-          <p className="eyebrow">History</p>
-          <h2 id="history-title" tabIndex={-1}>Points of <code>.envs/history.ndjson</code></h2>
-          <p className="lede">
-            Hover or click a point to see what restoring it would change: <span className="key-removed">red</span> is removed,{" "}
-            <span className="key-changed">green</span> is changed or added. Restoring adds a new point; none is ever deleted.
-          </p>
-          <HistoryPanel history={history} current={current} dirty={dirty} busy={busy} onRestore={restorePoint} />
-        </section>
-
-        {result && (result.logs.length > 0 || result.errors.length > 0 || result.created.length > 0) && (
-          <pre aria-label={result.action === "restore" ? "Restore log" : "Save log"}>
-            {[
-              ...result.created.map((c) => `+ created ${c} from default`),
-              ...result.logs,
-              ...result.errors,
-            ].join("\n")}
-          </pre>
+        ) : (
+          <OverviewPage
+            worktrees={loaded.worktrees}
+            current={loaded.current}
+            uses={uses}
+            setUses={setUses}
+            vars={vars}
+            setVars={setVars}
+            profile={profile}
+            setProfile={setProfile}
+            worktree={worktree}
+            setWorktree={setWorktree}
+            compactChoice={compactChoice}
+            setCompactChoice={setCompactChoice}
+            onAddProfile={() => {
+              const name = addProfile();
+              if (name) setProfile(name);
+            }}
+          />
         )}
+        <HistoryCard history={history} current={editorValues} dirty={dirty} busy={busy} onRestore={restorePoint} />
+        <ActionLog result={result} />
       </main>
     </>
   );

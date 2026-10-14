@@ -17,6 +17,7 @@ import {
   formatDotenvValue,
   HELP,
   listWorktrees,
+  worktreeContaining,
   loadUiHistory,
   loadUiState,
   normalizeValues,
@@ -214,6 +215,25 @@ describe("git helpers", () => {
     const detached = list.find((w) => w.path.endsWith("detached-wt"));
     expect(detached?.name).toBe("detached-wt");
     await $`git -C ${ws.main} worktree remove --force ${detached!.path}`.quiet();
+  });
+});
+
+describe("worktreeContaining (the worktree `envs edit --ui` was run from)", () => {
+  const worktrees = [
+    { name: "main", path: "/foo" },
+    { name: "tar", path: "/foo/workspaces/tar" },
+    { name: "other", path: "/elsewhere/other" },
+  ];
+  test("the worktree itself or any folder inside it; the deepest worktree wins", () => {
+    expect(worktreeContaining("/foo/workspaces/tar", worktrees)).toBe("tar");
+    expect(worktreeContaining("/foo/workspaces/tar/src/lib", worktrees)).toBe("tar");
+    expect(worktreeContaining("/foo/workspaces", worktrees)).toBe("main");
+    expect(worktreeContaining("/elsewhere/other", worktrees)).toBe("other");
+  });
+  test("a sibling folder with a longer name is not inside, and no match is undefined", () => {
+    expect(worktreeContaining("/foo/workspaces/tarball", worktrees)).toBe("main");
+    expect(worktreeContaining("/elsewhere/other-2", worktrees)).toBeUndefined();
+    expect(worktreeContaining("/", worktrees)).toBeUndefined();
   });
 });
 

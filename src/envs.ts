@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { chmod, mkdir, open, rename, unlink, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { chmod, mkdir, open, realpath, rename, unlink, writeFile } from "node:fs/promises";
+import { basename, dirname, join, sep } from "node:path";
 import { stat } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1218,15 +1218,44 @@ export async function edit(ctx: Context, options: { ui?: boolean } = {}): Promis
   });
 }
 
-/** State the web editor shows: the normalized values plus the worktree names. */
+/**
+ * The worktree that contains `cwd` (the worktree itself or any folder inside it), or undefined.
+ * Worktrees can live inside another one (`/repo/workspaces/tar` inside `/repo`): the deepest wins.
+ * Paths are compared as given; resolve symlinks first (see {@link currentWorktree}).
+ */
+export function worktreeContaining(cwd: string, worktrees: Worktree[]): string | undefined {
+  const inside = (path: string) => cwd === path || cwd.startsWith(path.endsWith(sep) ? path : path + sep);
+  return worktrees
+    .filter(({ path }) => inside(path))
+    .sort((a, b) => b.path.length - a.path.length)[0]?.name;
+}
+
+/** The worktree `cwd` is in, comparing real paths (a symlinked folder or `/tmp` on macOS still matches). */
+export async function currentWorktree(cwd: string, worktrees: Worktree[]): Promise<string | undefined> {
+  const real = (path: string) => realpath(path).catch(() => path);
+  const resolved = await Promise.all(worktrees.map(async ({ name, path }) => ({ name, path: await real(path) })));
+  return worktreeContaining(await real(cwd), resolved);
+}
+
+/**
+ * State the web editor shows: the normalized values, the worktree names and `current`, the worktree
+ * the command was run from (the editor opens on its page; absent when the folder is in none).
+ */
 export async function loadUiState(ctx: Context) {
   const read = await readValues(ctx);
   if (!read) throw new Error("Run `envs init` first.");
+  const listed = await listWorktrees(ctx.cwd);
   // The main workspace comes first, the rest in natural order (fix-2 before fix-10).
-  const [main, ...others] = (await listWorktrees(ctx.cwd)).map(({ name }) => name);
+  const [main, ...others] = listed.map(({ name }) => name);
   others.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const worktrees = main === undefined ? [] : [main, ...others];
-  return { ...normalizeValues(read.values), worktrees, version: valuesVersion(await Bun.file(read.path).text()) };
+  const current = await currentWorktree(ctx.cwd, listed);
+  return {
+    ...normalizeValues(read.values),
+    worktrees,
+    current,
+    version: valuesVersion(await Bun.file(read.path).text()),
+  };
 }
 
 /** History the web editor shows: whether it is on and its points, oldest first (none while it is off). */

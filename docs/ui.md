@@ -26,12 +26,28 @@ El servidor expone los valores de tus `.env` (secretos incluidos), así que cada
 
 Además, el servidor nunca responde a las peticiones previas CORS, de modo que ningún otro sitio puede enviarle una escritura JSON. Si abres la dirección sin token, con el token de otra ejecución o con uno ya usado (por ejemplo desde el historial del navegador), ves un `401`: vuelve a abrir la que imprimió `envs edit --ui`.
 
+## Página del worktree
+
+Si ejecutas `envs edit --ui` dentro de un worktree (en su carpeta o en cualquier subcarpeta, por ejemplo `/foo/workspaces/tar`), el editor se abre en la página de **ese worktree**. Fuera de todo worktree se abre en la [vista general](#1-vista-general).
+
+![Página del worktree fix-login](assets/images/ui/ui-15-worktree.png)
+
+- **Encabezado:** las dos páginas, como pestañas: el worktree (con un cuadrado violeta si es desde donde ejecutaste el comando) y **All worktrees**, la vista general. En la vista general, el nombre de cada worktree también abre su página. La página queda en la dirección (`#/worktree/<nombre>` o `#/overview`), así que recargar o el botón Atrás del navegador la conservan.
+- **Worktree:** el nombre del worktree (con la etiqueta *current* si es el del comando) y **Switch to** para pasar a otro.
+- **Profile:** el perfil que usa este worktree; es el mismo valor que *Profile of each worktree* de la vista general. **+ Profile** crea un perfil nuevo como copia de `default` y lo asigna a este worktree.
+- **Variables:** una fila por cada variable de **cualquier** perfil y estas columnas:
+  - **Defaults:** los valores por defecto del perfil en uso (su nombre aparece debajo del título de la columna). Editarlos cambia ese perfil para todos los worktrees que lo usan.
+  - **Una columna por perfil:** el valor propio de este worktree en ese perfil. Una celda vacía hereda el valor por defecto de ese perfil, que se muestra en gris.
+  - La columna del perfil en uso va primero, resaltada y con la etiqueta **In use**: el `.env` del worktree recibe esa columna o, donde está vacía, **Defaults**. Al cambiar el perfil, el resaltado y **Defaults** cambian con él.
+- **+ Add variable** agrega una fila en todos los perfiles; no se guarda hasta que tiene nombre. Renombrar una variable la renombra en todos los perfiles; si el nombre ya existe, el campo se marca en rojo y el cambio no se aplica. **×** quita la variable de todos los perfiles.
+- Como en la vista general, `""` fija una variable en la cadena vacía, y **Save** (o Ctrl/Cmd+S), el estado, **History** y el registro del `push` funcionan igual.
+
 ## 1. Vista general
 
 ![Vista general del editor](assets/images/ui/ui-01-overview.png)
 
 - **Encabezado:** el estado (por ejemplo *Unsaved changes*), el botón **History** y **Save**. **History** lleva al panel del historial, que está al final de la página, y muestra cuántos puntos hay; el foco pasa al título del panel. Con el historial desactivado, el botón sigue ahí y el panel lo explica.
-- **Worktrees:** el perfil de cada worktree.
+- **Worktrees:** el perfil de cada worktree. Cada nombre abre la [página de ese worktree](#página-del-worktree).
 - **View:** el perfil y el worktree que se muestran, y el modo compacto.
 - **Variables:** una tabla con una columna de valor por defecto y una columna por worktree.
 - **History:** el panel del historial (ver más abajo).
@@ -129,5 +145,5 @@ Un punto de [resincronización](history.md#puntos-de-resincronización) lleva la
 ## Notas
 
 - Con el historial desactivado (`envs config set history false`), el panel muestra un mensaje y no ofrece restablecer.
-- El servidor solo escucha en `127.0.0.1`, exige el token en todas las rutas (ver «Acceso al servidor») y expone `GET/PUT /api/values`, `GET /api/history` y `POST /api/restore`.
+- El servidor solo escucha en `127.0.0.1`, exige el token en todas las rutas (ver «Acceso al servidor») y expone `GET/PUT /api/values`, `GET /api/history` y `POST /api/restore`. `GET /api/values` incluye `current`, el worktree desde el que se ejecutó el comando (ausente si la carpeta no está en ninguno).
 - Las capturas se generaron con Chromium (Playwright) sobre un proyecto de ejemplo; las fechas y hashes varían en cada ejecución.
