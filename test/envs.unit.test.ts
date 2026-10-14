@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   defaultContext,
+  directOpener,
   findRoot,
   formatDotenvValue,
   HELP,
@@ -161,6 +162,37 @@ describe("run", () => {
     expect(error).toHaveBeenCalledWith("err");
     log.mockRestore();
     error.mockRestore();
+  });
+
+  test("directOpener hands the URL itself to the opener only in VS Code's terminal", () => {
+    expect(directOpener({}, "open")).toBeUndefined();
+    expect(directOpener({ TERM_PROGRAM: "iTerm.app" }, "open")).toBeUndefined();
+    expect(directOpener({ TERM_PROGRAM: "vscode" }, "open")).toEqual(["open"]);
+    expect(directOpener({ TERM_PROGRAM: "vscode", BROWSER: "" }, "xdg-open")).toEqual(["xdg-open"]);
+    // Remote windows set $BROWSER to VS Code's helper, which forwards the port and opens the local browser.
+    expect(directOpener({ TERM_PROGRAM: "vscode", BROWSER: "/vscode/bin/helpers/browser.sh" }, "xdg-open")).toEqual(["/vscode/bin/helpers/browser.sh"]);
+  });
+
+  test("defaultContext.openUrl in VS Code's terminal runs the opener with the http URL", async () => {
+    const fakeBin = await mkdtemp(join(tmpdir(), "envs-fakebin-"));
+    const argsFile = join(fakeBin, "args.txt");
+    const browser = join(fakeBin, "browser.sh");
+    await Bun.write(browser, `#!/bin/sh\necho "$@" > "${argsFile}"\n`);
+    await chmod(browser, 0o755);
+    const saved = { TERM_PROGRAM: process.env.TERM_PROGRAM, BROWSER: process.env.BROWSER };
+    process.env.TERM_PROGRAM = "vscode";
+    process.env.BROWSER = browser;
+    try {
+      const url = "http://127.0.0.1:1234/?token=abc";
+      expect(await defaultContext().openUrl!(url)).toBeUndefined();
+      expect((await Bun.file(argsFile).text()).trim()).toBe(url);
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+      await rm(fakeBin, { recursive: true, force: true });
+    }
   });
 
   test("defaultContext.openEditor runs `code -w <file>`", async () => {

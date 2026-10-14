@@ -92,6 +92,20 @@ const green = (text: string) => paint(32, text);
 const yellow = (text: string) => paint(33, text);
 const red = (text: string) => paint(31, text);
 
+/**
+ * The command that opens the editor's URL as is, when `envs` runs in VS Code's integrated terminal
+ * (`TERM_PROGRAM=vscode`, also set by editors built on it); undefined elsewhere. There the local page
+ * that hides the URL from `ps` does not work: in a remote window (SSH, container, WSL) the browser is
+ * on another machine, which can neither read that file nor reach the server until VS Code forwards
+ * its port, and VS Code forwards it when its own opener (`$BROWSER`, set in remote windows) or the
+ * system one is handed an http URL. The token then shows in `ps` while the opener runs; it is
+ * single-use and spent on the first visit.
+ */
+export function directOpener(env: Record<string, string | undefined>, systemOpener: string): string[] | undefined {
+  if (env.TERM_PROGRAM !== "vscode") return;
+  return [env.BROWSER?.trim() || systemOpener];
+}
+
 export const defaultContext = (): Context => ({
   cwd: process.cwd(),
   log: (message) => console.log(message),
@@ -106,6 +120,13 @@ export const defaultContext = (): Context => ({
   openUrl: async (url) => {
     const opener =
       process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
+    const direct = directOpener(process.env, opener);
+    if (direct) {
+      // In VS Code's terminal the opener gets the URL itself: see `directOpener`.
+      const code = await Bun.spawn([...direct, url], { stdio: ["ignore", "ignore", "ignore"] }).exited;
+      if (code !== 0) throw new Error(`${direct.join(" ")} exited with code ${code}`);
+      return;
+    }
     // The opener's arguments are visible to every user in `ps`, so the URL (it carries the token)
     // never goes there: the opener gets a private local page that redirects to it.
     const dir = mkdtempSync(join(tmpdir(), "envs-"));
