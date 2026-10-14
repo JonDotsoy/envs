@@ -42,8 +42,15 @@ function NameCell(props: { value: string; taken(name: string): boolean; onRename
   );
 }
 
-function ProfileTable(props: { worktree: string; selected: string; vars: VarsByProfile; setVars(vars: VarsByProfile): void; compact: boolean }) {
-  const { worktree, selected, vars, setVars, compact } = props;
+function ProfileTable(props: {
+  worktree: string;
+  selected: string;
+  onSelect(profile: string): void;
+  vars: VarsByProfile;
+  setVars(vars: VarsByProfile): void;
+  compact: boolean;
+}) {
+  const { worktree, selected, onSelect, vars, setVars, compact } = props;
   // Every profile with the same rows: row i is one variable everywhere. Edits are made on this copy.
   const table = alignProfiles(vars);
   // The profile in use comes first, next to its defaults: what ends up in .env reads left to right.
@@ -72,8 +79,18 @@ function ProfileTable(props: { worktree: string; selected: string; vars: VarsByP
               </th>
               {profiles.map((p) => (
                 <th scope="col" key={p} className={`wt${p === selected ? " in-use" : ""}`}>
-                  <span className="th-clip" title={p}>{p}</span>
-                  {p === selected && <span className="in-use-tag">in use</span>}
+                  {p === selected ? (
+                    <>
+                      <span className="th-clip" title={p}>{p}</span>
+                      <span className="in-use-tag">in use</span>
+                    </>
+                  ) : (
+                    // One click on the header makes this the profile the worktree uses.
+                    <button className="use-profile" title={`Use ${p} for ${worktree}`} aria-label={`Use profile ${p} for ${worktree}`} onClick={() => onSelect(p)}>
+                      <span className="th-clip">{p}</span>
+                      <span className="use-hint" aria-hidden="true">use</span>
+                    </button>
+                  )}
                 </th>
               ))}
               <th><span className="sr-only">Remove</span></th>
@@ -191,9 +208,9 @@ export function WorktreePage(props: {
         <p className="lede">
           <strong>Defaults</strong> are those of <code>{selected}</code>, the profile in use. Each profile column holds this worktree's
           own value in that profile; an empty cell inherits that profile's default, in grey. The <code>.env</code> gets the
-          highlighted column, or Defaults where it is empty. Removing a variable removes it from every profile; <EmptyHint />.
+          highlighted column, or Defaults where it is empty; click another profile's header to use it. Removing a variable removes it from every profile; <EmptyHint />.
         </p>
-        <ProfileTable worktree={worktree} selected={selected} vars={vars} setVars={setVars} compact={compact} />
+        <ProfileTable worktree={worktree} selected={selected} onSelect={(p) => setUses({ ...uses, [worktree]: p })} vars={vars} setVars={setVars} compact={compact} />
       </section>
     </>
   );

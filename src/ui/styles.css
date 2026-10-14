@@ -499,3 +499,9 @@ input[aria-invalid="true"], input[aria-invalid="true"]:focus-visible { border-co
   .pages a { flex: 1; justify-content: center; }
   .wt-title { font-size: 22px; }
 }
+/* A profile column header that is not in use: one click makes the worktree use it. */
+.use-profile { display: block; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.use-profile .use-hint { display: inline-block; margin-top: 2px; padding: 0 8px; border: 1px dashed var(--color-ash-border); border-radius: var(--radius-pills); color: var(--color-steel); font: 500 10px/1.5 var(--font-body); text-transform: uppercase; letter-spacing: 0.04em; opacity: 0; transition: opacity 120ms; }
+.use-profile:hover .use-hint, .use-profile:focus-visible .use-hint { opacity: 1; }
+.use-profile:hover, .use-profile:focus-visible { color: var(--color-graphite); }
+.use-profile:focus-visible { outline: 2px solid var(--color-lavender); outline-offset: 2px; border-radius: 4px; }

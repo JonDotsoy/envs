@@ -38,7 +38,7 @@ Si ejecutas `envs edit --ui` dentro de un worktree (en su carpeta o en cualquier
 - **Variables:** una fila por cada variable de **cualquier** perfil y estas columnas:
   - **Defaults:** los valores por defecto del perfil en uso (su nombre aparece debajo del título de la columna). Editarlos cambia ese perfil para todos los worktrees que lo usan.
   - **Una columna por perfil:** el valor propio de este worktree en ese perfil. Una celda vacía hereda el valor por defecto de ese perfil, que se muestra en gris.
-  - La columna del perfil en uso va primero, resaltada y con la etiqueta **In use**: el `.env` del worktree recibe esa columna o, donde está vacía, **Defaults**. Al cambiar el perfil, el resaltado y **Defaults** cambian con él.
+  - La columna del perfil en uso va primero, resaltada y con la etiqueta **In use**: el `.env` del worktree recibe esa columna o, donde está vacía, **Defaults**. Hacer clic en el encabezado de otra columna de perfil hace que el worktree use ese perfil (igual que elegirlo en **Profile**). Al cambiar el perfil, el resaltado y **Defaults** cambian con él.
 - **+ Add variable** agrega una fila en todos los perfiles; no se guarda hasta que tiene nombre. Renombrar una variable la renombra en todos los perfiles; si el nombre ya existe, el campo se marca en rojo y el cambio no se aplica. **×** quita la variable de todos los perfiles.
 - Como en la vista general, `""` fija una variable en la cadena vacía, y **Save** (o Ctrl/Cmd+S), el estado, **History** y el registro del `push` funcionan igual.
 
