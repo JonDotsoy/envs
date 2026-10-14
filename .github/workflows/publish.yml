@@ -110,6 +110,10 @@ jobs:
       - name: Build
         run: bun run build
 
+      - name: Bundle envs.js
+        # Single-file CLI, attached to the GitHub release. Run after the version bump so `envs version` matches.
+        run: bun build src/bin/envs.ts --target bun --outfile envs.js
+
       - name: Publish to npm
         # Authenticates with GitHub OIDC (id-token: write); no npm token needed.
         env:
@@ -138,13 +142,46 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ inputs.tag }}
           BRANCH: ${{ github.ref_name }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
           name=$(node -p "require('./package.json').name")
           url="https://www.npmjs.com/package/$name/v/$VERSION"
+          asset="$REPO_URL/releases/download/v$VERSION/envs.js"
+          sha256=$(sha256sum envs.js | cut -d' ' -f1)
+          {
+            echo "Published to npm: $url"
+            echo
+            echo "## Homebrew"
+            echo
+            echo "\`envs.js\` is a single-file bundle that runs on Bun. Save this formula as \`Formula/envs.rb\` in a tap and install it to get the \`envs\` command:"
+            echo
+            echo '```ruby'
+            cat <<RUBY
+          class Envs < Formula
+            desc "Keep every git worktree's .env in one file"
+            homepage "$REPO_URL"
+            url "$asset"
+            version "$VERSION"
+            sha256 "$sha256"
+            license "MIT"
+
+            depends_on "bun"
+
+            def install
+              bin.install "envs.js" => "envs"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/envs version")
+            end
+          end
+          RUBY
+            echo '```'
+          } > release-notes.md
           args=()
           if [ "$TAG" != "latest" ]; then args+=(--prerelease); fi
           gh release create "v$VERSION" --verify-tag --title "v$VERSION" \
-            --notes "Published to npm: $url" "${args[@]}"
+            --notes-file release-notes.md "${args[@]}" envs.js
 
       - name: GitHub summary
         if: ${{ always() }}
