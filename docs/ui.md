@@ -1,6 +1,6 @@
 # Editor web (`envs edit --ui`)
 
-Interfaz web local para editar `values.yml`. Este documento recorre cada acción con una captura de pantalla de la aplicación. Para el resumen de comandos, consulta el [README](../README.md); para el historial en detalle, [history.md](history.md).
+Interfaz web local para editar `values.yml`. Tiene tres vistas: la [página del worktree](#página-del-worktree), centrada en un worktree y sus valores en cada perfil; la [vista general](#vista-general-all-worktrees), con todos los worktrees, y la de [configuración](#configuración), con el auto guardado y las rutas de los archivos. Este documento recorre cada acción con una captura de pantalla de la aplicación. Para el resumen de comandos, consulta el [README](../README.md); para el historial en detalle, [history.md](history.md).
 
 Las capturas usan un proyecto de ejemplo con tres worktrees (`main`, `feature-checkout` y `fix-login`) y las variables `DATABASE_URL`, `PORT`, `LOG_LEVEL`, `DEBUG` y `FEATURE_CHECKOUT`.
 
@@ -10,7 +10,7 @@ Las capturas usan un proyecto de ejemplo con tres worktrees (`main`, `feature-ch
 envs edit --ui
 ```
 
-Ejecuta `init` (si hace falta) y `pull`, y levanta un servidor en `127.0.0.1` con un puerto aleatorio. Abre la dirección que se imprime (se intenta abrir el navegador por ti, mediante una página temporal privada que redirige a ella, para que el token no aparezca en los argumentos del proceso en `ps`; esa página se borra en cuanto se canjea el token). Si no se puede abrir el navegador, se imprime `Could not open the browser. Open this address manually: <dirección>`. Tiene la forma `http://127.0.0.1:<puerto>/?token=<token>`: el token es aleatorio, distinto en cada ejecución y **de un solo uso**: el navegador lo cambia en la primera visita por una cookie de sesión (`HttpOnly`, `SameSite=Strict`) con otro valor, lo quita de la barra de direcciones, y a partir de ahí la dirección deja de funcionar. Al usarlo, el servidor imprime enseguida en la salida estándar una dirección nueva (`New single-use URL: ...`), también de un solo uso, por si quieres abrir el editor en otro navegador. Detén el servidor con Ctrl+C.
+Ejecuta `init` (si hace falta) y `pull`, y levanta un servidor en `127.0.0.1` con un puerto aleatorio. Abre la dirección que se imprime (se intenta abrir el navegador por ti, mediante una página temporal privada que redirige a ella, para que el token no aparezca en los argumentos del proceso en `ps`; esa página se borra en cuanto se canjea el token). En la terminal integrada de VS Code (`TERM_PROGRAM=vscode`, también en editores basados en él) se abre la dirección `http://` directamente, con `$BROWSER` si está definido (VS Code lo define en las ventanas remotas: SSH, contenedores, WSL) o con `open`/`xdg-open`: así VS Code reenvía el puerto y abre tu navegador local, que no podría leer la página temporal del equipo remoto. Mientras corre ese comando el token se ve en `ps`; sigue siendo de un solo uso. Si no se puede abrir el navegador, se imprime `Could not open the browser. Open this address manually: <dirección>`. Tiene la forma `http://127.0.0.1:<puerto>/?token=<token>`: el token es aleatorio, distinto en cada ejecución y **de un solo uso**: el navegador lo cambia en la primera visita por una cookie de sesión (`HttpOnly`, `SameSite=Strict`) con otro valor, lo quita de la barra de direcciones, y a partir de ahí la dirección deja de funcionar. Al usarlo, el servidor imprime enseguida en la salida estándar una dirección nueva (`New single-use URL: ...`), también de un solo uso, por si quieres abrir el editor en otro navegador. Detén el servidor con Ctrl+C.
 
 ### Acceso al servidor
 
@@ -26,12 +26,53 @@ El servidor expone los valores de tus `.env` (secretos incluidos), así que cada
 
 Además, el servidor nunca responde a las peticiones previas CORS, de modo que ningún otro sitio puede enviarle una escritura JSON. Si abres la dirección sin token, con el token de otra ejecución o con uno ya usado (por ejemplo desde el historial del navegador), ves un `401`: vuelve a abrir la que imprimió `envs edit --ui`.
 
-## 1. Vista general
+## Vistas
+
+| Vista | Dirección | Cuándo se abre |
+| --- | --- | --- |
+| [Página del worktree](#página-del-worktree) | `#/worktree/<nombre>` | Al ejecutar `envs edit --ui` dentro de un worktree (en su carpeta o en cualquier subcarpeta, por ejemplo `/foo/workspaces/tar`): se abre la de **ese worktree**. |
+| [Vista general](#vista-general-all-worktrees) | `#/overview` | Al ejecutar el comando fuera de todo worktree, o desde la pestaña **All worktrees**. |
+| [Configuración](#configuración) | `#/settings` | Desde la pestaña **Settings**. |
+
+El encabezado muestra las vistas como pestañas: la del worktree (con un cuadrado violeta si es desde donde ejecutaste el comando), **All worktrees** y **Settings**. En la vista general, el nombre de cada worktree abre su página, y en la página del worktree **Switch to** pasa a otro. La vista queda en la dirección, así que recargar o el botón Atrás del navegador la conservan; un nombre desconocido en la dirección vuelve a la página del worktree actual o, si no hay, a la vista general. Para saber desde qué worktree se ejecutó el comando, el editor usa el campo `current` de `GET /api/values` (ver [Notas](#notas)).
+
+Las tres comparten el encabezado (estado, **History**, **Save**) y el registro del `push`; la página del worktree y la vista general también muestran el panel del historial (desde **Settings**, el botón **History** vuelve a la página del worktree y baja al panel). Los cambios sin guardar se conservan al pasar de una vista a otra y **Save** guarda todos.
+
+## Página del worktree
+
+![Página del worktree fix-login](assets/images/ui/ui-15-worktree.png)
+
+- **Worktree:** el nombre del worktree (con la etiqueta *current* si es el del comando) y **Switch to** para pasar a otro.
+- **Profile:** el perfil que usa este worktree; es el mismo valor que *Profile of each worktree* de la vista general. **+ Profile** crea un perfil nuevo como copia de `default` y lo asigna a este worktree.
+- **Variables:** una fila por cada variable de **cualquier** perfil y estas columnas:
+  - **Defaults:** los valores por defecto del perfil en uso (su nombre aparece debajo del título de la columna). Editarlos cambia ese perfil para todos los worktrees que lo usan.
+  - **Una columna por perfil:** el valor propio de este worktree en ese perfil. Una celda vacía hereda el valor por defecto de ese perfil, que se muestra en gris.
+  - La columna del perfil en uso va primero, resaltada y con la etiqueta **In use**: el `.env` del worktree recibe esa columna o, donde está vacía, **Defaults**. Hacer clic en el encabezado de otra columna de perfil hace que el worktree use ese perfil (igual que elegirlo en **Profile**). Al cambiar el perfil, el resaltado y **Defaults** cambian con él.
+- **+ Add variable** agrega una fila en todos los perfiles; no se guarda hasta que tiene nombre. Renombrar una variable la renombra en todos los perfiles; si el nombre ya existe, el campo se marca en rojo y el cambio no se aplica. **×** quita la variable de todos los perfiles.
+- Como en la vista general, `""` fija una variable en la cadena vacía, y **Save** (o Ctrl/Cmd+S), el estado, **History** y el registro del `push` funcionan igual.
+
+### Elegir el perfil desde la tabla
+
+![Cursor sobre el encabezado del perfil default](assets/images/ui/ui-16-use-profile.png)
+
+Al pasar el cursor por el encabezado de una columna de perfil que no está en uso aparece la etiqueta **USE**; un clic hace que el worktree use ese perfil. Es lo mismo que elegirlo en **Profile**: la columna pasa a ser la primera, se resalta, **Defaults** muestra los de ese perfil y el encabezado indica **Unsaved changes** hasta que guardes. Con el teclado, el encabezado se alcanza con Tab y se activa con Enter o Espacio.
+
+### Muchos perfiles
+
+![Diez perfiles, con la tabla desplazada a la derecha](assets/images/ui/ui-17-many-profiles.png)
+
+Con más perfiles de los que caben en el ancho, la tabla se desplaza horizontalmente: **Variable** y **Defaults** quedan fijas a la izquierda y el resto de las columnas pasa por debajo. Con más de seis perfiles el modo **Compact** se activa solo (puedes desactivarlo). La columna del perfil en uso va primera, pero no queda fija: al desplazarte hacia los últimos perfiles deja de verse. En pantallas angostas (hasta 480 px de ancho) solo **Variable** queda fija.
+
+## Vista general (All worktrees)
+
+La vista con todos los worktrees: el perfil de cada uno y, para un perfil, una columna por worktree.
+
+## 1. Resumen
 
 ![Vista general del editor](assets/images/ui/ui-01-overview.png)
 
-- **Encabezado:** el estado (por ejemplo *Unsaved changes*), el botón **History** y **Save**. **History** lleva al panel del historial, que está al final de la página, y muestra cuántos puntos hay; el foco pasa al título del panel. Con el historial desactivado, el botón sigue ahí y el panel lo explica.
-- **Worktrees:** el perfil de cada worktree.
+- **Encabezado:** las pestañas de las [vistas](#vistas), el estado (por ejemplo *Unsaved changes*), el botón **History** y **Save**. **History** lleva al panel del historial, que está al final de la página, y muestra cuántos puntos hay; el foco pasa al título del panel. Con el historial desactivado, el botón sigue ahí y el panel lo explica.
+- **Worktrees:** el perfil de cada worktree. Cada nombre abre la [página de ese worktree](#página-del-worktree).
 - **View:** el perfil y el worktree que se muestran, y el modo compacto.
 - **Variables:** una tabla con una columna de valor por defecto y una columna por worktree.
 - **History:** el panel del historial (ver más abajo).
@@ -77,6 +118,15 @@ El selector **Worktree** deja en la tabla solo la columna de un worktree.
 Los números y booleanos conservan su tipo: guardar `3000` sin tocarlo no genera un cambio.
 
 Si `values.yml` cambió después de abrir el editor (otro comando o editor lo guardó), Save responde `409` y no guarda nada, para no pisar ese cambio: recarga el editor y aplica de nuevo tus cambios. Un nombre de variable inválido o un valor con salto de línea también se rechaza antes de guardar.
+
+## Configuración
+
+![Página de configuración con el auto guardado activado](assets/images/ui/ui-18-settings.png)
+
+La pestaña **Settings** abre una página con solo dos tarjetas:
+
+- **Auto-save:** un interruptor que activa el auto guardado. Activado, el editor guarda solo 1,5 segundos después del último cambio, igual que **Save**: escribe `values.yml`, ejecuta `push` sobre los `.env` y agrega un punto al historial (así que una sesión de edición deja un punto por cada pausa). Mientras espera, el encabezado muestra **Auto-saving soon**. Si un guardado falla (por ejemplo un nombre de variable inválido o un `409` porque `values.yml` cambió por fuera), no se reintenta hasta que cambies algo. Lo que escribas mientras se guarda queda en el editor y se guarda en la siguiente pausa. Está desactivado por defecto y se guarda en `.envs/config.yml` como `ui.autosave`, así que vale para las próximas ejecuciones; equivale a `envs config set ui.autosave true`.
+- **Where the files are:** las rutas absolutas en el sistema del proyecto (el workspace principal, que tiene la carpeta `.envs/`), de `values.yml`, del historial (`history.ndjson`) y de `config.yml`, cada una con un botón **Copy**. Son las mismas sin importar desde qué worktree ejecutes el comando, porque todos comparten `.envs/`.
 
 ## Historial
 
@@ -129,5 +179,5 @@ Un punto de [resincronización](history.md#puntos-de-resincronización) lleva la
 ## Notas
 
 - Con el historial desactivado (`envs config set history false`), el panel muestra un mensaje y no ofrece restablecer.
-- El servidor solo escucha en `127.0.0.1`, exige el token en todas las rutas (ver «Acceso al servidor») y expone `GET/PUT /api/values`, `GET /api/history` y `POST /api/restore`.
-- Las capturas se generaron con Chromium (Playwright) sobre un proyecto de ejemplo; las fechas y hashes varían en cada ejecución.
+- El servidor solo escucha en `127.0.0.1`, exige el token en todas las rutas (ver «Acceso al servidor») y expone `GET/PUT /api/values`, `GET /api/history`, `POST /api/restore` y `GET/PUT /api/settings` (el auto guardado y las rutas absolutas). `GET /api/values` incluye `current`, el worktree desde el que se ejecutó el comando (ausente si la carpeta no está en ninguno).
+- Las capturas se generaron con Chromium (Playwright) sobre un proyecto de ejemplo; las fechas y hashes varían en cada ejecución. La de muchos perfiles usa diez perfiles (`default`, `staging`, `production`, `qa`, `dev-local`, `perf-testing`, `demo`, `sandbox`, `eu-west` y `us-east-backup`).

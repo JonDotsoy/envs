@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { chmod, mkdir, open, rename, unlink, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { chmod, mkdir, open, realpath, rename, unlink, writeFile } from "node:fs/promises";
+import { basename, dirname, join, sep } from "node:path";
 import { stat } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -92,6 +92,20 @@ const green = (text: string) => paint(32, text);
 const yellow = (text: string) => paint(33, text);
 const red = (text: string) => paint(31, text);
 
+/**
+ * The command that opens the editor's URL as is, when `envs` runs in VS Code's integrated terminal
+ * (`TERM_PROGRAM=vscode`, also set by editors built on it); undefined elsewhere. There the local page
+ * that hides the URL from `ps` does not work: in a remote window (SSH, container, WSL) the browser is
+ * on another machine, which can neither read that file nor reach the server until VS Code forwards
+ * its port, and VS Code forwards it when its own opener (`$BROWSER`, set in remote windows) or the
+ * system one is handed an http URL. The token then shows in `ps` while the opener runs; it is
+ * single-use and spent on the first visit.
+ */
+export function directOpener(env: Record<string, string | undefined>, systemOpener: string): string[] | undefined {
+  if (env.TERM_PROGRAM !== "vscode") return;
+  return [env.BROWSER?.trim() || systemOpener];
+}
+
 export const defaultContext = (): Context => ({
   cwd: process.cwd(),
   log: (message) => console.log(message),
@@ -106,6 +120,13 @@ export const defaultContext = (): Context => ({
   openUrl: async (url) => {
     const opener =
       process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
+    const direct = directOpener(process.env, opener);
+    if (direct) {
+      // In VS Code's terminal the opener gets the URL itself: see `directOpener`.
+      const code = await Bun.spawn([...direct, url], { stdio: ["ignore", "ignore", "ignore"] }).exited;
+      if (code !== 0) throw new Error(`${direct.join(" ")} exited with code ${code}`);
+      return;
+    }
     // The opener's arguments are visible to every user in `ps`, so the URL (it carries the token)
     // never goes there: the opener gets a private local page that redirects to it.
     const dir = mkdtempSync(join(tmpdir(), "envs-"));
@@ -1218,15 +1239,83 @@ export async function edit(ctx: Context, options: { ui?: boolean } = {}): Promis
   });
 }
 
-/** State the web editor shows: the normalized values plus the worktree names. */
+/**
+ * The worktree that contains `cwd` (the worktree itself or any folder inside it), or undefined.
+ * Worktrees can live inside another one (`/repo/workspaces/tar` inside `/repo`): the deepest wins.
+ * Paths are compared as given; resolve symlinks first (see {@link currentWorktree}).
+ */
+export function worktreeContaining(cwd: string, worktrees: Worktree[]): string | undefined {
+  const inside = (path: string) => cwd === path || cwd.startsWith(path.endsWith(sep) ? path : path + sep);
+  return worktrees
+    .filter(({ path }) => inside(path))
+    .sort((a, b) => b.path.length - a.path.length)[0]?.name;
+}
+
+/** The worktree `cwd` is in, comparing real paths (a symlinked folder or `/tmp` on macOS still matches). */
+export async function currentWorktree(cwd: string, worktrees: Worktree[]): Promise<string | undefined> {
+  const real = (path: string) => realpath(path).catch(() => path);
+  const resolved = await Promise.all(worktrees.map(async ({ name, path }) => ({ name, path: await real(path) })));
+  return worktreeContaining(await real(cwd), resolved);
+}
+
+/**
+ * State the web editor shows: the normalized values, the worktree names and `current`, the worktree
+ * the command was run from (the editor opens on its page; absent when the folder is in none).
+ */
 export async function loadUiState(ctx: Context) {
   const read = await readValues(ctx);
   if (!read) throw new Error("Run `envs init` first.");
+  const listed = await listWorktrees(ctx.cwd);
   // The main workspace comes first, the rest in natural order (fix-2 before fix-10).
-  const [main, ...others] = (await listWorktrees(ctx.cwd)).map(({ name }) => name);
+  const [main, ...others] = listed.map(({ name }) => name);
   others.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const worktrees = main === undefined ? [] : [main, ...others];
-  return { ...normalizeValues(read.values), worktrees, version: valuesVersion(await Bun.file(read.path).text()) };
+  const current = await currentWorktree(ctx.cwd, listed);
+  return {
+    ...normalizeValues(read.values),
+    worktrees,
+    current,
+    version: valuesVersion(await Bun.file(read.path).text()),
+  };
+}
+
+/** Key of `.envs/config.yml` that turns on auto-save in the web editor. */
+export const AUTOSAVE_KEY = "ui.autosave";
+
+/** Settings of the web editor, kept in `.envs/config.yml` so they last across runs. */
+export interface UiSettings {
+  /** Save (and push) on its own a moment after the last change. Off unless set. */
+  autosave: boolean;
+}
+
+/** Where the editor's files live, as absolute paths: shown on its settings page. */
+export interface UiPaths {
+  /** The main workspace: the folder that holds `.envs/`. */
+  project: string;
+  values: string;
+  history: string;
+  config: string;
+}
+
+export async function loadUiSettings(ctx: Context): Promise<UiSettings & { paths: UiPaths }> {
+  const root = await findRoot(ctx.cwd);
+  const config = join(root, ".envs/config.yml");
+  return {
+    autosave: (await readConfig(config))[AUTOSAVE_KEY] === true,
+    paths: { project: root, values: join(root, ".envs/values.yml"), history: join(root, ".envs/history.ndjson"), config },
+  };
+}
+
+/** Writes the web editor's settings to `.envs/config.yml` (the same file `envs config` manages). */
+export async function saveUiSettings(ctx: Context, settings: UiSettings): Promise<UiSettings> {
+  const root = await findRoot(ctx.cwd);
+  const path = join(root, ".envs/config.yml");
+  return await withLock(root, async () => {
+    const current = await readConfig(path);
+    current[AUTOSAVE_KEY] = settings.autosave;
+    await writeConfig(root, path, current);
+    return { autosave: settings.autosave };
+  });
 }
 
 /** History the web editor shows: whether it is on and its points, oldest first (none while it is off). */
