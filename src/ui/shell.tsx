@@ -25,10 +25,10 @@ export interface SaveResult {
 export type ActionResult = SaveResult & { action: "save" | "restore" };
 
 /** The badge next to Save: failure first, then unsaved changes, then the last success. */
-export function statusOf(busy: boolean, dirty: boolean, result?: ActionResult) {
+export function statusOf(busy: boolean, dirty: boolean, result?: ActionResult, autosave = false) {
   if (busy) return undefined;
   if (result && !result.ok) return { kind: "err", text: result.action === "restore" ? "Restore failed" : "Save failed" };
-  if (dirty) return { kind: "dirty", text: "Unsaved changes" };
+  if (dirty) return { kind: "dirty", text: autosave ? "Auto-saving soon" : "Unsaved changes" };
   if (result?.ok) return { kind: "ok", text: result.action === "restore" ? "Restored and pushed" : "Saved and pushed" };
   return undefined;
 }
@@ -43,30 +43,33 @@ export function Header(props: {
   dirty: boolean;
   result?: ActionResult;
   history?: HistoryState;
+  autosave?: boolean;
   onSave(): void;
 }) {
-  const { route, worktree, current, busy, saving, dirty, result, history, onSave } = props;
-  const status = statusOf(busy, dirty, result);
-  const onWorktree = route.page === "worktree";
+  const { route, worktree, current, busy, saving, dirty, result, history, autosave, onSave } = props;
+  const status = statusOf(busy, dirty, result, autosave);
   return (
     <header>
       <span className="brand"><Logo state={busy ? "saving" : result ? (result.ok ? "saved" : "error") : "idle"} />envs<span className="dim"> / values.yml</span></span>
-      {worktree !== undefined && (
-        <nav className="pages" aria-label="Pages">
-          <a href={routeHash({ page: "worktree", worktree })} aria-current={onWorktree ? "page" : undefined} title={`Values of ${worktree} in each profile`}>
+      <nav className="pages" aria-label="Pages">
+        {worktree !== undefined && (
+          <a href={routeHash({ page: "worktree", worktree })} aria-current={route.page === "worktree" ? "page" : undefined} title={`Values of ${worktree} in each profile`}>
             {worktree === current && <span className="here" aria-hidden="true" />}
             <span className="clip">{worktree}</span>
             {worktree === current && <span className="sr-only"> (current worktree)</span>}
           </a>
-          <a href={routeHash({ page: "overview" })} aria-current={onWorktree ? undefined : "page"} title="Every worktree, a column per worktree">
-            All worktrees
-          </a>
-        </nav>
-      )}
+        )}
+        <a href={routeHash({ page: "overview" })} aria-current={route.page === "overview" ? "page" : undefined} title="Every worktree, a column per worktree">
+          All worktrees
+        </a>
+        <a href={routeHash({ page: "settings" })} aria-current={route.page === "settings" ? "page" : undefined} title="Auto-save and where the files are">
+          Settings
+        </a>
+      </nav>
       <span role="status" className={`status ${status?.kind ?? ""}`}>
         {status?.text}
       </span>
-      <button className="header-link" onClick={goToHistory} title={history?.enabled === false ? "The history is off" : "Go to the history panel"}>
+      <button className="header-link" onClick={() => goToHistory(worktree)} title={history?.enabled === false ? "The history is off" : "Go to the history panel"}>
         History
         {history?.enabled !== false && history && history.points.length > 0 && (
           <span className="count" aria-label={`${history.points.length} points`}>{history.points.length}</span>
@@ -79,10 +82,17 @@ export function Header(props: {
   );
 }
 
-/** Scrolls to the history card (below the variables) and moves focus there for keyboard and screen reader users. */
-function goToHistory() {
+/**
+ * Scrolls to the history card (below the variables) and moves focus there for keyboard and screen reader users.
+ * The settings page has no history card: it first goes back to the worktree page (or the overview).
+ */
+function goToHistory(worktree?: string, tries = 0) {
   const card = document.getElementById("history");
-  if (!card) return;
+  if (!card) {
+    if (tries === 0) location.hash = routeHash(worktree !== undefined ? { page: "worktree", worktree } : { page: "overview" });
+    if (tries < 20) setTimeout(() => goToHistory(worktree, tries + 1), 50);
+    return;
+  }
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   card.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
   document.getElementById("history-title")?.focus({ preventScroll: true });

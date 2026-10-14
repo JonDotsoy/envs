@@ -5,6 +5,7 @@ import type { HistoryState } from "./history-panel";
 import { OverviewPage } from "./overview";
 import { parseRoute, routeHash, type Route } from "./route";
 import { ActionLog, Header, HistoryCard, type ActionResult, type SaveResult, type State } from "./shell";
+import { AUTOSAVE_DELAY_MS, SettingsPage, type Settings } from "./settings-page";
 import { WorktreePage } from "./worktree-page";
 
 /** JSON with sorted keys, so two states compare equal regardless of key order. */
@@ -37,6 +38,11 @@ function App() {
   const [history, setHistory] = useState<HistoryState>();
   const [baseline, setBaseline] = useState("");
   const [compactChoice, setCompactChoice] = useState<boolean>();
+  const [settings, setSettings] = useState<Settings>();
+  const [settingsError, setSettingsError] = useState<string>();
+  const [savingSettings, setSavingSettings] = useState(false);
+  /** The editor's state as last saved and failed: auto-save does not retry it until something changes. */
+  const [failedSnapshot, setFailedSnapshot] = useState<string>();
 
   const load = (state: State) => {
     const rows = Object.fromEntries(Object.entries(state.profiles).map(([n, p]) => [n, toVarRows(p)]));
@@ -53,6 +59,10 @@ function App() {
   useEffect(() => {
     fetch("/api/values").then((r) => r.json() as Promise<State>).then(load);
     loadHistory();
+    fetch("/api/settings")
+      .then((r) => r.json() as Promise<Settings>)
+      .then(setSettings)
+      .catch(() => setSettingsError("Could not read the settings."));
   }, []);
 
   // The page follows the URL hash. Without one, the editor opens on the worktree it was run from.
@@ -84,7 +94,11 @@ function App() {
     [uses, vars],
   );
 
-  const dirty = loaded !== undefined && snapshot(uses, vars, loaded.worktrees) !== baseline;
+  const editorSnapshot = loaded === undefined ? "" : snapshot(uses, vars, loaded.worktrees);
+  const dirty = loaded !== undefined && editorSnapshot !== baseline;
+  // What the editor holds right now, for a save that finishes after more edits were made.
+  const latest = useRef({ snapshot: editorSnapshot });
+  latest.current.snapshot = editorSnapshot;
   // Warn before closing the tab with unsaved changes; Ctrl/Cmd+S saves.
   const saveRef = useRef<() => void>(() => {});
   useEffect(() => {
@@ -104,6 +118,15 @@ function App() {
     return () => removeEventListener("keydown", onKey);
   }, []);
 
+  // Auto-save: a moment after the last change, save what the editor holds (unless that very state just failed).
+  const busyNow = saving || restoring;
+  const autosave = settings?.autosave === true;
+  useEffect(() => {
+    if (!autosave || !dirty || busyNow || editorSnapshot === failedSnapshot) return;
+    const timer = setTimeout(() => saveRef.current(), AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [autosave, dirty, busyNow, editorSnapshot, failedSnapshot]);
+
   if (!loaded) return <main className="loading" aria-busy="true">Loading…</main>;
 
   const profileNames = Object.keys(vars);
@@ -119,6 +142,7 @@ function App() {
   const save = async () => {
     if (busy) return;
     setSaving(true);
+    const sent = editorSnapshot;
     try {
       const profiles = Object.fromEntries(
         profileNames.map((n) => [n, fromVarRows(vars[n] ?? [])]),
@@ -130,9 +154,19 @@ function App() {
       });
       const body = (await res.json()) as SaveResult & { error?: string };
       setResult(res.ok ? { ...body, action: "save" } : { action: "save", ok: false, created: [], logs: body.logs ?? [], errors: body.errors ?? [body.error ?? "Save failed"] });
-      if (res.ok) load((await (await fetch("/api/values")).json()) as State);
+      setFailedSnapshot(res.ok ? undefined : sent);
+      if (res.ok) {
+        const state = (await (await fetch("/api/values")).json()) as State;
+        if (latest.current.snapshot === sent) load(state);
+        else {
+          // Edits made while saving stay in the editor (still unsaved); only the saved state becomes the baseline.
+          setLoaded(state);
+          setBaseline(snapshot(state.uses, Object.fromEntries(Object.entries(state.profiles).map(([n, p]) => [n, toVarRows(p)])), state.worktrees));
+        }
+      }
     } catch (error) {
       setResult({ action: "save", ok: false, created: [], logs: [], errors: [String(error)] });
+      setFailedSnapshot(sent);
     } finally {
       setSaving(false);
       loadHistory();
@@ -163,6 +197,26 @@ function App() {
 
   saveRef.current = save;
 
+  /** Turns auto-save on or off on the server (it is kept in .envs/config.yml). */
+  const setAutosave = async (on: boolean) => {
+    setSavingSettings(true);
+    setSettingsError(undefined);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ autosave: on }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const saved = (await res.json()) as Pick<Settings, "autosave">;
+      setSettings((s) => s && { ...s, autosave: saved.autosave });
+    } catch {
+      setSettingsError("Could not change auto-save.");
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   return (
     <>
       <Header
@@ -174,10 +228,13 @@ function App() {
         dirty={dirty}
         result={result}
         history={history}
+        autosave={autosave}
         onSave={save}
       />
       <main>
-        {route.page === "worktree" ? (
+        {route.page === "settings" ? (
+          <SettingsPage settings={settings} error={settingsError} onAutosave={setAutosave} savingSettings={savingSettings} />
+        ) : route.page === "worktree" ? (
           <WorktreePage
             key={route.worktree}
             worktree={route.worktree}
@@ -214,7 +271,7 @@ function App() {
             }}
           />
         )}
-        <HistoryCard history={history} current={editorValues} dirty={dirty} busy={busy} onRestore={restorePoint} />
+        {route.page !== "settings" && <HistoryCard history={history} current={editorValues} dirty={dirty} busy={busy} onRestore={restorePoint} />}
         <ActionLog result={result} />
       </main>
     </>

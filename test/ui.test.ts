@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { realpath } from "node:fs/promises";
 import { $ } from "bun";
 import { compareStates, run, stateAfter, type Context } from "../src/envs";
 import { MAX_BODY_BYTES } from "../src/ui/server";
@@ -119,6 +120,38 @@ test("GET /api/values reports the worktree the editor was started from as `curre
       } finally {
         expect(await ui.stop()).toBe(0);
       }
+    }
+  } finally {
+    await cws.cleanup();
+  }
+});
+
+test("/api/settings reads and writes auto-save in config.yml and gives the absolute paths", async () => {
+  const cws = await createWorkspace({ worktrees: ["one"] });
+  try {
+    const ui = await startUi(cws.worktrees.one!);
+    try {
+      const root = await realpath(cws.main);
+      const settings = (await (await fetch(`${ui.url}/api/settings`)).json()) as any;
+      // Off unless set; every path is in the main workspace, even when run from a worktree.
+      expect(settings.autosave).toBe(false);
+      expect(await realpath(settings.paths.project)).toBe(root);
+      for (const [key, file] of [["values", "values.yml"], ["history", "history.ndjson"], ["config", "config.yml"]] as const) {
+        expect(settings.paths[key]).toBe(join(settings.paths.project, ".envs", file));
+      }
+
+      const put = (body: unknown) =>
+        fetch(`${ui.url}/api/settings`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      expect((await put({ autosave: "yes" })).status).toBe(400);
+      expect((await put({})).status).toBe(400);
+      const on = await put({ autosave: true });
+      expect(on.status).toBe(200);
+      expect(await on.json()).toEqual({ autosave: true });
+      expect(await Bun.file(join(cws.main, ".envs/config.yml")).text()).toContain("ui.autosave: true");
+      expect(((await (await fetch(`${ui.url}/api/settings`)).json()) as any).autosave).toBe(true);
+      expect(await (await put({ autosave: false })).json()).toEqual({ autosave: false });
+    } finally {
+      expect(await ui.stop()).toBe(0);
     }
   } finally {
     await cws.cleanup();

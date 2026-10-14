@@ -1,6 +1,6 @@
 # Editor web (`envs edit --ui`)
 
-Interfaz web local para editar `values.yml`. Tiene dos vistas: la [página del worktree](#página-del-worktree), centrada en un worktree y sus valores en cada perfil, y la [vista general](#vista-general-all-worktrees), con todos los worktrees. Este documento recorre cada acción con una captura de pantalla de la aplicación. Para el resumen de comandos, consulta el [README](../README.md); para el historial en detalle, [history.md](history.md).
+Interfaz web local para editar `values.yml`. Tiene tres vistas: la [página del worktree](#página-del-worktree), centrada en un worktree y sus valores en cada perfil; la [vista general](#vista-general-all-worktrees), con todos los worktrees, y la de [configuración](#configuración), con el auto guardado y las rutas de los archivos. Este documento recorre cada acción con una captura de pantalla de la aplicación. Para el resumen de comandos, consulta el [README](../README.md); para el historial en detalle, [history.md](history.md).
 
 Las capturas usan un proyecto de ejemplo con tres worktrees (`main`, `feature-checkout` y `fix-login`) y las variables `DATABASE_URL`, `PORT`, `LOG_LEVEL`, `DEBUG` y `FEATURE_CHECKOUT`.
 
@@ -32,10 +32,11 @@ Además, el servidor nunca responde a las peticiones previas CORS, de modo que n
 | --- | --- | --- |
 | [Página del worktree](#página-del-worktree) | `#/worktree/<nombre>` | Al ejecutar `envs edit --ui` dentro de un worktree (en su carpeta o en cualquier subcarpeta, por ejemplo `/foo/workspaces/tar`): se abre la de **ese worktree**. |
 | [Vista general](#vista-general-all-worktrees) | `#/overview` | Al ejecutar el comando fuera de todo worktree, o desde la pestaña **All worktrees**. |
+| [Configuración](#configuración) | `#/settings` | Desde la pestaña **Settings**. |
 
-El encabezado muestra las dos vistas como pestañas: la del worktree (con un cuadrado violeta si es desde donde ejecutaste el comando) y **All worktrees**. En la vista general, el nombre de cada worktree abre su página, y en la página del worktree **Switch to** pasa a otro. La vista queda en la dirección, así que recargar o el botón Atrás del navegador la conservan; un nombre desconocido en la dirección vuelve a la página del worktree actual o, si no hay, a la vista general. Para saber desde qué worktree se ejecutó el comando, el editor usa el campo `current` de `GET /api/values` (ver [Notas](#notas)).
+El encabezado muestra las vistas como pestañas: la del worktree (con un cuadrado violeta si es desde donde ejecutaste el comando), **All worktrees** y **Settings**. En la vista general, el nombre de cada worktree abre su página, y en la página del worktree **Switch to** pasa a otro. La vista queda en la dirección, así que recargar o el botón Atrás del navegador la conservan; un nombre desconocido en la dirección vuelve a la página del worktree actual o, si no hay, a la vista general. Para saber desde qué worktree se ejecutó el comando, el editor usa el campo `current` de `GET /api/values` (ver [Notas](#notas)).
 
-Ambas vistas comparten el encabezado (estado, **History**, **Save**), el panel del historial y el registro del `push`: los cambios sin guardar se conservan al pasar de una vista a otra y **Save** guarda los de las dos.
+Las tres comparten el encabezado (estado, **History**, **Save**) y el registro del `push`; la página del worktree y la vista general también muestran el panel del historial (desde **Settings**, el botón **History** vuelve a la página del worktree y baja al panel). Los cambios sin guardar se conservan al pasar de una vista a otra y **Save** guarda todos.
 
 ## Página del worktree
 
@@ -118,6 +119,15 @@ Los números y booleanos conservan su tipo: guardar `3000` sin tocarlo no genera
 
 Si `values.yml` cambió después de abrir el editor (otro comando o editor lo guardó), Save responde `409` y no guarda nada, para no pisar ese cambio: recarga el editor y aplica de nuevo tus cambios. Un nombre de variable inválido o un valor con salto de línea también se rechaza antes de guardar.
 
+## Configuración
+
+![Página de configuración con el auto guardado activado](assets/images/ui/ui-18-settings.png)
+
+La pestaña **Settings** abre una página con solo dos tarjetas:
+
+- **Auto-save:** un interruptor que activa el auto guardado. Activado, el editor guarda solo 1,5 segundos después del último cambio, igual que **Save**: escribe `values.yml`, ejecuta `push` sobre los `.env` y agrega un punto al historial (así que una sesión de edición deja un punto por cada pausa). Mientras espera, el encabezado muestra **Auto-saving soon**. Si un guardado falla (por ejemplo un nombre de variable inválido o un `409` porque `values.yml` cambió por fuera), no se reintenta hasta que cambies algo. Lo que escribas mientras se guarda queda en el editor y se guarda en la siguiente pausa. Está desactivado por defecto y se guarda en `.envs/config.yml` como `ui.autosave`, así que vale para las próximas ejecuciones; equivale a `envs config set ui.autosave true`.
+- **Where the files are:** las rutas absolutas en el sistema del proyecto (el workspace principal, que tiene la carpeta `.envs/`), de `values.yml`, del historial (`history.ndjson`) y de `config.yml`, cada una con un botón **Copy**. Son las mismas sin importar desde qué worktree ejecutes el comando, porque todos comparten `.envs/`.
+
 ## Historial
 
 El panel **History** lista los puntos de `.envs/history.ndjson`, del más nuevo al más antiguo, con su hash corto, fecha y número de cambios. Las etiquetas indican el punto `latest`, el `initial`, el que coincide con lo que hay en el editor (`in editor`) y los puntos de resincronización (`external`).
@@ -169,5 +179,5 @@ Un punto de [resincronización](history.md#puntos-de-resincronización) lleva la
 ## Notas
 
 - Con el historial desactivado (`envs config set history false`), el panel muestra un mensaje y no ofrece restablecer.
-- El servidor solo escucha en `127.0.0.1`, exige el token en todas las rutas (ver «Acceso al servidor») y expone `GET/PUT /api/values`, `GET /api/history` y `POST /api/restore`. `GET /api/values` incluye `current`, el worktree desde el que se ejecutó el comando (ausente si la carpeta no está en ninguno).
+- El servidor solo escucha en `127.0.0.1`, exige el token en todas las rutas (ver «Acceso al servidor») y expone `GET/PUT /api/values`, `GET /api/history`, `POST /api/restore` y `GET/PUT /api/settings` (el auto guardado y las rutas absolutas). `GET /api/values` incluye `current`, el worktree desde el que se ejecutó el comando (ausente si la carpeta no está en ninguno).
 - Las capturas se generaron con Chromium (Playwright) sobre un proyecto de ejemplo; las fechas y hashes varían en cada ejecución. La de muchos perfiles usa diez perfiles (`default`, `staging`, `production`, `qa`, `dev-local`, `perf-testing`, `demo`, `sandbox`, `eu-west` y `us-east-backup`).

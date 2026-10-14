@@ -14,6 +14,7 @@ describe("the editor's pages in the URL hash", () => {
   test("the hash names the page, whatever the current worktree", () => {
     expect(parseRoute("#/overview", worktrees, "fix-login")).toEqual({ page: "overview" });
     expect(parseRoute("#/worktree/main", worktrees, "fix-login")).toEqual({ page: "worktree", worktree: "main" });
+    expect(parseRoute("#/settings", worktrees, "fix-login")).toEqual({ page: "settings" });
   });
 
   test("worktree names with / round-trip through the hash", () => {
@@ -21,6 +22,7 @@ describe("the editor's pages in the URL hash", () => {
     expect(hash).toBe("#/worktree/feature%2Fcheckout");
     expect(parseRoute(hash, worktrees)).toEqual({ page: "worktree", worktree: "feature/checkout" });
     expect(routeHash({ page: "overview" })).toBe("#/overview");
+    expect(routeHash({ page: "settings" })).toBe("#/settings");
   });
 
   test("an unknown worktree or a malformed hash falls back", () => {

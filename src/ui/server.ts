@@ -2,9 +2,11 @@ import {
   findRoot,
   historyEnabled,
   loadUiHistory,
+  loadUiSettings,
   loadUiState,
   readHistoryPoints,
   restore,
+  saveUiSettings,
   saveUiState,
   type Context,
   type NormalizedValues,
@@ -32,6 +34,12 @@ function parseBody(body: unknown): { values: NormalizedValues; base?: string } |
   }
   if (body.version !== undefined && typeof body.version !== "string") return;
   return { values: body as unknown as NormalizedValues, ...(body.version !== undefined && { base: body.version }) };
+}
+
+/** Validates the JSON body of a settings request: `{autosave}` with a boolean. */
+function parseSettingsBody(body: unknown): { autosave: boolean } | undefined {
+  if (!isRecord(body) || typeof body.autosave !== "boolean") return;
+  return { autosave: body.autosave };
 }
 
 /** Validates the JSON body of a restore request: `{hash}` with a whole point hash (12 hex characters). */
@@ -183,6 +191,15 @@ export async function serveUi(ctx: Context): Promise<number> {
       },
       "/api/history": {
         GET: guard(async () => Response.json(await loadUiHistory(ctx))),
+      },
+      // The editor's own settings (auto-save), kept in .envs/config.yml.
+      "/api/settings": {
+        GET: guard(async () => Response.json(await loadUiSettings(ctx))),
+        PUT: guard(async (req) => {
+          const settings = parseSettingsBody(await req.json().catch(() => undefined));
+          if (!settings) return Response.json({ error: "Invalid settings" }, { status: 400 });
+          return Response.json(await saveUiSettings(ctx, settings));
+        }),
       },
       // Restores values.yml to the state after a point: a new point is appended, none is removed.
       "/api/restore": {

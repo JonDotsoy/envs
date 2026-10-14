@@ -1279,6 +1279,45 @@ export async function loadUiState(ctx: Context) {
   };
 }
 
+/** Key of `.envs/config.yml` that turns on auto-save in the web editor. */
+export const AUTOSAVE_KEY = "ui.autosave";
+
+/** Settings of the web editor, kept in `.envs/config.yml` so they last across runs. */
+export interface UiSettings {
+  /** Save (and push) on its own a moment after the last change. Off unless set. */
+  autosave: boolean;
+}
+
+/** Where the editor's files live, as absolute paths: shown on its settings page. */
+export interface UiPaths {
+  /** The main workspace: the folder that holds `.envs/`. */
+  project: string;
+  values: string;
+  history: string;
+  config: string;
+}
+
+export async function loadUiSettings(ctx: Context): Promise<UiSettings & { paths: UiPaths }> {
+  const root = await findRoot(ctx.cwd);
+  const config = join(root, ".envs/config.yml");
+  return {
+    autosave: (await readConfig(config))[AUTOSAVE_KEY] === true,
+    paths: { project: root, values: join(root, ".envs/values.yml"), history: join(root, ".envs/history.ndjson"), config },
+  };
+}
+
+/** Writes the web editor's settings to `.envs/config.yml` (the same file `envs config` manages). */
+export async function saveUiSettings(ctx: Context, settings: UiSettings): Promise<UiSettings> {
+  const root = await findRoot(ctx.cwd);
+  const path = join(root, ".envs/config.yml");
+  return await withLock(root, async () => {
+    const current = await readConfig(path);
+    current[AUTOSAVE_KEY] = settings.autosave;
+    await writeConfig(root, path, current);
+    return { autosave: settings.autosave };
+  });
+}
+
 /** History the web editor shows: whether it is on and its points, oldest first (none while it is off). */
 export async function loadUiHistory(
   ctx: Context,

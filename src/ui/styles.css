@@ -505,3 +505,27 @@ input[aria-invalid="true"], input[aria-invalid="true"]:focus-visible { border-co
 .use-profile:hover .use-hint, .use-profile:focus-visible .use-hint { opacity: 1; }
 .use-profile:hover, .use-profile:focus-visible { color: var(--color-graphite); }
 .use-profile:focus-visible { outline: 2px solid var(--color-lavender); outline-offset: 2px; border-radius: 4px; }
+
+/* Settings page: one row per setting (text on the left, its switch on the right), then the paths. */
+.setting { display: flex; gap: var(--space-6); align-items: flex-start; justify-content: space-between; padding-top: var(--space-4); border-top: 1px solid var(--color-frost); }
+.setting h3 { margin: 0 0 var(--space-1); font: 500 16px/1.4 var(--font-body); color: var(--color-graphite); }
+.setting p { margin: 0; max-width: 72ch; font-size: 14px; line-height: 1.57; color: var(--color-slate-body); }
+.setting-error { margin: var(--space-3) 0 0; color: var(--color-removed); font-size: 14px; }
+button.switch-toggle { flex: none; display: inline-flex; align-items: center; gap: var(--space-2); padding: 4px 12px 4px 4px; border-radius: var(--radius-pills); font: 500 13px/1.4 var(--font-body); color: var(--color-slate-body); }
+.switch-toggle .knob { position: relative; width: 36px; height: 20px; border-radius: var(--radius-pills); background: var(--color-mist-border); transition: background 120ms; }
+.switch-toggle .knob::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-canvas); box-shadow: var(--shadow-small); transition: transform 120ms; }
+.switch-toggle[aria-checked="true"] { border-color: var(--color-lavender); background: var(--color-lilac); color: var(--color-graphite); }
+.switch-toggle[aria-checked="true"] .knob { background: var(--color-volt-violet); }
+.switch-toggle[aria-checked="true"] .knob::after { transform: translateX(16px); }
+@media (prefers-reduced-motion: reduce) { .switch-toggle .knob, .switch-toggle .knob::after { transition: none; } }
+.paths { margin: 0; }
+.path-row { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: var(--space-4); align-items: center; padding: var(--space-3) 0; border-top: 1px solid var(--color-frost); }
+.path-row dt { font: 500 14px/1.4 var(--font-body); color: var(--color-graphite); }
+.path-hint { display: block; font: 400 12px/1.4 var(--font-body); color: var(--color-steel); }
+.path-row dd { display: flex; gap: var(--space-2); align-items: center; min-width: 0; margin: 0; }
+code.path { flex: 1; min-width: 0; padding: 8px 12px; border-radius: var(--radius-inputs); background: var(--color-cloud-mist); font: 400 13px/1.5 var(--font-mono); color: var(--color-graphite); overflow-wrap: anywhere; user-select: all; }
+button.copy { flex: none; padding: 6px 12px; font-size: 13px; }
+@media (max-width: 720px) {
+  .setting { flex-direction: column; gap: var(--space-3); }
+  .path-row { grid-template-columns: 1fr; gap: var(--space-2); }
+}
