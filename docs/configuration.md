@@ -31,6 +31,7 @@ ui.autosave: true
 | --- | --- | --- | --- |
 | `history` | booleano | `true` | Con `false` se deja de registrar el historial (`.envs/history.ndjson`); `envs restore` se niega a ejecutarse mientras esté apagado. Se considera activo salvo que valga exactamente `false`. Ver [history.md](history.md). |
 | `history.secrets` | booleano | `false` | Con `true` el historial guarda los secretos en claro, lo que permite restablecerlos exactamente. Por defecto solo guarda su huella (fingerprint). Ver [history.md](history.md). |
+| `edit.ui` | booleano | `true` | Con `false`, `envs edit` (sin opciones) solo imprime la ruta de `values.yml` y no abre nada; `envs edit --ui` sigue levantando el editor web y `envs edit --code` abre VS Code. Se considera activo salvo que valga exactamente `false`. Ver [ui.md](ui.md). |
 | `ui.autosave` | booleano | `false` | Con `true`, el editor web (`envs edit --ui`) guarda un momento después de cada cambio. También se cambia desde la página **Settings** del editor, que escribe esta misma clave. Ver [ui.md](ui.md). |
 
 Cualquier otra clave se almacena sin error, pero `envs` no la usa.

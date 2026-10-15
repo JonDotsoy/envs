@@ -243,7 +243,7 @@ describe("data loss and orphan variables", () => {
 
   test("H05 (fixed) a cancelled envs edit (editor exits non-zero) leaves values.yml as it was", async () => {
     const d = await demo();
-    const { code } = await d.cmd(["edit"], {
+    const { code } = await d.cmd(["edit", "--code"], {
       openEditor: async (path) => {
         const values = Bun.YAML.parse(await Bun.file(path).text()) as any;
         values.profiles.default.envs.PORT.main = 9999;
@@ -302,13 +302,13 @@ describe("data loss and orphan variables", () => {
 
   test("H09 (fixed) deleting a profile: the history replay drops it too", async () => {
     const d = await demo();
-    await d.cmd(["edit"], {
+    await d.cmd(["edit", "--code"], {
       openEditor: async (path) => {
         await Bun.write(path, (await Bun.file(path).text()).trimEnd() + "\n  qa: \n    defaults: \n      LOG_LEVEL: trace\n    envs: \n      {}\n");
         return 0;
       },
     });
-    await d.cmd(["edit"], {
+    await d.cmd(["edit", "--code"], {
       openEditor: async (path) => {
         const y = Bun.YAML.parse(await Bun.file(path).text()) as any;
         delete y.profiles.qa;
@@ -322,7 +322,7 @@ describe("data loss and orphan variables", () => {
 
   test("H10 (fixed) creating an empty profile is recorded in the history", async () => {
     const d = await demo();
-    await d.cmd(["edit"], {
+    await d.cmd(["edit", "--code"], {
       openEditor: async (path) => {
         await Bun.write(path, (await Bun.file(path).text()).trimEnd() + "\n  empty: \n    defaults: \n      {}\n    envs: \n      {}\n");
         return 0;
@@ -335,7 +335,7 @@ describe("data loss and orphan variables", () => {
   // By design (a default applies to every worktree), now reported by pull instead of surprising later.
   test("H11 (reported) a default removed from one .env: pull says push writes it back, and dropping it from the defaults removes it everywhere", async () => {
     const d = await demo();
-    await d.cmd(["edit"], {
+    await d.cmd(["edit", "--code"], {
       openEditor: async (path) => {
         const values = Bun.YAML.parse(await Bun.file(path).text()) as any;
         values.profiles.default.defaults.REGION = "eu";
@@ -351,7 +351,7 @@ describe("data loss and orphan variables", () => {
     await d.cmd(["push"]);
     expect(await d.dotenv(d.login)).toContain("REGION=eu");
     // The way to drop it everywhere: remove it from the defaults; push then removes it from every .env.
-    await d.cmd(["edit"], {
+    await d.cmd(["edit", "--code"], {
       openEditor: async (path) => {
         const values = Bun.YAML.parse(await Bun.file(path).text()) as any;
         delete values.profiles.default.defaults.REGION;

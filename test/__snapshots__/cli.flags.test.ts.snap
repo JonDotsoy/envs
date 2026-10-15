@@ -200,6 +200,26 @@ exports[`rootParser ["edit","--ui"] 1`] = `
 }
 `;
 
+exports[`rootParser ["edit","--code"] 1`] = `
+{
+  "config": null,
+  "edit": [
+    "--code",
+  ],
+  "help": false,
+  "helpCommand": false,
+  "history": null,
+  "init": null,
+  "lint": null,
+  "pull": null,
+  "push": null,
+  "restore": null,
+  "use": null,
+  "version": false,
+  "versionCommand": false,
+}
+`;
+
 exports[`rootParser ["use","staging"] 1`] = `
 {
   "config": null,
@@ -285,6 +305,7 @@ exports[`rootParser ["config","set","key","value"] 1`] = `
 
 exports[`editParser [] 1`] = `
 {
+  "code": false,
   "help": false,
   "ui": false,
 }
@@ -292,6 +313,7 @@ exports[`editParser [] 1`] = `
 
 exports[`editParser ["-h"] 1`] = `
 {
+  "code": false,
   "help": true,
   "ui": false,
 }
@@ -299,6 +321,7 @@ exports[`editParser ["-h"] 1`] = `
 
 exports[`editParser ["--help"] 1`] = `
 {
+  "code": false,
   "help": true,
   "ui": false,
 }
@@ -306,6 +329,7 @@ exports[`editParser ["--help"] 1`] = `
 
 exports[`editParser ["--ui"] 1`] = `
 {
+  "code": false,
   "help": false,
   "ui": true,
 }
@@ -313,6 +337,7 @@ exports[`editParser ["--ui"] 1`] = `
 
 exports[`editParser ["--ui","--help"] 1`] = `
 {
+  "code": false,
   "help": true,
   "ui": true,
 }
@@ -603,6 +628,7 @@ exports[`parser ["lint"] 1`] = `
 exports[`parser ["edit"] 1`] = `
 {
   "action": "edit",
+  "code": false,
   "help": false,
   "ok": true,
   "ui": false,
@@ -612,6 +638,7 @@ exports[`parser ["edit"] 1`] = `
 exports[`parser ["edit","--help"] 1`] = `
 {
   "action": "edit",
+  "code": false,
   "help": true,
   "ok": true,
   "ui": false,
@@ -621,6 +648,7 @@ exports[`parser ["edit","--help"] 1`] = `
 exports[`parser ["edit","--ui"] 1`] = `
 {
   "action": "edit",
+  "code": false,
   "help": false,
   "ok": true,
   "ui": true,
@@ -630,9 +658,20 @@ exports[`parser ["edit","--ui"] 1`] = `
 exports[`parser ["edit","--ui","-h"] 1`] = `
 {
   "action": "edit",
+  "code": false,
   "help": true,
   "ok": true,
   "ui": true,
+}
+`;
+
+exports[`parser ["edit","--code"] 1`] = `
+{
+  "action": "edit",
+  "code": true,
+  "help": false,
+  "ok": true,
+  "ui": false,
 }
 `;
 

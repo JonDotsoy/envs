@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- `envs edit` now prints the path of `values.yml` and serves the web editor (like `--ui`) instead of opening VS Code. `envs edit --ui` also prints the path, and the new `envs edit --code` opens `values.yml` with `code -w` and pushes when it closes (the old behavior). The new config key `edit.ui` (default `true`) set to `false` makes a plain `envs edit` only print the path and open nothing.
+
 ### Fixed
 
 - `envs edit --ui` failed with `ENOENT: scandir '.../bin/ui'` when run from the single-file `envs.js` (Homebrew): the web editor is now embedded in the bundle instead of read from a `ui/` folder next to it.
