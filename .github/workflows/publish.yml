@@ -160,7 +160,8 @@ jobs:
             echo
             echo "$notes"
             echo
-            echo "## Homebrew"
+            echo "<details>"
+            echo "<summary><strong>Install with Homebrew</strong></summary>"
             echo
             echo "\`envs.js\` is a single-file bundle that runs on Bun. Save this formula as \`Formula/envs.rb\` in a tap and install it to get the \`envs\` command:"
             echo
@@ -186,6 +187,8 @@ jobs:
           end
           RUBY
             echo '```'
+            echo
+            echo "</details>"
           } > release-notes.md
           args=()
           if [ "$TAG" != "latest" ]; then args+=(--prerelease); fi
