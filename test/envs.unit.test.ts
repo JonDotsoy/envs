@@ -296,7 +296,7 @@ describe("commands (in-process)", () => {
         return 0;
       },
     });
-    expect(await run(["edit"], ctx)).toBe(0);
+    expect(await run(["edit", "--code"], ctx)).toBe(0);
     expect(opened).toEqual([valuesPath()]);
     expect(await Bun.file(join(ws.main, ".envs/.gitignore")).text()).toBe(
       "*\n",
@@ -481,7 +481,7 @@ describe("commands (in-process)", () => {
         return 0;
       },
     });
-    expect(await run(["edit"], ctx)).toBe(0);
+    expect(await run(["edit", "--code"], ctx)).toBe(0);
     expect(opened).toEqual([valuesPath()]);
     expect(await Bun.file(join(ws.main, ".env")).text()).toBe("E=after\n");
   });
@@ -495,7 +495,7 @@ describe("commands (in-process)", () => {
         return 0;
       },
     });
-    expect(await run(["edit"], ctx)).toBe(0);
+    expect(await run(["edit", "--code"], ctx)).toBe(0);
     expect(seen.startsWith("# ")).toBe(true);
     expect(seen).toContain("Ctrl+C");
     expect(await Bun.file(valuesPath()).text()).not.toContain("Ctrl+C");
@@ -509,7 +509,7 @@ describe("commands (in-process)", () => {
         return 3;
       },
     });
-    expect(await run(["edit"], ctx)).toBe(3);
+    expect(await run(["edit", "--code"], ctx)).toBe(3);
     expect(logs.some((l) => l.includes("↻"))).toBe(false);
     expect(await Bun.file(join(ws.main, ".env")).text()).toBe("E=keep\n");
   });
@@ -581,7 +581,7 @@ describe("edit creates .envs/ in the main repo", () => {
           return 0;
         },
       });
-      expect(await run(["edit"], ctx)).toBe(0);
+      expect(await run(["edit", "--code"], ctx)).toBe(0);
       const valuesPath = join(ws.main, ".envs/values.yml");
       expect(opened).toEqual([valuesPath]);
       expect(await Bun.file(valuesPath).exists()).toBe(true);
@@ -626,7 +626,7 @@ describe("profiles", () => {
         return code;
       },
     });
-    return { code: await run(["edit"], ctx), logs };
+    return { code: await run(["edit", "--code"], ctx), logs };
   };
 
   test("edit writes the published schema modeline at the top of values.yml", async () => {
@@ -859,7 +859,7 @@ describe("history on the first edit of a project", () => {
     await Bun.write(join(ws.worktrees["feature-x"]!, ".env"), "LOG=info\nPORT=3001\n");
 
     const { ctx } = testContext(ws.main, { now });
-    expect(await run(["edit"], ctx)).toBe(0);
+    expect(await run(["edit", "--code"], ctx)).toBe(0);
 
     const history = await readHistory();
     expect(history).toHaveLength(1);
@@ -880,7 +880,7 @@ describe("history on the first edit of a project", () => {
         return 0;
       },
     });
-    expect(await run(["edit"], ctx)).toBe(0);
+    expect(await run(["edit", "--code"], ctx)).toBe(0);
 
     const history = await readHistory();
     expect(history).toHaveLength(2);
@@ -896,7 +896,7 @@ describe("history on the first edit of a project", () => {
     await Bun.write(join(ws.worktrees["feature-x"]!, ".env"), "LOG=info\nPORT=3002\n");
 
     const { ctx } = testContext(ws.main, { now });
-    expect(await run(["edit"], ctx)).toBe(0);
+    expect(await run(["edit", "--code"], ctx)).toBe(0);
 
     const history = await readHistory();
     expect(history).toHaveLength(before.length + 1);
@@ -967,7 +967,7 @@ describe("history on the first edit of a project", () => {
     try {
       await Bun.write(join(dir.main, ".env"), "A=1\n");
       expect(await run(["config", "set", "history", "false"], testContext(dir.main).ctx)).toBe(0);
-      expect(await run(["edit"], testContext(dir.main).ctx)).toBe(0);
+      expect(await run(["edit", "--code"], testContext(dir.main).ctx)).toBe(0);
       expect(await Bun.file(join(dir.main, ".envs/history.ndjson")).exists()).toBe(false);
     } finally {
       await dir.cleanup();

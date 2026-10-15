@@ -60,7 +60,7 @@ test("envs init", async () => {
   expect(await Bun.file(values).text()).toBe("FOO: bar\n");
 });
 
-test("envs edit pulls before opening and pushes after closing", async () => {
+test("envs edit --code pulls before opening and pushes after closing", async () => {
   const bin = join(import.meta.dir, "../src/bin/envs.ts");
   const dir = ws.worktrees["wt-2"]!;
   const valuesPath = join(ws.main, ".envs/values.yml");
@@ -84,7 +84,7 @@ test("envs edit pulls before opening and pushes after closing", async () => {
     await Bun.write(join(dir, ".env"), "EDIT=initial\n");
 
     // Runs from a worktree: opens values.yml of the parent workspace.
-    const result = await $`bun ${bin} edit`.cwd(dir).env(env).quiet();
+    const result = await $`bun ${bin} edit --code`.cwd(dir).env(env).quiet();
     expect(result.exitCode).toBe(0);
     expect((await Bun.file(argsFile).text()).trim()).toBe(`-w ${valuesPath}`);
     // pull ran before the editor opened the file...

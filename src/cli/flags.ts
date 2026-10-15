@@ -19,10 +19,11 @@ export const rootParser = flags({
   .program("envs")
   .describe("Manage .env files per worktree");
 
-/** `envs edit [--ui]` */
+/** `envs edit [--ui | --code]` */
 export const editParser = flags({
   help: flag("-h", "--help").boolean().describe("Show this help message"),
-  ui: flag("--ui").boolean().describe("Serve a web editor instead of opening VS Code"),
+  ui: flag("--ui").boolean().describe("Serve the web editor and print its address"),
+  code: flag("--code").boolean().describe("Open .envs/values.yml in VS Code (code -w), then push"),
 })
   .program("envs edit")
   .describe("Pull, edit .envs/values.yml, then push");
@@ -98,7 +99,7 @@ export type CliAction =
   | { action: "help" }
   | { action: "version" }
   | { action: "init" | "pull" | "push" | "lint"; help: boolean }
-  | { action: "edit"; help: boolean; ui: boolean }
+  | { action: "edit"; help: boolean; ui: boolean; code: boolean }
   | { action: "use"; help: boolean; profile: string | null }
   | { action: "restore"; help: boolean; force: boolean; hash: string | null }
   | { action: "history"; help: boolean; redact: boolean }

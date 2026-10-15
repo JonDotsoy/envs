@@ -38,8 +38,9 @@ Commands:
   pull    Read each worktree's .env and write it into .envs/values.yml
   push    Write defaults and .envs/values.yml into the .env of each worktree
   lint    Warn about insecure values and unprotected secret files
-  edit    Pull, open .envs/values.yml in VS Code (code -w), then push
-          With --ui, serve a web editor instead; its Save button pushes
+  edit    Pull, then serve the web editor (config edit.ui false: only print the path of .envs/values.yml)
+          --ui   always serve the web editor; prints the path of values.yml and its address
+          --code open .envs/values.yml in VS Code (code -w), then push
   use     Select the profile of the current worktree (envs use <profile>), or list them
   restore Restore values.yml to the state after a history point (envs restore <hash> [--force]), adding a new point
   history Manage the history (history redact: remove secrets in clear from an existing history)
@@ -1198,12 +1199,21 @@ export async function lint(ctx: Context): Promise<number> {
   return 1;
 }
 
-export async function edit(ctx: Context, options: { ui?: boolean } = {}): Promise<number> {
-  const valuesPath = join(await findRoot(ctx.cwd), ".envs/values.yml");
+export async function edit(ctx: Context, options: { ui?: boolean; code?: boolean } = {}): Promise<number> {
+  if (options.ui && options.code) {
+    ctx.error("Use either --ui or --code, not both.");
+    return 1;
+  }
+  const root = await findRoot(ctx.cwd);
+  const valuesPath = join(root, ".envs/values.yml");
   if (!(await Bun.file(valuesPath).exists())) await init(ctx);
   const pulled = await pull(ctx);
   if (pulled !== 0) return pulled;
-  if (options.ui) {
+  if (!options.code) {
+    // Plain `envs edit` serves the web editor unless `envs config set edit.ui false` turned that off.
+    const serve = options.ui || (await readConfig(join(root, ".envs/config.yml")))[EDIT_UI_KEY] !== false;
+    ctx.log(valuesPath);
+    if (!serve) return 0;
     const { serveUi } = await import("./ui/server");
     return await serveUi(ctx);
   }
@@ -1278,6 +1288,9 @@ export async function loadUiState(ctx: Context) {
     version: valuesVersion(await Bun.file(read.path).text()),
   };
 }
+
+/** Key of `.envs/config.yml` that makes a plain `envs edit` serve the web editor; on unless set to false. */
+export const EDIT_UI_KEY = "edit.ui";
 
 /** Key of `.envs/config.yml` that turns on auto-save in the web editor. */
 export const AUTOSAVE_KEY = "ui.autosave";
@@ -1449,7 +1462,7 @@ async function dispatch(args: string[], ctx: Context): Promise<number> {
     case "lint":
       return await lint(ctx);
     case "edit":
-      return await edit(ctx, { ui: parsed.ui });
+      return await edit(ctx, { ui: parsed.ui, code: parsed.code });
     case "use":
       return await use(ctx, parsed.profile ?? undefined);
     case "history":

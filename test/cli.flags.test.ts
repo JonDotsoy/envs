@@ -14,6 +14,7 @@ describe("rootParser", () => {
     ["lint"],
     ["edit"],
     ["edit", "--ui"],
+    ["edit", "--code"],
     ["use", "staging"],
     ["restore", "abc123", "--force"],
     ["history", "redact"],
@@ -83,7 +84,7 @@ describe("parser", () => {
   const cases: string[][] = [
     [], ["help"], ["-h"], ["--help"], ["nope"],
     ["init"], ["init", "--help"], ["pull"], ["pull", "-h"], ["push"], ["lint"],
-    ["edit"], ["edit", "--help"], ["edit", "--ui"], ["edit", "--ui", "-h"],
+    ["edit"], ["edit", "--help"], ["edit", "--ui"], ["edit", "--ui", "-h"], ["edit", "--code"],
     ["use"], ["use", "staging"], ["use", "--help"],
     ["restore"], ["restore", "abc123"], ["restore", "abc123", "--force"], ["restore", "--help"],
     ["history"], ["history", "redact"], ["history", "--help"],

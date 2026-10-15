@@ -15,7 +15,9 @@ Resumen de las funcionalidades de `@jondotsoy/envs`. Para el detalle de uso, con
 | --- | --- |
 | `envs pull` | Recoge los `.env` existentes y los escribe en `values.yml`. |
 | `envs push` | Distribuye `values.yml` a los `.env` de cada worktree. |
-| `envs edit` | Ejecuta `init` (si hace falta) y `pull`, abre el editor y al cerrarlo ejecuta `push`. |
+| `envs edit` | Ejecuta `init` (si hace falta) y `pull`, imprime la ruta de `values.yml` y levanta el editor web (como `--ui`); con `edit.ui` en `false` solo imprime la ruta. |
+| `envs edit --ui` | Siempre imprime la ruta de `values.yml` y levanta el editor web, imprimiendo su dirección. |
+| `envs edit --code` | Abre `values.yml` con `code -w` y al cerrarlo ejecuta `push`. |
 | `envs use [profile]` | Cambia el perfil del worktree actual y lo sincroniza; sin argumentos lista el perfil de cada worktree. |
 | `envs restore <hash> [--force]` | Restablece `values.yml` al estado de un punto del historial, agrega un punto nuevo y sincroniza. No borra puntos. Se niega si la cadena de hashes está rota, salvo con `--force`. |
 | `envs config set <clave> <valor>` / `get [clave]` / `delete <clave>` | Gestiona la configuración guardada en `.envs/config.yml`. |
@@ -27,8 +29,8 @@ Resumen de las funcionalidades de `@jondotsoy/envs`. Para el detalle de uso, con
 
 ## Editores
 
-- **VS Code** (`envs edit`): abre `values.yml` con `code -w`; si el editor falla, no se hace `push`.
-- **Editor web** (`envs edit --ui`): servidor local (`127.0.0.1`, puerto aleatorio) con una interfaz React para perfiles, valores por defecto y valores por worktree. El botón **Save** guarda y hace `push`. La dirección que imprime lleva un token de **un solo uso** (el navegador lo cambia por una cookie de sesión; al usarlo se imprime una dirección nueva) que no aparece en `ps`; si no se puede abrir el navegador, se imprime la dirección para abrirla a mano (ver [ui.md](ui.md)). Ejecutado dentro de un worktree se abre en la página de ese worktree, con su perfil y sus valores en cada perfil; **All worktrees** muestra la vista general. **Settings** activa el auto guardado y muestra las rutas absolutas del proyecto, `values.yml`, el historial y `config.yml`.
+- **VS Code** (`envs edit --code`): abre `values.yml` con `code -w`; si el editor falla, no se hace `push`.
+- **Editor web** (`envs edit --ui`, y también `envs edit` mientras `edit.ui` no sea `false`; con `edit.ui` en `false`, `envs edit` solo imprime la ruta de `values.yml` y no abre nada): servidor local (`127.0.0.1`, puerto aleatorio) con una interfaz React para perfiles, valores por defecto y valores por worktree. El botón **Save** guarda y hace `push`. La dirección que imprime lleva un token de **un solo uso** (el navegador lo cambia por una cookie de sesión; al usarlo se imprime una dirección nueva) que no aparece en `ps`; si no se puede abrir el navegador, se imprime la dirección para abrirla a mano (ver [ui.md](ui.md)). Ejecutado dentro de un worktree se abre en la página de ese worktree, con su perfil y sus valores en cada perfil; **All worktrees** muestra la vista general. **Settings** activa el auto guardado y muestra las rutas absolutas del proyecto, `values.yml`, el historial y `config.yml`.
 - **Panel History** del editor web: lista los puntos del historial (el más reciente primero). Al pasar el mouse o hacer clic en un punto (el clic solo lo selecciona) muestra qué cambiaría respecto al editor: en rojo lo que se eliminaría y en verde lo que cambiaría o se agregaría. El botón **Restore** pide confirmación y restablece ese punto agregando uno nuevo.
 
 ![Editor web iniciado con envs edit --ui](assets/images/edit-ui.png)
