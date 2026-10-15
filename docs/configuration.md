@@ -14,6 +14,17 @@ envs config delete <clave>        # vuelve al valor por defecto
 
 Los valores `true` y `false` se guardan como booleanos, los números como números y el resto como texto. Las claves de la tabla se leen con una comparación estricta (`=== true` o `!== false`), así que un valor de otro tipo (por ejemplo, el texto `"yes"`) se trata como el valor por defecto.
 
+### Dónde se guarda
+
+Siempre en `<raíz>/.envs/config.yml`, donde `<raíz>` es el repositorio principal: dentro de un worktree `envs` sube al repo padre (`git rev-parse --git-common-dir`), así que todos los worktrees comparten la misma configuración. Fuera de git, usa el directorio actual. No se guarda en el home ni es global: cada proyecto tiene la suya.
+
+Dentro del archivo, cada clave es una entrada plana de primer nivel; el punto forma parte del nombre y **no** crea anidación. Se escriben ordenadas alfabéticamente:
+
+```yaml
+history.secrets: true
+ui.autosave: true
+```
+
 ### Claves disponibles
 
 | Clave | Tipo | Por defecto | Efecto |
