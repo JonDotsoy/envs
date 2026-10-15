@@ -13,7 +13,7 @@ import {
 } from "../envs";
 import { join } from "node:path";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { readdir } from "node:fs/promises";
+import { buildEmbeddedUi } from "./embedded" with { type: "macro" };
 
 const ANSI = /\x1b\[[0-9;]*m/g;
 
@@ -60,21 +60,22 @@ function capture(ctx: Context) {
   return { ctx: captured, logs, errors };
 }
 
-/**
- * The built front end by URL path. Running from source it is bundled in memory; the published
- * package ships it prebuilt in `ui/` next to the compiled script (see scripts/build.ts).
- */
-async function loadAssets(): Promise<Map<string, Blob>> {
+/** The built front end by URL path, embedded at bundle time (see embedded.ts). */
+const EMBEDDED_UI: Record<string, string> = buildEmbeddedUi();
+
+function loadAssets(): Map<string, Blob> {
   const assets = new Map<string, Blob>();
-  if (await Bun.file(join(import.meta.dir, "app.tsx")).exists()) {
-    const result = await Bun.build({ entrypoints: [join(import.meta.dir, "index.html")], target: "browser" });
-    if (!result.success) throw new AggregateError(result.logs, "Web editor build failed");
-    for (const out of result.outputs) assets.set(out.path.replace(/^\.\//, ""), out);
-  } else {
-    const dir = join(import.meta.dir, "ui");
-    for (const name of await readdir(dir)) assets.set(name, Bun.file(join(dir, name)));
+  for (const [path, text] of Object.entries(EMBEDDED_UI)) {
+    assets.set(path, new Blob([text], { type: contentTypeOf(path) }));
   }
   return assets;
+}
+
+function contentTypeOf(path: string): string {
+  if (path.endsWith(".js")) return "text/javascript;charset=utf-8";
+  if (path.endsWith(".css")) return "text/css;charset=utf-8";
+  if (path.endsWith(".html")) return "text/html;charset=utf-8";
+  return "application/octet-stream";
 }
 
 const TOKEN_COOKIE = "envs_token";
@@ -125,7 +126,7 @@ function presentedToken(req: Request): string | undefined {
  *   "simple" fetch cannot send without a preflight this server never allows.
  */
 export async function serveUi(ctx: Context): Promise<number> {
-  const assets = await loadAssets();
+  const assets = loadAssets();
   // The token in the URL, valid for one visit and then replaced by a new one; `session` is what that visit trades it for.
   let opened: Promise<void | (() => void)> | undefined;
   let token = randomBytes(24).toString("base64url");

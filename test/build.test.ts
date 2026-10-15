@@ -30,3 +30,38 @@ test("build creates the compiled script and a self-pointing package.json", async
   expect(result.exitCode).toBe(0);
   expect(result.stdout.toString()).toContain("Usage: envs <command>");
 });
+
+test("the single-file bundle serves the web editor with no ui/ folder next to it", async () => {
+  const solo = await mkdtemp(join(tmpdir(), "envs-solo-"));
+  const cwd = await mkdtemp(join(tmpdir(), "envs-cwd-"));
+  try {
+    await $`bun build ${join(import.meta.dir, "../src/bin/envs.ts")} --target bun --outfile ${join(solo, "envs.js")}`.quiet();
+    await $`git init -q`.cwd(cwd).quiet();
+    const proc = Bun.spawn(["bun", join(solo, "envs.js"), "edit", "--ui"], {
+      cwd,
+      env: { ...process.env, BROWSER: "true", TERM_PROGRAM: "" },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    try {
+      const reader = proc.stdout.getReader();
+      let out = "";
+      while (!/Web editor running at (\S+)/.test(out)) {
+        const { value, done } = await reader.read();
+        if (done) throw new Error(`envs exited early: ${out}`);
+        out += new TextDecoder().decode(value);
+      }
+      const url = out.match(/Web editor running at (\S+)/)![1]!;
+      const first = await fetch(url, { redirect: "manual" });
+      const cookie = first.headers.get("set-cookie")!.split(";")[0]!;
+      const page = await fetch(new URL("/", url), { headers: { cookie } });
+      expect(page.status).toBe(200);
+      expect(await page.text()).toContain('<div id="root">');
+    } finally {
+      proc.kill();
+    }
+  } finally {
+    await rm(solo, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
