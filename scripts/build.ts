@@ -16,17 +16,7 @@ export async function build(outdir = join(root, "dist")): Promise<void> {
     throw new AggregateError(result.logs, "Build failed");
   }
 
-  // The web editor (`envs edit --ui`) is served from dist/ui.
-  const ui = await Bun.build({
-    entrypoints: [join(root, "src/ui/index.html")],
-    outdir: join(outdir, "ui"),
-    target: "browser",
-    minify: true,
-    naming: "[name].[ext]",
-  });
-  if (!ui.success) {
-    throw new AggregateError(ui.logs, "Web editor build failed");
-  }
+  // The web editor (`envs edit --ui`) is embedded in envs.js at bundle time (src/ui/embedded.ts).
 
   for (const file of ["LICENSE", "README.md", "SECURITY.md"]) {
     await Bun.write(join(outdir, file), Bun.file(join(root, file)));

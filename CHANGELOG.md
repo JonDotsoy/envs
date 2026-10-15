@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- `envs edit --ui` failed with `ENOENT: scandir '.../bin/ui'` when run from the single-file `envs.js` (Homebrew): the web editor is now embedded in the bundle instead of read from a `ui/` folder next to it.
 - `envs edit --ui`: the automatically opened browser ended in `401` because the session cookie was `SameSite=Strict` and the navigation starts from a `file://` page; it is now `SameSite=Lax`.
 - A `HEAD` request no longer spends the single-use token; unsupported methods answer `405` instead of `415`.
 - The web editor sends `Content-Security-Policy`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
