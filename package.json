@@ -31,7 +31,8 @@
     "typescript": "^7"
   },
   "scripts": {
-    "build": "bun scripts/build.ts"
+    "build": "bun scripts/build.ts",
+    "ext:dev": "bun run --cwd extensions/vscode build && code --extensionDevelopmentPath=./extensions/vscode"
   },
   "dependencies": {
     "@jondotsoy/flags": "^3.2.1"

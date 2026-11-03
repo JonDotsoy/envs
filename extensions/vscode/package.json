@@ -1,0 +1,38 @@
+{
+  "name": "envs-vscode",
+  "displayName": "envs",
+  "description": "VS Code extension for @jondotsoy/envs",
+  "version": "0.0.1",
+  "private": true,
+  "publisher": "jondotsoy",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JonDotsoy/envs.git",
+    "directory": "extensions/vscode"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "envs.helloWorld",
+        "title": "Hello World",
+        "category": "envs"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "bun build src/extension.ts --outfile out/extension.js --target node --format cjs --external vscode",
+    "watch": "bun build src/extension.ts --outfile out/extension.js --target node --format cjs --external vscode --watch",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.6.0"
+  }
+}
